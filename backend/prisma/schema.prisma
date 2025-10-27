@@ -1,0 +1,538 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// JUEGOS Y CONFIGURACIÓN
+// ============================================
+
+model Game {
+  id            String        @id @default(uuid())
+  name          String        // "LOTOANIMALITO", "TRIPLE PANTERA"
+  type          GameType      // "ANIMALITOS" | "TRIPLE" | "ROULETTE"
+  slug          String        @unique
+  totalNumbers  Int           // 38 para animalitos, 1000 para triple
+  isActive      Boolean       @default(true)
+  description   String?
+  config        Json?         // Configuración adicional del juego
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relaciones
+  items         GameItem[]
+  templates     DrawTemplate[]
+  draws         Draw[]
+  pauses        DrawPause[]
+  apiConfigs    ApiConfiguration[]
+  channels      GameChannel[]
+  
+  @@index([slug])
+  @@index([isActive])
+}
+
+enum GameType {
+  ANIMALITOS
+  TRIPLE
+  ROULETTE
+}
+
+// ============================================
+// ITEMS DEL JUEGO (Números/Animales)
+// ============================================
+
+model GameItem {
+  id            String    @id @default(uuid())
+  gameId        String
+  number        String    // "00", "01", "000", "999"
+  name          String    // "BALLENA", "CARNERO", etc.
+  displayOrder  Int       // Para ordenar
+  multiplier    Decimal   @default(30.00) @db.Decimal(10, 2)
+  lastWin       DateTime? // Última vez que ganó
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relaciones
+  game                Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  drawsAsPreselected  Draw[]            @relation("PreselectedItem")
+  drawsAsWinner       Draw[]            @relation("WinnerItem")
+  externalTickets     ExternalTicket[]
+  
+  @@unique([gameId, number])
+  @@index([gameId])
+  @@index([gameId, isActive])
+}
+
+// ============================================
+// PLANTILLAS DE SORTEOS
+// ============================================
+
+model DrawTemplate {
+  id          String    @id @default(uuid())
+  gameId      String
+  name        String    // "Plantilla Lunes-Viernes", "Plantilla Fin de Semana"
+  description String?
+  daysOfWeek  Int[]     // [1,2,3,4,5] (1=Lunes, 7=Domingo)
+  drawTimes   String[]  // ["08:00", "09:00", "10:00"]
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relaciones
+  game        Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  draws       Draw[]
+  
+  @@index([gameId])
+  @@index([isActive])
+}
+
+// ============================================
+// SORTEOS
+// ============================================
+
+model Draw {
+  id                  String        @id @default(uuid())
+  gameId              String
+  templateId          String?
+  scheduledAt         DateTime      // Hora programada del sorteo
+  status              DrawStatus    @default(SCHEDULED)
+  preselectedItemId   String?       // Número preseleccionado (opcional)
+  winnerItemId        String?       // Número ganador
+  imageUrl            String?       // URL de la imagen generada
+  imageGenerated      Boolean       @default(false) // Si la imagen fue generada
+  imageGeneratedAt    DateTime?     // Cuando se generó la imagen
+  imageError          String?       // Error en generación de imagen
+  videoUrl            String?       // URL del video generado
+  videoGeneratedAt    DateTime?     // Cuando se generó el video
+  videoError          String?       // Error en generación de video
+  closedAt            DateTime?     // Cuando se cerró (5 min antes)
+  drawnAt             DateTime?     // Cuando se ejecutó
+  publishedAt         DateTime?     // Cuando se publicó
+  notes               String?       // Notas adicionales
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  // Relaciones
+  game                Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  template            DrawTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  preselectedItem     GameItem?         @relation("PreselectedItem", fields: [preselectedItemId], references: [id], onDelete: SetNull)
+  winnerItem          GameItem?         @relation("WinnerItem", fields: [winnerItemId], references: [id], onDelete: SetNull)
+  publications        DrawPublication[]
+  apiMappings         ApiDrawMapping[]
+  
+  @@index([gameId])
+  @@index([scheduledAt])
+  @@index([status])
+  @@index([gameId, scheduledAt])
+  @@index([gameId, status])
+}
+
+enum DrawStatus {
+  SCHEDULED   // Programado
+  CLOSED      // Cerrado (5 min antes)
+  DRAWN       // Ejecutado (número seleccionado)
+  PUBLISHED   // Publicado en canales
+  CANCELLED   // Cancelado
+}
+
+// ============================================
+// PUBLICACIONES EN CANALES
+// ============================================
+
+model DrawPublication {
+  id          String            @id @default(uuid())
+  drawId      String
+  channel     Channel
+  status      PublicationStatus @default(PENDING)
+  sentAt      DateTime?
+  externalId  String?           // ID del mensaje en el canal (Telegram, etc)
+  error       String?
+  retries     Int               @default(0)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  
+  // Relaciones
+  draw        Draw              @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  
+  @@unique([drawId, channel])
+  @@index([drawId])
+  @@index([status])
+  @@index([channel, status])
+}
+
+enum Channel {
+  TELEGRAM
+  WHATSAPP
+  FACEBOOK
+  INSTAGRAM
+  TIKTOK
+}
+
+enum PublicationStatus {
+  PENDING   // Pendiente
+  SENT      // Enviado
+  FAILED    // Fallido
+  SKIPPED   // Omitido
+}
+
+// ============================================
+// PAUSAS DE SORTEOS
+// ============================================
+
+model DrawPause {
+  id          String    @id @default(uuid())
+  gameId      String
+  startDate   DateTime  // Fecha de inicio
+  endDate     DateTime  // Fecha de fin
+  reason      String?   // Razón de la pausa
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relaciones
+  game        Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  @@index([gameId])
+  @@index([startDate, endDate])
+  @@index([gameId, isActive])
+}
+
+// ============================================
+// CONFIGURACIÓN DE CANALES
+// ============================================
+
+model ChannelConfig {
+  id          String    @id @default(uuid())
+  name        String    // "Canal Telegram Principal"
+  type        Channel
+  config      Json      // Credenciales y configuración (encriptada)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@unique([type, name])
+  @@index([type, isActive])
+}
+
+// ============================================
+// CANALES POR JUEGO
+// ============================================
+
+model GameChannel {
+  id                    String    @id @default(uuid())
+  gameId                String
+  channelType           Channel   // TELEGRAM, WHATSAPP, etc.
+  name                  String    // "WhatsApp Principal", "Telegram VIP"
+  
+  // Referencias a instancias de cada plataforma
+  whatsappInstanceId    String?   // ID de la instancia de WhatsApp
+  telegramInstanceId    String?   // ID de la instancia de Telegram
+  instagramInstanceId   String?   // ID de la instancia de Instagram
+  facebookInstanceId    String?   // ID de la instancia de Facebook
+  tiktokInstanceId      String?   // ID de la instancia de TikTok
+  
+  // Configuración específica del canal (para compatibilidad)
+  telegramChatId        String?   // ID del chat/canal de Telegram (para TELEGRAM)
+  
+  // Plantilla de mensaje (Mustache syntax)
+  messageTemplate       String    @default("🎰 *{{gameName}}*\n\n⏰ Hora: {{time}}\n🎯 Resultado: *{{winnerNumber}}*\n🏆 {{winnerName}}\n\n✨ ¡Buena suerte en el próximo sorteo!")
+  
+  // Destinatarios (para canales que requieren lista de números/usuarios)
+  recipients            String[]  @default([]) // Array de números de teléfono o IDs de usuario
+  
+  isActive              Boolean   @default(true)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  // Relaciones
+  game                  Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  @@unique([gameId, channelType, name])
+  @@index([gameId])
+  @@index([channelType])
+  @@index([isActive])
+  @@index([whatsappInstanceId])
+  @@index([telegramInstanceId])
+  @@index([instagramInstanceId])
+  @@index([facebookInstanceId])
+  @@index([tiktokInstanceId])
+}
+
+// ============================================
+// USUARIOS Y AUTENTICACIÓN
+// ============================================
+
+model User {
+  id              String    @id @default(uuid())
+  username        String    @unique
+  email           String    @unique
+  password        String    // Hash bcrypt
+  role            UserRole  @default(OPERATOR)
+  telegramUserId  String?   @unique // Para bot de Telegram
+  isActive        Boolean   @default(true)
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  // Relaciones
+  auditLogs       AuditLog[]
+  
+  @@index([username])
+  @@index([email])
+  @@index([isActive])
+}
+
+enum UserRole {
+  ADMIN     // Acceso completo
+  OPERATOR  // Gestión de sorteos
+  VIEWER    // Solo lectura
+}
+
+// ============================================
+// AUDITORÍA
+// ============================================
+
+model AuditLog {
+  id          String    @id @default(uuid())
+  userId      String?
+  action      String    // "DRAW_CREATED", "WINNER_CHANGED", etc.
+  entity      String    // "Draw", "Game", etc.
+  entityId    String
+  changes     Json?     // Cambios realizados
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
+  
+  // Relaciones
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@index([action])
+}
+
+// ============================================
+// INTEGRACIÓN CON APIs EXTERNAS
+// ============================================
+
+model ApiSystem {
+  id            String            @id @default(uuid())
+  name          String            // "SRQ", "OtroSistema"
+  description   String?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  // Relaciones
+  configurations ApiConfiguration[]
+  
+  @@index([name])
+}
+
+model ApiConfiguration {
+  id            String            @id @default(uuid())
+  name          String            // "SRQ Planificación Juego X"
+  apiSystemId   String
+  gameId        String
+  type          ApiConfigType     // "PLANNING" | "SALES"
+  baseUrl       String            // URL base del endpoint
+  token         String            // Token de autenticación
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  
+  // Relaciones
+  apiSystem     ApiSystem         @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
+  game          Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  drawMappings  ApiDrawMapping[]
+  
+  @@index([apiSystemId])
+  @@index([gameId])
+  @@index([type])
+  @@index([isActive])
+}
+
+enum ApiConfigType {
+  PLANNING  // Para obtener planificación de sorteos
+  SALES     // Para obtener ventas/tickets
+}
+
+model ApiDrawMapping {
+  id              String            @id @default(uuid())
+  apiConfigId     String
+  drawId          String
+  externalDrawId  String            // ID del sorteo en el sistema externo
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  // Relaciones
+  apiConfig       ApiConfiguration  @relation(fields: [apiConfigId], references: [id], onDelete: Cascade)
+  draw            Draw              @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  tickets         ExternalTicket[]
+  
+  @@unique([externalDrawId])
+  @@unique([drawId, apiConfigId])
+  @@index([apiConfigId])
+  @@index([drawId])
+}
+
+model ExternalTicket {
+  id              String            @id @default(uuid())
+  mappingId       String
+  gameItemId      String
+  amount          Decimal           @db.Decimal(10, 2)
+  externalData    Json?             // Datos adicionales del ticket (taquilla, grupo, etc)
+  createdAt       DateTime          @default(now())
+  
+  // Relaciones
+  mapping         ApiDrawMapping    @relation(fields: [mappingId], references: [id], onDelete: Cascade)
+  gameItem        GameItem          @relation(fields: [gameItemId], references: [id], onDelete: Cascade)
+  
+  @@index([mappingId])
+  @@index([gameItemId])
+}
+
+// ============================================
+// INSTANCIAS DE CANALES MULTI-PLATAFORMA
+// ============================================
+
+// Instancias de WhatsApp (mantener compatibilidad)
+model WhatsAppInstance {
+  id              String            @id @default(uuid())
+  instanceId      String            @unique // ID único de la instancia (ej: "instance-1")
+  name            String            // Nombre descriptivo
+  phoneNumber     String?           // Número de teléfono conectado
+  status          WhatsAppStatus    @default(DISCONNECTED)
+  qrCode          String?           // Último QR generado
+  qrGeneratedAt   DateTime?         // Cuando se generó el QR
+  connectedAt     DateTime?         // Cuando se conectó por última vez
+  lastSeen        DateTime          @default(now()) // Última actividad
+  sessionData     Json?             // Datos adicionales de la sesión
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([instanceId])
+  @@index([status])
+  @@index([isActive])
+}
+
+enum WhatsAppStatus {
+  CONNECTING      // Iniciando conexión
+  QR_READY        // QR generado, esperando escaneo
+  CONNECTED       // Conectado y activo
+  DISCONNECTED    // Desconectado
+  LOGGED_OUT      // Sesión cerrada por el usuario
+}
+
+// Instancias de Telegram
+model TelegramInstance {
+  id              String            @id @default(uuid())
+  instanceId      String            @unique // ID único de la instancia
+  name            String            // Nombre descriptivo
+  botToken        String            // Token del bot de Telegram
+  chatId          String?           // ID del chat/canal por defecto
+  webhookUrl      String?           // URL del webhook (opcional)
+  status          PlatformStatus    @default(DISCONNECTED)
+  connectedAt     DateTime?         // Cuando se conectó por última vez
+  lastSeen        DateTime          @default(now()) // Última actividad
+  config          Json?             // Configuración adicional
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([instanceId])
+  @@index([status])
+  @@index([isActive])
+}
+
+// Instancias de Instagram
+model InstagramInstance {
+  id              String            @id @default(uuid())
+  instanceId      String            @unique // ID único de la instancia
+  name            String            // Nombre descriptivo
+  appId           String            // Facebook App ID
+  appSecret       String            // Facebook App Secret (encriptado)
+  accessToken     String?           // Access token de Instagram
+  refreshToken    String?           // Refresh token
+  tokenExpiresAt  DateTime?         // Expiración del token
+  userId          String?           // Instagram User ID
+  username        String?           // Instagram username
+  status          PlatformStatus    @default(DISCONNECTED)
+  connectedAt     DateTime?         // Cuando se conectó por última vez
+  lastSeen        DateTime          @default(now()) // Última actividad
+  config          Json?             // Configuración adicional
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([instanceId])
+  @@index([status])
+  @@index([isActive])
+}
+
+// Instancias de Facebook
+model FacebookInstance {
+  id              String            @id @default(uuid())
+  instanceId      String            @unique // ID único de la instancia
+  name            String            // Nombre descriptivo
+  pageAccessToken String            // Page Access Token (encriptado)
+  appSecret       String            // App Secret (encriptado)
+  webhookToken    String            // Webhook verify token
+  pageId          String            // Facebook Page ID
+  pageName        String?           // Nombre de la página
+  status          PlatformStatus    @default(DISCONNECTED)
+  connectedAt     DateTime?         // Cuando se conectó por última vez
+  lastSeen        DateTime          @default(now()) // Última actividad
+  config          Json?             // Configuración adicional
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([instanceId])
+  @@index([status])
+  @@index([isActive])
+}
+
+// Instancias de TikTok
+model TikTokInstance {
+  id              String            @id @default(uuid())
+  instanceId      String            @unique // ID único de la instancia
+  name            String            // Nombre descriptivo
+  clientKey       String            // TikTok Client Key
+  clientSecret    String            // TikTok Client Secret (encriptado)
+  accessToken     String?           // Access token
+  refreshToken    String?           // Refresh token
+  tokenExpiresAt  DateTime?         // Expiración del access token
+  refreshExpiresAt DateTime?        // Expiración del refresh token
+  openId          String?           // TikTok Open ID del usuario
+  scope           String?           // Permisos autorizados
+  status          PlatformStatus    @default(DISCONNECTED)
+  connectedAt     DateTime?         // Cuando se conectó por última vez
+  lastSeen        DateTime          @default(now()) // Última actividad
+  config          Json?             // Configuración adicional
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  @@index([instanceId])
+  @@index([status])
+  @@index([isActive])
+}
+
+// Estado común para todas las plataformas (excepto WhatsApp que mantiene su enum)
+enum PlatformStatus {
+  CONNECTING      // Iniciando conexión
+  CONNECTED       // Conectado y activo
+  DISCONNECTED    // Desconectado
+  ERROR           // Error de conexión
+  EXPIRED         // Token expirado
+}

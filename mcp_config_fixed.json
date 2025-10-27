@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "mysql-bot": {
+      "command": "/usr/bin/node",
+      "args": [
+        "/usr/lib/node_modules/@benborla29/mcp-server-mysql/dist/index.js"
+      ],
+      "env": {
+        "MYSQL_HOST": "144.126.150.120",
+        "MYSQL_PORT": "3706",
+        "MYSQL_USER": "diazhh",
+        "MYSQL_PASS": "Telecom2025*",
+        "MYSQL_DB": "bot",
+        "ALLOW_INSERT_OPERATION": "false",
+        "ALLOW_UPDATE_OPERATION": "false",
+        "ALLOW_DELETE_OPERATION": "false",
+        "MYSQL_POOL_SIZE": "10",
+        "MYSQL_QUERY_TIMEOUT": "30000"
+      }
+    },
+    "prisma-mcp-server": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "prisma",
+        "mcp"
+      ],
+      "env": {}
+    }
+  }
+}
