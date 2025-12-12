@@ -7,6 +7,7 @@ import logger from '../lib/logger.js';
 class ApiIntegrationService {
   /**
    * Sincronizar planificación de sorteos con API SRQ
+   * Mapea sorteos externos con locales POR ORDEN (1:1)
    * @param {Date} date - Fecha para sincronizar
    */
   async syncSRQPlanning(date) {
@@ -31,11 +32,17 @@ class ApiIntegrationService {
 
       for (const config of planningConfigs) {
         try {
-          // Llamar a la API de SRQ
-          const url = `${config.baseUrl}${dateStr}&token=${config.token}`;
-          logger.debug(`Consultando: ${config.baseUrl}${dateStr}`);
+          // Llamar a la API de SRQ (header APIKEY)
+          const url = `${config.baseUrl}${dateStr}`;
+          logger.debug(`Consultando: ${url}`);
 
-          const response = await fetch(url);
+          const response = await fetch(url, {
+            method: 'GET',
+            headers: {
+              'APIKEY': config.token,
+              'Content-Type': 'application/json',
+            },
+          });
           const data = await response.json();
 
           if (data.result === 'error') {
@@ -43,23 +50,88 @@ class ApiIntegrationService {
             continue;
           }
 
-          // Procesar cada sorteo externo
-          if (data.loteries && Array.isArray(data.loteries)) {
-            for (const externalDraw of data.loteries) {
-              const mapped = await this.mapExternalDraw(
-                config.id,
-                config.gameId,
-                externalDraw,
-                date
-              );
-
-              if (mapped) {
-                totalMapped++;
-              } else {
-                totalSkipped++;
-              }
-            }
+          // SRQ devuelve array directamente ordenado por hora
+          const externalDraws = Array.isArray(data) ? data : (data.loteries || []);
+          
+          if (externalDraws.length === 0) {
+            logger.warn(`No hay sorteos externos para ${config.game.name}`);
+            continue;
           }
+
+          // Obtener sorteos locales del día para este juego, ordenados por hora
+          const startOfDay = new Date(date);
+          startOfDay.setHours(0, 0, 0, 0);
+          const endOfDay = new Date(date);
+          endOfDay.setHours(23, 59, 59, 999);
+
+          const localDraws = await prisma.draw.findMany({
+            where: {
+              gameId: config.gameId,
+              scheduledAt: {
+                gte: startOfDay,
+                lte: endOfDay
+              }
+            },
+            orderBy: { scheduledAt: 'asc' }
+          });
+
+          if (localDraws.length === 0) {
+            logger.warn(`No hay sorteos locales para ${config.game.name} en ${dateStr}`);
+            totalSkipped += externalDraws.length;
+            continue;
+          }
+
+          // Mapear 1:1 por orden
+          const minLength = Math.min(externalDraws.length, localDraws.length);
+          
+          for (let i = 0; i < minLength; i++) {
+            const externalDraw = externalDraws[i];
+            const localDraw = localDraws[i];
+            
+            // SRQ usa sorteoID como identificador
+            const externalId = (externalDraw.sorteoID || externalDraw.id).toString();
+            
+            // Verificar si ya existe el mapping
+            const existingMapping = await prisma.apiDrawMapping.findFirst({
+              where: {
+                OR: [
+                  { externalDrawId: externalId },
+                  { drawId: localDraw.id, apiConfigId: config.id }
+                ]
+              }
+            });
+
+            if (existingMapping) {
+              logger.debug(`Mapping ya existe: ${externalId} ↔ ${localDraw.id}`);
+              totalSkipped++;
+              continue;
+            }
+
+            // Crear el mapping
+            await prisma.apiDrawMapping.create({
+              data: {
+                apiConfigId: config.id,
+                drawId: localDraw.id,
+                externalDrawId: externalId
+              }
+            });
+
+            const hora = localDraw.scheduledAt.toLocaleTimeString('es-VE', { 
+              timeZone: 'America/Caracas', 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            });
+            logger.info(`✅ Mapeado: ${config.game.name} ${hora} → SRQ ${externalId} (${externalDraw.descripcion || ''})`);
+            totalMapped++;
+          }
+
+          // Reportar si hay diferencia en cantidad
+          if (externalDraws.length !== localDraws.length) {
+            logger.warn(
+              `⚠️ ${config.game.name}: ${externalDraws.length} sorteos SRQ vs ${localDraws.length} locales`
+            );
+          }
+
         } catch (error) {
           logger.error(`Error procesando config ${config.name}:`, error.message);
         }
@@ -70,164 +142,6 @@ class ApiIntegrationService {
     } catch (error) {
       logger.error('❌ Error en syncSRQPlanning:', error);
       throw error;
-    }
-  }
-
-  /**
-   * Mapear un sorteo externo con uno local
-   * @param {string} apiConfigId - ID de la configuración de API
-   * @param {string} gameId - ID del juego
-   * @param {object} externalDraw - Datos del sorteo externo
-   * @param {Date} date - Fecha del sorteo
-   */
-  async mapExternalDraw(apiConfigId, gameId, externalDraw, date) {
-    try {
-      // Verificar si ya existe el mapping
-      const existingMapping = await prisma.apiDrawMapping.findUnique({
-        where: {
-          externalDrawId: externalDraw.id.toString()
-        }
-      });
-
-      if (existingMapping) {
-        logger.debug(`Mapping ya existe para sorteo externo ${externalDraw.id}`);
-        return false;
-      }
-
-      // Buscar el sorteo local correspondiente (HARDCODED por nombre/hora)
-      const localDraw = await this.findMatchingLocalDraw(
-        gameId,
-        externalDraw,
-        date
-      );
-
-      if (!localDraw) {
-        logger.warn(`No se encontró sorteo local para mapear con ${externalDraw.id}`);
-        return false;
-      }
-
-      // Crear el mapping
-      await prisma.apiDrawMapping.create({
-        data: {
-          apiConfigId,
-          drawId: localDraw.id,
-          externalDrawId: externalDraw.id.toString()
-        }
-      });
-
-      logger.debug(`✅ Mapeado: sorteo externo ${externalDraw.id} → draw ${localDraw.id}`);
-      return true;
-    } catch (error) {
-      logger.error(`Error mapeando sorteo externo ${externalDraw.id}:`, error.message);
-      return false;
-    }
-  }
-
-  /**
-   * Encontrar el sorteo local que corresponde al sorteo externo
-   * HARDCODED: Mapeo por hora del sorteo
-   */
-  async findMatchingLocalDraw(gameId, externalDraw, date) {
-    try {
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
-
-      // Obtener todos los sorteos del día para este juego
-      const draws = await prisma.draw.findMany({
-        where: {
-          gameId,
-          scheduledAt: {
-            gte: startOfDay,
-            lt: endOfDay
-          },
-          status: 'SCHEDULED'
-        },
-        orderBy: {
-          scheduledAt: 'asc'
-        }
-      });
-
-      if (draws.length === 0) {
-        return null;
-      }
-
-      // Parsear la hora del sorteo externo
-      const drawTime = this.parseDrawTime(externalDraw.time || externalDraw.hour || externalDraw.name);
-      
-      if (!drawTime) {
-        logger.warn(`No se pudo parsear la hora del sorteo externo ${externalDraw.id}`);
-        return null;
-      }
-
-      // Buscar el sorteo que coincida con la hora
-      const targetTime = new Date(date);
-      targetTime.setHours(drawTime.hours, drawTime.minutes, 0, 0);
-
-      // Buscar el sorteo más cercano a la hora objetivo
-      let closestDraw = null;
-      let minDiff = Infinity;
-
-      for (const draw of draws) {
-        const diff = Math.abs(draw.scheduledAt.getTime() - targetTime.getTime());
-        if (diff < minDiff) {
-          minDiff = diff;
-          closestDraw = draw;
-        }
-      }
-
-      // Solo aceptar si la diferencia es menor a 5 minutos
-      if (minDiff < 5 * 60 * 1000) {
-        return closestDraw;
-      }
-
-      return null;
-    } catch (error) {
-      logger.error('Error en findMatchingLocalDraw:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Parsear hora del sorteo externo
-   * Formatos soportados: "08 AM", "02 PM", "14:00", "8:00 AM"
-   */
-  parseDrawTime(timeStr) {
-    if (!timeStr) return null;
-
-    try {
-      const str = timeStr.trim().toUpperCase();
-      
-      // Formato: "08 AM" o "02 PM"
-      const amPmMatch = str.match(/(\d{1,2})\s*(AM|PM)/);
-      if (amPmMatch) {
-        let hours = parseInt(amPmMatch[1]);
-        const period = amPmMatch[2];
-        
-        if (period === 'PM' && hours !== 12) {
-          hours += 12;
-        } else if (period === 'AM' && hours === 12) {
-          hours = 0;
-        }
-        
-        return { hours, minutes: 0 };
-      }
-
-      // Formato: "14:00" o "8:30"
-      const timeMatch = str.match(/(\d{1,2}):(\d{2})/);
-      if (timeMatch) {
-        return {
-          hours: parseInt(timeMatch[1]),
-          minutes: parseInt(timeMatch[2])
-        };
-      }
-
-      return null;
-    } catch (error) {
-      logger.error('Error parseando hora:', timeStr, error);
-      return null;
     }
   }
 
@@ -273,11 +187,17 @@ class ApiIntegrationService {
         return { imported: 0, skipped: 0 };
       }
 
-      // Llamar a la API de tickets
-      const url = `${salesConfig.baseUrl}${mapping.externalDrawId}?token=${salesConfig.token}`;
-      logger.debug(`Consultando tickets: ${salesConfig.baseUrl}${mapping.externalDrawId}`);
+      // Llamar a la API de tickets (header APIKEY)
+      const url = `${salesConfig.baseUrl}${mapping.externalDrawId}`;
+      logger.debug(`Consultando tickets: ${url}`);
 
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'APIKEY': salesConfig.token,
+          'Content-Type': 'application/json',
+        },
+      });
       const data = await response.json();
 
       if (data.result === 'error') {
@@ -286,11 +206,13 @@ class ApiIntegrationService {
       }
 
       // Procesar tickets
+      // SRQ devuelve array directamente
       let imported = 0;
       let skipped = 0;
+      const tickets = Array.isArray(data) ? data : (data.tickets || []);
 
-      if (data.tickets && Array.isArray(data.tickets)) {
-        for (const ticket of data.tickets) {
+      if (tickets.length > 0) {
+        for (const ticket of tickets) {
           const saved = await this.saveTicket(mapping.id, mapping.apiConfig.gameId, ticket);
           if (saved) {
             imported++;
@@ -310,28 +232,41 @@ class ApiIntegrationService {
 
   /**
    * Guardar un ticket en la base de datos
+   * SRQ format: { ticketID, numero, monto, premio, anulado, taquillaID, grupoID, bancaID, comercialID }
    */
   async saveTicket(mappingId, gameId, ticket) {
     try {
-      // Buscar el game_item por número
+      // Ignorar tickets anulados
+      if (ticket.anulado) {
+        return false;
+      }
+
+      // Buscar el game_item por número (SRQ usa 'numero')
+      const numero = ticket.numero?.toString() || ticket.number?.toString();
       const gameItem = await prisma.gameItem.findFirst({
         where: {
           gameId,
-          number: ticket.number.toString()
+          number: numero.padStart(2, '0')
         }
       });
 
       if (!gameItem) {
-        logger.warn(`No se encontró gameItem para número ${ticket.number} en juego ${gameId}`);
+        logger.warn(`No se encontró gameItem para número ${numero} en juego ${gameId}`);
         return false;
       }
+
+      // SRQ usa 'monto' en lugar de 'amount'
+      const amount = parseFloat(ticket.monto || ticket.amount || 0);
 
       // Verificar si ya existe el ticket (evitar duplicados)
       const existing = await prisma.externalTicket.findFirst({
         where: {
           mappingId,
           gameItemId: gameItem.id,
-          amount: parseFloat(ticket.amount)
+          externalData: {
+            path: ['ticketID'],
+            equals: ticket.ticketID
+          }
         }
       });
 
@@ -344,13 +279,14 @@ class ApiIntegrationService {
         data: {
           mappingId,
           gameItemId: gameItem.id,
-          amount: parseFloat(ticket.amount),
+          amount,
           externalData: {
-            taquillaId: ticket.taquilla_id,
-            grupoId: ticket.grupo_id,
-            bancaId: ticket.banca_id,
-            comercialId: ticket.comercial_id,
-            date: ticket.date
+            ticketID: ticket.ticketID,
+            taquillaID: ticket.taquillaID,
+            grupoID: ticket.grupoID,
+            bancaID: ticket.bancaID,
+            comercialID: ticket.comercialID,
+            premio: ticket.premio
           }
         }
       });

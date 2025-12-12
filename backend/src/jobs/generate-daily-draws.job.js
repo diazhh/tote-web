@@ -22,9 +22,9 @@ class GenerateDailyDrawsJob {
   start() {
     this.task = cron.schedule(this.cronExpression, async () => {
       await this.execute();
-    });
+    }, { timezone: 'America/Caracas' });
 
-    logger.info('✅ Job GenerateDailyDraws iniciado (00:05 AM diario)');
+    logger.info('✅ Job GenerateDailyDraws iniciado (00:05 AM diario, TZ: America/Caracas)');
   }
 
   /**

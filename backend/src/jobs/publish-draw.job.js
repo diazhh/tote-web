@@ -20,9 +20,9 @@ class PublishDrawJob {
   start() {
     this.task = cron.schedule(this.cronExpression, async () => {
       await this.execute();
-    });
+    }, { timezone: 'America/Caracas' });
 
-    logger.info('✅ Job PublishDraws iniciado (cada minuto)');
+    logger.info('✅ Job PublishDraws iniciado (cada minuto, TZ: America/Caracas)');
   }
 
   /**

@@ -1,13 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import publicAPI from '@/lib/api/public';
-import { Gamepad2, Plus, Edit2, Eye } from 'lucide-react';
+import gamesAPI from '@/lib/api/games';
+import { toast } from 'sonner';
+import { Gamepad2, Plus, Edit2, Eye, Trash2 } from 'lucide-react';
 import Link from 'next/link';
+import GameModal from '@/components/admin/config/GameModal';
 
 export default function JuegosPage() {
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [selectedGame, setSelectedGame] = useState(null);
 
   useEffect(() => {
     loadGames();
@@ -15,13 +19,42 @@ export default function JuegosPage() {
 
   const loadGames = async () => {
     try {
-      const response = await publicAPI.getGames();
+      const response = await gamesAPI.getAll();
       setGames(response.data || []);
     } catch (error) {
       console.error('Error loading games:', error);
+      toast.error('Error al cargar juegos');
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleCreate = () => {
+    setSelectedGame(null);
+    setShowModal(true);
+  };
+
+  const handleEdit = (game) => {
+    setSelectedGame(game);
+    setShowModal(true);
+  };
+
+  const handleDelete = async (game) => {
+    if (!confirm(`¿Estás seguro de eliminar el juego "${game.name}"?`)) return;
+
+    try {
+      await gamesAPI.delete(game.id);
+      toast.success('Juego eliminado correctamente');
+      loadGames();
+    } catch (error) {
+      toast.error(error.message || 'Error al eliminar juego');
+    }
+  };
+
+  const handleModalClose = (reload) => {
+    setShowModal(false);
+    setSelectedGame(null);
+    if (reload) loadGames();
   };
 
   if (loading) {
@@ -43,6 +76,13 @@ export default function JuegosPage() {
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Juegos</h1>
           <p className="text-gray-600 mt-1">Administra los juegos del sistema</p>
         </div>
+        <button
+          onClick={handleCreate}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Nuevo Juego
+        </button>
       </div>
 
       {/* Games Grid */}
@@ -80,13 +120,26 @@ export default function JuegosPage() {
 
             <div className="flex items-center space-x-2">
               <Link
-                href={`/juego/${game.slug}`}
-                target="_blank"
-                className="flex-1 flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm"
+                href={`/admin/juegos/${game.id}`}
+                className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
               >
                 <Eye className="w-4 h-4 mr-2" />
-                Ver público
+                Configurar
               </Link>
+              <button
+                onClick={() => handleEdit(game)}
+                className="flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                title="Editar juego"
+              >
+                <Edit2 className="w-4 h-4 text-blue-600" />
+              </button>
+              <button
+                onClick={() => handleDelete(game)}
+                className="flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-red-50 transition"
+                title="Eliminar juego"
+              >
+                <Trash2 className="w-4 h-4 text-red-600" />
+              </button>
             </div>
           </div>
         ))}
@@ -95,8 +148,23 @@ export default function JuegosPage() {
       {games.length === 0 && (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <Gamepad2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-600">No hay juegos configurados</p>
+          <p className="text-gray-600 mb-4">No hay juegos configurados</p>
+          <button
+            onClick={handleCreate}
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Crear Primer Juego
+          </button>
         </div>
+      )}
+
+      {/* Modal */}
+      {showModal && (
+        <GameModal
+          game={selectedGame}
+          onClose={handleModalClose}
+        />
       )}
     </div>
   );

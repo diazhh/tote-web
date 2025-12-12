@@ -3,6 +3,10 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import { emitToAll, emitToGame } from '../lib/socket.js';
 import apiIntegrationService from '../services/api-integration.service.js';
+import adminNotificationService from '../services/admin-notification.service.js';
+import prewinnerSelectionService from '../services/prewinner-selection.service.js';
+import pdfReportService from '../services/pdf-report.service.js';
+import { startOfDay } from 'date-fns';
 
 /**
  * Job para cerrar sorteos 5 minutos antes y preseleccionar ganador
@@ -20,9 +24,9 @@ class CloseDrawJob {
   start() {
     this.task = cron.schedule(this.cronExpression, async () => {
       await this.execute();
-    });
+    }, { timezone: 'America/Caracas' });
 
-    logger.info('✅ Job CloseDraws iniciado (cada minuto)');
+    logger.info('✅ Job CloseDraws iniciado (cada minuto, TZ: America/Caracas)');
   }
 
   /**
@@ -61,7 +65,8 @@ class CloseDrawJob {
                 }
               }
             }
-          }
+          },
+          preselectedItem: true
         }
       });
 
@@ -73,7 +78,6 @@ class CloseDrawJob {
 
       for (const draw of drawsToClose) {
         try {
-          // Seleccionar número ganador aleatorio
           const items = draw.game.items;
           
           if (items.length === 0) {
@@ -81,19 +85,88 @@ class CloseDrawJob {
             continue;
           }
 
-          const randomIndex = Math.floor(Math.random() * items.length);
-          const selectedItem = items[randomIndex];
+          let selectedItem;
+          let pdfPath = null;
+          let selectionMethod = 'random';
 
-          // ANTES DE CERRAR: Importar tickets de APIs externas
-          try {
-            logger.info(`📥 Importando ventas externas para sorteo ${draw.id}...`);
-            const importResult = await apiIntegrationService.importSRQTickets(draw.id);
-            logger.info(
-              `✅ Ventas importadas: ${importResult.imported} tickets guardados, ${importResult.skipped} saltados`
-            );
-          } catch (error) {
-            logger.warn(`⚠️ No se pudieron importar ventas para sorteo ${draw.id}:`, error.message);
-            // Continuar aunque falle la importación
+          // Verificar si un admin ya puso un pre-ganador manualmente
+          if (draw.preselectedItemId) {
+            // Respetar la selección del admin
+            selectedItem = items.find(i => i.id === draw.preselectedItemId);
+            if (selectedItem) {
+              selectionMethod = 'admin';
+              logger.info(
+                `👤 Sorteo ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()} ` +
+                `| Pre-ganador ya seleccionado por admin: ${selectedItem.number} - ${selectedItem.name}`
+              );
+            }
+          }
+
+          // Si no hay pre-ganador de admin, hacer selección automática
+          if (!selectedItem) {
+            // ANTES DE CERRAR: Importar tickets de APIs externas
+            let hasTickets = false;
+            try {
+              logger.info(`📥 Importando ventas externas para sorteo ${draw.id}...`);
+              const importResult = await apiIntegrationService.importSRQTickets(draw.id);
+              logger.info(
+                `✅ Ventas importadas: ${importResult.imported} tickets guardados, ${importResult.skipped} saltados`
+              );
+              hasTickets = importResult.imported > 0;
+            } catch (error) {
+              logger.warn(`⚠️ No se pudieron importar ventas para sorteo ${draw.id}:`, error.message);
+            }
+
+            // Si hay tickets, usar el servicio de selección inteligente
+            if (hasTickets) {
+              try {
+                selectedItem = await prewinnerSelectionService.selectPrewinner(draw.id);
+                // El servicio ya actualiza el sorteo, genera PDF y envía notificación
+                if (selectedItem) {
+                  selectionMethod = 'intelligent';
+                  // Emitir eventos WebSocket
+                  const updatedDraw = await prisma.draw.findUnique({
+                    where: { id: draw.id },
+                    include: { game: true, preselectedItem: true }
+                  });
+                  
+                  emitToAll('draw:closed', {
+                    drawId: updatedDraw.id,
+                    game: { name: updatedDraw.game.name, slug: updatedDraw.game.slug },
+                    scheduledAt: updatedDraw.scheduledAt,
+                    preselectedItem: { number: selectedItem.number, name: selectedItem.name }
+                  });
+
+                  emitToGame(updatedDraw.game.slug, 'draw:closed', {
+                    drawId: updatedDraw.id,
+                    scheduledAt: updatedDraw.scheduledAt,
+                    preselectedItem: { number: selectedItem.number, name: selectedItem.name }
+                  });
+
+                  logger.info(
+                    `🔒 Sorteo cerrado: ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()} ` +
+                    `| Preselección inteligente: ${selectedItem.number} - ${selectedItem.name}`
+                  );
+                  continue; // Ya se procesó todo en el servicio
+                }
+              } catch (error) {
+                logger.warn(`⚠️ Error en selección inteligente, usando aleatoria:`, error.message);
+              }
+            }
+
+            // Selección aleatoria (sin tickets o si falló la inteligente)
+            // Aplicar filtro de items no usados hoy
+            const usedItemsToday = await this.getUsedItemsToday(draw.gameId, draw.scheduledAt);
+            let availableItems = items.filter(item => !usedItemsToday.has(item.id));
+            
+            if (availableItems.length === 0) {
+              logger.warn(`⚠️ No hay items disponibles que no hayan sido usados hoy, usando cualquiera...`);
+              availableItems = items;
+            }
+
+            const randomIndex = Math.floor(Math.random() * availableItems.length);
+            selectedItem = availableItems[randomIndex];
+            selectionMethod = 'random';
           }
 
           // Actualizar sorteo
@@ -112,30 +185,21 @@ class CloseDrawJob {
 
           logger.info(
             `🔒 Sorteo cerrado: ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()} ` +
-            `| Preselección: ${selectedItem.number} - ${selectedItem.name}`
+            `| Preselección aleatoria: ${selectedItem.number} - ${selectedItem.name}`
           );
 
           // Emitir evento WebSocket
           emitToAll('draw:closed', {
             drawId: updatedDraw.id,
-            game: {
-              name: updatedDraw.game.name,
-              slug: updatedDraw.game.slug
-            },
+            game: { name: updatedDraw.game.name, slug: updatedDraw.game.slug },
             scheduledAt: updatedDraw.scheduledAt,
-            preselectedItem: {
-              number: selectedItem.number,
-              name: selectedItem.name
-            }
+            preselectedItem: { number: selectedItem.number, name: selectedItem.name }
           });
 
           emitToGame(updatedDraw.game.slug, 'draw:closed', {
             drawId: updatedDraw.id,
             scheduledAt: updatedDraw.scheduledAt,
-            preselectedItem: {
-              number: selectedItem.number,
-              name: selectedItem.name
-            }
+            preselectedItem: { number: selectedItem.number, name: selectedItem.name }
           });
 
           // Registrar en audit log
@@ -153,8 +217,41 @@ class CloseDrawJob {
             }
           });
 
-          // TODO: Enviar notificación a Telegram
-          // await telegramBot.notifyDrawClosed(updatedDraw);
+          // Generar PDF de cierre (sin ventas)
+          try {
+            pdfPath = await pdfReportService.generateDrawClosingReport({
+              drawId: draw.id,
+              game: updatedDraw.game,
+              scheduledAt: updatedDraw.scheduledAt,
+              prewinnerItem: selectedItem,
+              totalSales: 0,
+              maxPayout: 0,
+              potentialPayout: 0,
+              allItems: items,
+              salesByItem: {},
+              candidates: []
+            });
+            logger.info(`  📄 PDF generado: ${pdfPath}`);
+          } catch (pdfError) {
+            logger.warn(`⚠️ Error generando PDF:`, pdfError.message);
+          }
+
+          // Enviar notificación a administradores por Telegram con PDF
+          try {
+            await adminNotificationService.notifyPrewinnerSelected({
+              drawId: updatedDraw.id,
+              game: updatedDraw.game,
+              scheduledAt: updatedDraw.scheduledAt,
+              prewinnerItem: updatedDraw.preselectedItem,
+              totalSales: 0,
+              maxPayout: 0,
+              potentialPayout: 0,
+              salesByItem: null,
+              pdfPath
+            });
+          } catch (notifyError) {
+            logger.warn(`⚠️ Error al notificar cierre de sorteo:`, notifyError.message);
+          }
         } catch (error) {
           logger.error(`Error al cerrar sorteo ${draw.id}:`, error);
         }
@@ -162,6 +259,47 @@ class CloseDrawJob {
     } catch (error) {
       logger.error('❌ Error en CloseDrawJob:', error);
     }
+  }
+
+  /**
+   * Obtener IDs de items ya usados hoy (pre-seleccionados o ganadores)
+   * Esto evita que un mismo item gane más de una vez en el mismo día
+   */
+  async getUsedItemsToday(gameId, referenceDate) {
+    const today = startOfDay(referenceDate);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const drawsToday = await prisma.draw.findMany({
+      where: {
+        gameId,
+        scheduledAt: {
+          gte: today,
+          lt: tomorrow
+        },
+        OR: [
+          { preselectedItemId: { not: null } },
+          { winnerItemId: { not: null } }
+        ]
+      },
+      select: {
+        preselectedItemId: true,
+        winnerItemId: true
+      }
+    });
+
+    const usedItems = new Set();
+    for (const draw of drawsToday) {
+      if (draw.preselectedItemId) {
+        usedItems.add(draw.preselectedItemId);
+      }
+      if (draw.winnerItemId) {
+        usedItems.add(draw.winnerItemId);
+      }
+    }
+
+    logger.debug(`  Items usados hoy para juego ${gameId}: ${usedItems.size} items`);
+    return usedItems;
   }
 }
 

@@ -9,6 +9,7 @@ import { prisma } from './lib/prisma.js';
 import { initializeSocket } from './lib/socket.js';
 import { startAllJobs, stopAllJobs } from './jobs/index.js';
 import whatsappBaileysService from './services/whatsapp-baileys.service.js';
+import adminTelegramBotService from './services/admin-telegram-bot.service.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -87,6 +88,7 @@ import channelRoutes from './routes/channel.routes.js';
 import imageRoutes from './routes/images.js';
 import whatsappBaileysRoutes from './routes/whatsapp-baileys.routes.js';
 import gameChannelsRoutes from './routes/game-channels.routes.js';
+import adminBotRoutes from './routes/admin-bot.routes.js';
 
 // Importar rutas de las nuevas plataformas
 import telegramRoutes from './routes/telegram.routes.js';
@@ -118,6 +120,10 @@ app.use('/api/telegram', telegramRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/facebook', facebookRoutes);
 app.use('/api/tiktok', tiktokRoutes);
+
+// Rutas de bots de administración y vinculación Telegram
+app.use('/api/admin', adminBotRoutes);
+app.use('/api/users', adminBotRoutes);
 
 // Rutas anidadas para items de juegos
 import gameItemController from './controllers/game-item.controller.js';
@@ -201,6 +207,14 @@ async function startServer() {
       logger.error('⚠️  Error al restaurar sesiones de WhatsApp:', error);
     }
 
+    // Inicializar bots de administración de Telegram
+    try {
+      await adminTelegramBotService.initialize();
+      logger.info('✅ Bots de administración de Telegram inicializados');
+    } catch (error) {
+      logger.error('⚠️  Error al inicializar bots de Telegram:', error);
+    }
+
     // Iniciar sistema de Jobs
     if (process.env.ENABLE_JOBS !== 'false') {
       startAllJobs();
@@ -217,6 +231,7 @@ async function startServer() {
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM recibido, cerrando servidor...');
   stopAllJobs();
+  await adminTelegramBotService.shutdown();
   await prisma.$disconnect();
   process.exit(0);
 });
@@ -224,6 +239,7 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT recibido, cerrando servidor...');
   stopAllJobs();
+  await adminTelegramBotService.shutdown();
   await prisma.$disconnect();
   process.exit(0);
 });

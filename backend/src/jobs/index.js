@@ -3,6 +3,7 @@ import closeDrawJob from './close-draw.job.js';
 import executeDrawJob from './execute-draw.job.js';
 import publishDrawJob from './publish-draw.job.js';
 import syncApiPlanningJob from './sync-api-planning.job.js';
+import syncApiTicketsJob from './sync-api-tickets.job.js';
 import logger from '../lib/logger.js';
 
 /**
@@ -20,6 +21,7 @@ export function startAllJobs() {
 
     // Jobs de integración con APIs externas
     syncApiPlanningJob.start();      // 06:00 AM - Sincronizar con API SRQ
+    syncApiTicketsJob.start();       // Cada minuto - Importar tickets 5 min antes del sorteo
 
     logger.info('✅ Todos los Jobs iniciados correctamente');
   } catch (error) {
@@ -40,6 +42,7 @@ export function stopAllJobs() {
     executeDrawJob.stop();
     publishDrawJob.stop();
     syncApiPlanningJob.stop();
+    syncApiTicketsJob.stop();
 
     logger.info('✅ Todos los Jobs detenidos');
   } catch (error) {
@@ -54,5 +57,6 @@ export default {
   closeDrawJob,
   executeDrawJob,
   publishDrawJob,
-  syncApiPlanningJob
+  syncApiPlanningJob,
+  syncApiTicketsJob
 };

@@ -18,9 +18,9 @@ class SyncApiPlanningJob {
   start() {
     this.task = cron.schedule(this.cronExpression, async () => {
       await this.execute();
-    });
+    }, { timezone: 'America/Caracas' });
 
-    logger.info('✅ Job SyncApiPlanning iniciado (6:00 AM diario)');
+    logger.info('✅ Job SyncApiPlanning iniciado (6:00 AM diario, TZ: America/Caracas)');
   }
 
   /**

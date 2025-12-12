@@ -33,6 +33,8 @@ model Game {
   pauses        DrawPause[]
   apiConfigs    ApiConfiguration[]
   channels      GameChannel[]
+  users         UserGame[]    // Usuarios asociados al juego
+  adminBots     AdminBotGame[] // Bots de admin asignados
   
   @@index([slug])
   @@index([isActive])
@@ -277,6 +279,7 @@ model User {
   password        String    // Hash bcrypt
   role            UserRole  @default(OPERATOR)
   telegramUserId  String?   @unique // Para bot de Telegram
+  telegramChatId  String?   // Chat ID para notificaciones directas
   isActive        Boolean   @default(true)
   lastLoginAt     DateTime?
   createdAt       DateTime  @default(now())
@@ -284,10 +287,28 @@ model User {
   
   // Relaciones
   auditLogs       AuditLog[]
+  games           UserGame[]  // Juegos asociados al usuario
+  telegramLinkCode TelegramLinkCode? // Código de vinculación temporal
   
   @@index([username])
   @@index([email])
   @@index([isActive])
+}
+
+// Relación muchos a muchos entre usuarios y juegos
+model UserGame {
+  id        String   @id @default(uuid())
+  userId    String
+  gameId    String
+  notify    Boolean  @default(true) // Si debe recibir notificaciones
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, gameId])
+  @@index([userId])
+  @@index([gameId])
 }
 
 enum UserRole {
@@ -535,4 +556,55 @@ enum PlatformStatus {
   DISCONNECTED    // Desconectado
   ERROR           // Error de conexión
   EXPIRED         // Token expirado
+}
+
+// ============================================
+// BOTS DE ADMINISTRACIÓN (Notificaciones)
+// ============================================
+
+// Bot de Telegram para notificaciones a administradores
+model AdminTelegramBot {
+  id              String            @id @default(uuid())
+  name            String            // Nombre descriptivo del bot
+  botToken        String            @unique // Token del bot de Telegram
+  botUsername     String?           // Username del bot (@bot_name)
+  status          PlatformStatus    @default(DISCONNECTED)
+  isActive        Boolean           @default(true)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  // Relaciones
+  gameAssignments AdminBotGame[]    // Juegos asignados a este bot
+  
+  @@index([status])
+  @@index([isActive])
+}
+
+// Relación entre bots de admin y juegos
+model AdminBotGame {
+  id        String           @id @default(uuid())
+  botId     String
+  gameId    String
+  createdAt DateTime         @default(now())
+  
+  bot       AdminTelegramBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  game      Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  
+  @@unique([botId, gameId])
+  @@index([botId])
+  @@index([gameId])
+}
+
+// Código de vinculación temporal para usuarios
+model TelegramLinkCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  code      String   @unique // Código de 6 dígitos
+  expiresAt DateTime // Expira en 10 minutos
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([code])
+  @@index([expiresAt])
 }

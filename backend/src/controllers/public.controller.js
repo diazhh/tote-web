@@ -1,6 +1,45 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
-import { startOfDay, endOfDay } from 'date-fns';
+
+// Helper para obtener inicio y fin del día en Venezuela (UTC-4)
+function getVenezuelaDayBounds(date) {
+  // Crear fecha en Venezuela
+  const d = new Date(date);
+  
+  // Si la fecha viene como string YYYY-MM-DD, interpretarla como fecha en Venezuela
+  if (typeof date === 'string' && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    // Crear fecha a medianoche en Venezuela (UTC-4 = +4 horas en UTC)
+    const [year, month, day] = date.split('-').map(Number);
+    const startOfDay = new Date(Date.UTC(year, month - 1, day, 4, 0, 0, 0)); // 00:00 VE = 04:00 UTC
+    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 3, 59, 59, 999)); // 23:59 VE = 03:59 UTC del día siguiente
+    return { startOfDay, endOfDay };
+  }
+  
+  // Para fechas Date, usar la hora local del servidor ajustada a Venezuela
+  const year = d.getFullYear();
+  const month = d.getMonth();
+  const day = d.getDate();
+  const startOfDay = new Date(Date.UTC(year, month, day, 4, 0, 0, 0));
+  const endOfDay = new Date(Date.UTC(year, month, day + 1, 3, 59, 59, 999));
+  return { startOfDay, endOfDay };
+}
+
+// Helper para obtener el día actual en Venezuela
+function getTodayVenezuelaBounds() {
+  // Obtener la hora actual en Venezuela
+  const now = new Date();
+  const venezuelaOffset = -4 * 60; // UTC-4 en minutos
+  const localOffset = now.getTimezoneOffset();
+  const venezuelaTime = new Date(now.getTime() + (localOffset - venezuelaOffset) * 60 * 1000);
+  
+  const year = venezuelaTime.getFullYear();
+  const month = venezuelaTime.getMonth();
+  const day = venezuelaTime.getDate();
+  
+  const startOfDay = new Date(Date.UTC(year, month, day, 4, 0, 0, 0)); // 00:00 VE = 04:00 UTC
+  const endOfDay = new Date(Date.UTC(year, month, day + 1, 3, 59, 59, 999)); // 23:59 VE = 03:59 UTC del día siguiente
+  return { startOfDay, endOfDay };
+}
 
 class PublicController {
   /**
@@ -41,9 +80,7 @@ class PublicController {
    */
   async getDrawsToday(req, res) {
     try {
-      const today = new Date();
-      const startDate = startOfDay(today);
-      const endDate = endOfDay(today);
+      const { startOfDay: startDate, endOfDay: endDate } = getTodayVenezuelaBounds();
 
       const draws = await prisma.draw.findMany({
         where: {
@@ -74,20 +111,20 @@ class PublicController {
               number: true,
               name: true
             }
-          },
-          preselectedItem: {
-            select: {
-              number: true,
-              name: true
-            }
           }
         },
         orderBy: { scheduledAt: 'asc' }
       });
 
+      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      const sanitizedDraws = draws.map(draw => ({
+        ...draw,
+        winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+      }));
+
       res.json({
         success: true,
-        data: draws
+        data: sanitizedDraws
       });
     } catch (error) {
       logger.error('Error en getDrawsToday:', error);
@@ -113,9 +150,7 @@ class PublicController {
         });
       }
 
-      const targetDate = new Date(date);
-      const startDate = startOfDay(targetDate);
-      const endDate = endOfDay(targetDate);
+      const { startOfDay: startDate, endOfDay: endDate } = getVenezuelaDayBounds(date);
 
       const draws = await prisma.draw.findMany({
         where: {
@@ -146,20 +181,20 @@ class PublicController {
               number: true,
               name: true
             }
-          },
-          preselectedItem: {
-            select: {
-              number: true,
-              name: true
-            }
           }
         },
         orderBy: { scheduledAt: 'asc' }
       });
 
+      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      const sanitizedDraws = draws.map(draw => ({
+        ...draw,
+        winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+      }));
+
       res.json({
         success: true,
-        data: draws
+        data: sanitizedDraws
       });
     } catch (error) {
       logger.error('Error en getDrawsByDate:', error);
@@ -177,9 +212,7 @@ class PublicController {
   async getGameDrawsToday(req, res) {
     try {
       const { gameSlug } = req.params;
-      const today = new Date();
-      const startDate = startOfDay(today);
-      const endDate = endOfDay(today);
+      const { startOfDay: startDate, endOfDay: endDate } = getTodayVenezuelaBounds();
 
       const game = await prisma.game.findUnique({
         where: { slug: gameSlug }
@@ -219,20 +252,20 @@ class PublicController {
               number: true,
               name: true
             }
-          },
-          preselectedItem: {
-            select: {
-              number: true,
-              name: true
-            }
           }
         },
         orderBy: { scheduledAt: 'asc' }
       });
 
+      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      const sanitizedDraws = draws.map(draw => ({
+        ...draw,
+        winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+      }));
+
       res.json({
         success: true,
-        data: draws
+        data: sanitizedDraws
       });
     } catch (error) {
       logger.error('Error en getGameDrawsToday:', error);
@@ -306,12 +339,6 @@ class PublicController {
                 number: true,
                 name: true
               }
-            },
-            preselectedItem: {
-              select: {
-                number: true,
-                name: true
-              }
             }
           },
           orderBy: { scheduledAt: 'desc' },
@@ -324,7 +351,10 @@ class PublicController {
       res.json({
         success: true,
         data: {
-          draws,
+          draws: draws.map(draw => ({
+            ...draw,
+            winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+          })),
           pagination: {
             page: parseInt(page),
             pageSize: parseInt(pageSize),
@@ -376,17 +406,12 @@ class PublicController {
               type: true
             }
           },
-          preselectedItem: {
-            select: {
-              number: true,
-              name: true
-            }
-          }
         },
         orderBy: { scheduledAt: 'asc' },
         take: parseInt(limit)
       });
 
+      // No mostrar preselectedItem en endpoints públicos
       res.json({
         success: true,
         data: draws
@@ -429,12 +454,6 @@ class PublicController {
               number: true,
               name: true
             }
-          },
-          preselectedItem: {
-            select: {
-              number: true,
-              name: true
-            }
           }
         }
       });
@@ -446,9 +465,13 @@ class PublicController {
         });
       }
 
+      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
       res.json({
         success: true,
-        data: draw
+        data: {
+          ...draw,
+          winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+        }
       });
     } catch (error) {
       logger.error('Error en getDraw:', error);
