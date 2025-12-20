@@ -24,7 +24,7 @@ export default function TemplateModal({ template, games, onClose }) {
         gameId: template.gameId || '',
         description: template.description || '',
         daysOfWeek: template.daysOfWeek || [],
-        drawTimes: template.drawTimes || [],
+        drawTimes: (template.drawTimes || []).map(t => t.substring(0, 5)),
         isActive: template.isActive !== undefined ? template.isActive : true,
       });
     } else if (games.length > 0) {

@@ -102,9 +102,10 @@ class AuthController {
    */
   async changePassword(req, res) {
     try {
-      const { oldPassword, newPassword } = req.body;
+      const { oldPassword, currentPassword, newPassword } = req.body;
+      const actualOldPassword = oldPassword || currentPassword;
 
-      if (!oldPassword || !newPassword) {
+      if (!actualOldPassword || !newPassword) {
         return res.status(400).json({
           success: false,
           error: 'Contraseña actual y nueva son requeridas'
@@ -118,7 +119,7 @@ class AuthController {
         });
       }
 
-      await authService.changePassword(req.user.id, oldPassword, newPassword);
+      await authService.changePassword(req.user.id, actualOldPassword, newPassword);
 
       res.json({
         success: true,
@@ -171,6 +172,28 @@ class AuthController {
       });
     } catch (error) {
       logger.error('Error en updateUser:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * PATCH /api/auth/profile
+   * Actualizar perfil del usuario actual
+   */
+  async updateProfile(req, res) {
+    try {
+      const { email } = req.body;
+      const user = await authService.updateUser(req.user.id, { email });
+
+      res.json({
+        success: true,
+        data: user
+      });
+    } catch (error) {
+      logger.error('Error en updateProfile:', error);
       res.status(400).json({
         success: false,
         error: error.message

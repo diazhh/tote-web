@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import useAuthStore from '@/lib/stores/authStore';
 import authAPI from '@/lib/api/auth';
 import { toast } from 'sonner';
-import { Users, Shield, Eye, UserPlus } from 'lucide-react';
+import { Users, Shield, Eye, UserPlus, Edit2, X, Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatCaracasDate } from '@/lib/utils/dateUtils';
 
@@ -13,6 +13,17 @@ export default function UsuariosPage() {
   const { user } = useAuthStore();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    username: '',
+    email: '',
+    password: '',
+    role: 'OPERATOR',
+    isActive: true
+  });
 
   useEffect(() => {
     // Solo ADMIN puede ver esta página
@@ -36,6 +47,81 @@ export default function UsuariosPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const resetForm = () => {
+    setFormData({ username: '', email: '', password: '', role: 'OPERATOR', isActive: true });
+  };
+
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    if (!formData.username || !formData.password) {
+      toast.error('Usuario y contraseña son requeridos');
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await authAPI.register({
+        username: formData.username,
+        email: formData.email || undefined,
+        password: formData.password,
+        role: formData.role
+      });
+      if (response.success) {
+        toast.success('Usuario creado exitosamente');
+        setShowCreateModal(false);
+        resetForm();
+        loadUsers();
+      } else {
+        toast.error(response.error || 'Error al crear usuario');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al crear usuario');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    if (!selectedUser) return;
+    setSaving(true);
+    try {
+      const updates = { email: formData.email || undefined, role: formData.role, isActive: formData.isActive };
+      if (formData.password) updates.password = formData.password;
+      const response = await authAPI.updateUser(selectedUser.id, updates);
+      if (response.success) {
+        toast.success('Usuario actualizado');
+        setShowEditModal(false);
+        setSelectedUser(null);
+        resetForm();
+        loadUsers();
+      } else {
+        toast.error(response.error || 'Error al actualizar');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al actualizar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleToggleActive = async (u) => {
+    try {
+      const response = await authAPI.updateUser(u.id, { isActive: !u.isActive });
+      if (response.success) {
+        toast.success(`Usuario ${u.isActive ? 'desactivado' : 'activado'}`);
+        loadUsers();
+      }
+    } catch (error) {
+      toast.error('Error al cambiar estado');
+    }
+  };
+
+  const openEditModal = (u) => {
+    setSelectedUser(u);
+    setFormData({ username: u.username, email: u.email || '', password: '', role: u.role, isActive: u.isActive });
+    setShowEditModal(true);
   };
 
   if (user?.role !== 'ADMIN') {
@@ -70,70 +156,95 @@ export default function UsuariosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h1>
           <p className="text-gray-600 mt-1">Administra los usuarios del sistema</p>
         </div>
+        <button
+          onClick={() => { resetForm(); setShowCreateModal(true); }}
+          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          <UserPlus className="w-4 h-4 mr-2" />
+          Nuevo Usuario
+        </button>
       </div>
 
       {/* Users Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Usuario
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Rol
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Estado
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Creado
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {users.map((u) => (
-              <tr key={u.id} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold mr-3">
-                      {u.username.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="text-sm font-medium text-gray-900">
-                      {u.username}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="text-sm text-gray-900">
-                    {u.email || '-'}
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {getRoleBadge(u.role)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    u.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                  }`}>
-                    {u.isActive ? 'Activo' : 'Inactivo'}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {formatCaracasDate(u.createdAt)}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Usuario
+                </th>
+                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Email
+                </th>
+                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Rol
+                </th>
+                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Estado
+                </th>
+                <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Creado
+                </th>
+                <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Acciones
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {users.map((u) => (
+                <tr key={u.id} className="hover:bg-gray-50">
+                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold mr-3 text-sm lg:text-base">
+                        {u.username.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {u.username}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                    <div className="text-sm text-gray-900">
+                      {u.email || '-'}
+                    </div>
+                  </td>
+                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                    {getRoleBadge(u.role)}
+                  </td>
+                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                    <button
+                      onClick={() => handleToggleActive(u)}
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition ${
+                        u.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                      }`}
+                      title={u.isActive ? 'Click para desactivar' : 'Click para activar'}
+                    >
+                      {u.isActive ? 'Activo' : 'Inactivo'}
+                    </button>
+                  </td>
+                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {formatCaracasDate(u.createdAt)}
+                  </td>
+                  <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                    <button
+                      onClick={() => openEditModal(u)}
+                      className="text-blue-600 hover:text-blue-900 p-1"
+                      title="Editar usuario"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
 
         {users.length === 0 && (
           <div className="text-center py-12">
@@ -142,6 +253,97 @@ export default function UsuariosPage() {
           </div>
         )}
       </div>
+
+      {/* Create User Modal */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Crear Usuario</h2>
+              <button onClick={() => setShowCreateModal(false)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Usuario *</label>
+                <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="nombre_usuario" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="usuario@ejemplo.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña *</label>
+                <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="••••••••" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
+                <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="OPERATOR">Operador</option>
+                  <option value="ADMIN">Administrador</option>
+                  <option value="VIEWER">Visor</option>
+                </select>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Crear Usuario
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit User Modal */}
+      {showEditModal && selectedUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold">Editar Usuario</h2>
+              <button onClick={() => { setShowEditModal(false); setSelectedUser(null); }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={handleEditUser} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Usuario</label>
+                <input type="text" value={formData.username} disabled className="w-full px-3 py-2 border rounded-lg bg-gray-100 text-gray-500" />
+                <p className="text-xs text-gray-500 mt-1">El nombre de usuario no se puede cambiar</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input type="email" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="usuario@ejemplo.com" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nueva Contraseña</label>
+                <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" placeholder="Dejar vacío para no cambiar" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Rol</label>
+                <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500">
+                  <option value="OPERATOR">Operador</option>
+                  <option value="ADMIN">Administrador</option>
+                  <option value="VIEWER">Visor</option>
+                </select>
+              </div>
+              <div className="flex items-center">
+                <input type="checkbox" id="isActive" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="w-4 h-4 text-blue-600 rounded" />
+                <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">Usuario activo</label>
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => { setShowEditModal(false); setSelectedUser(null); }} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg">Cancelar</button>
+                <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2">
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/authStore';
-import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot } from 'lucide-react';
+import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -11,6 +11,7 @@ export default function AdminLayout({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, isAuthenticated, logout, checkAuth } = useAuthStore();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const verify = async () => {
@@ -42,6 +43,7 @@ export default function AdminLayout({ children }) {
     { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { name: 'Sorteos', href: '/admin/sorteos', icon: Trophy },
     { name: 'Juegos', href: '/admin/juegos', icon: Calendar },
+    { name: 'Pausas y Emergencia', href: '/admin/pausas', icon: PauseCircle, adminOnly: true },
     { name: 'Usuarios', href: '/admin/usuarios', icon: Users, adminOnly: true },
     { name: 'Bots Admin', href: '/admin/bots-admin', icon: Bot, adminOnly: true },
     { 
@@ -65,16 +67,34 @@ export default function AdminLayout({ children }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <div className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200">
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 z-40 bg-gray-600 bg-opacity-75 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      <div className="flex h-screen">
+        {/* Sidebar */}
+        <div className={`
+          fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 lg:flex-shrink-0
+          ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        `}>
         {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-gray-200">
+        <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200">
           <h1 className="text-xl font-bold text-gray-900">Totalizador</h1>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"
+          >
+            <X className="w-6 h-6" />
+          </button>
         </div>
 
         {/* User Info */}
         <div className="p-4 border-b border-gray-200">
-          <div className="flex items-center space-x-3">
+          <Link href="/admin/perfil" className="flex items-center space-x-3 hover:bg-gray-50 rounded-lg p-2 -m-2 transition">
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold">
               {user?.username?.charAt(0).toUpperCase()}
             </div>
@@ -83,10 +103,10 @@ export default function AdminLayout({ children }) {
                 {user?.username}
               </p>
               <p className="text-xs text-gray-500 truncate">
-                {user?.role}
+                {user?.role} • Ver perfil
               </p>
             </div>
-          </div>
+          </Link>
         </div>
 
         {/* Navigation */}
@@ -157,26 +177,35 @@ export default function AdminLayout({ children }) {
       </div>
 
       {/* Main Content */}
-      <div className="pl-64">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
-        <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8">
-          <h2 className="text-lg font-semibold text-gray-900">
-            Panel de Administración
-          </h2>
+        <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-8 flex-shrink-0">
+          <div className="flex items-center">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 mr-4"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Panel de Administración
+            </h2>
+          </div>
           <a
             href="/"
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-blue-600 hover:text-blue-700 font-medium"
+            className="text-sm text-blue-600 hover:text-blue-700 font-medium hidden sm:block"
           >
             Ver sitio público →
           </a>
         </div>
 
         {/* Page Content */}
-        <main className="p-8">
+        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
           {children}
         </main>
+      </div>
       </div>
     </div>
   );

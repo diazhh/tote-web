@@ -9,12 +9,12 @@ import { es } from 'date-fns/locale';
  */
 export function formatDate(date, formatStr = 'dd/MM/yyyy') {
   if (!date) return '';
-  // Convertir UTC a Venezuela (UTC-4)
-  // UTC-4 significa que Venezuela está 4 horas DETRÁS de UTC
-  // Por lo tanto, restamos 4 horas del timestamp UTC
-  const utcDate = new Date(date);
-  const venezuelaDate = new Date(utcDate.getTime() - (4 * 60 * 60 * 1000));
-  return format(venezuelaDate, formatStr, { locale: es });
+  // Las fechas ya vienen en hora de Caracas desde la DB (timestamp without time zone)
+  // Parseamos como string para evitar conversión automática de zona horaria
+  const dateStr = typeof date === 'string' ? date : date.toISOString();
+  const [datePart] = dateStr.split('T');
+  const [year, month, day] = datePart.split('-');
+  return `${day}/${month}/${year}`;
 }
 
 /**
@@ -24,17 +24,14 @@ export function formatDate(date, formatStr = 'dd/MM/yyyy') {
  */
 export function formatTime(date) {
   if (!date) return '';
-  // Parsear la fecha como string y extraer la hora sin conversión de zona horaria
+  // Las horas ya vienen en hora de Caracas desde la DB (timestamp without time zone)
+  // Parseamos como string para evitar conversión automática de zona horaria
   const dateStr = typeof date === 'string' ? date : date.toISOString();
-  const [datePart, timePart] = dateStr.split('T');
+  const [, timePart] = dateStr.split('T');
   const [hoursStr, minutes] = timePart.split(':');
   let hours = parseInt(hoursStr);
   
-  // Convertir de UTC a Venezuela (UTC-4)
-  hours = hours - 4;
-  if (hours < 0) hours += 24;
-  
-  // Convertir a formato 12 horas
+  // Convertir a formato 12 horas (sin ajuste de zona horaria)
   const period = hours >= 12 ? 'PM' : 'AM';
   const hours12 = hours % 12 || 12;
   

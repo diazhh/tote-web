@@ -172,22 +172,22 @@ export default function WhatsAppPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">WhatsApp</h1>
           <p className="text-gray-600 mt-1">Gestiona tus instancias de WhatsApp</p>
         </div>
-        <div className="flex space-x-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={() => setShowNewInstanceModal(true)}
-            className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <Plus className="w-4 h-4 mr-2" />
             Nueva Instancia
           </button>
           <button
             onClick={handleCleanup}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <Trash2 className="w-4 h-4 mr-2" />
             Limpiar Inactivas
@@ -196,7 +196,7 @@ export default function WhatsAppPage() {
       </div>
 
       {instances.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-8 text-center">
+        <div className="bg-white rounded-lg shadow p-6 lg:p-8 text-center">
           <Smartphone className="w-12 h-12 text-gray-400 mx-auto" />
           <h2 className="mt-4 text-lg font-medium text-gray-900">No hay instancias de WhatsApp</h2>
           <p className="mt-2 text-gray-500">
@@ -212,114 +212,116 @@ export default function WhatsAppPage() {
         </div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Instancia
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Número
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Conexión
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Canal
-                </th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {instances.map((instance) => (
-                <tr key={instance.instanceId}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10 bg-gray-100 rounded-full flex items-center justify-center">
-                        <Smartphone className="h-5 w-5 text-gray-500" />
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">
-                          {instance.name || instance.instanceId}
-                        </div>
-                        {instance.name && (
-                          <div className="text-xs text-gray-500">
-                            {instance.instanceId}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {getStatusBadge(instance.status)}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {instance.phoneNumber || 'No conectado'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {instance.connectedAt ? formatCaracasDateTime(instance.connectedAt) : 'N/A'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {instance.channelName || 'Sin asociar'}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <div className="flex justify-end space-x-2">
-                      {instance.status === 'connected' && (
-                        <button
-                          onClick={() => handleShowTestMessage(instance)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Enviar mensaje de prueba"
-                        >
-                          <MessageSquare className="w-5 h-5" />
-                        </button>
-                      )}
-                      
-                      {(instance.status === 'qr_ready' || instance.status === 'disconnected') && (
-                        <button
-                          onClick={() => handleShowQR(instance)}
-                          className="text-blue-600 hover:text-blue-900"
-                          title="Ver código QR"
-                        >
-                          <QrCode className="w-5 h-5" />
-                        </button>
-                      )}
-                      
-                      <button
-                        onClick={() => handleReconnect(instance.instanceId)}
-                        className="text-green-600 hover:text-green-900"
-                        title="Reconectar"
-                      >
-                        <RefreshCw className="w-5 h-5" />
-                      </button>
-                      
-                      {instance.status === 'connected' && (
-                        <button
-                          onClick={() => handleDisconnect(instance.instanceId)}
-                          className="text-orange-600 hover:text-orange-900"
-                          title="Desconectar"
-                        >
-                          <Power className="w-5 h-5" />
-                        </button>
-                      )}
-                      
-                      <button
-                        onClick={() => handleDelete(instance.instanceId)}
-                        className="text-red-600 hover:text-red-900"
-                        title="Eliminar"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Instancia
+                  </th>
+                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Número
+                  </th>
+                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Conexión
+                  </th>
+                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Canal
+                  </th>
+                  <th scope="col" className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Acciones
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {instances.map((instance) => (
+                  <tr key={instance.instanceId}>
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-8 w-8 lg:h-10 lg:w-10 bg-gray-100 rounded-full flex items-center justify-center">
+                          <Smartphone className="h-4 w-4 lg:h-5 lg:w-5 text-gray-500" />
+                        </div>
+                        <div className="ml-3 lg:ml-4">
+                          <div className="text-sm font-medium text-gray-900">
+                            {instance.name || instance.instanceId}
+                          </div>
+                          {instance.name && (
+                            <div className="text-xs text-gray-500">
+                              {instance.instanceId}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                      {getStatusBadge(instance.status)}
+                    </td>
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {instance.phoneNumber || 'No conectado'}
+                    </td>
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {instance.connectedAt ? formatCaracasDateTime(instance.connectedAt) : 'N/A'}
+                    </td>
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {instance.channelName || 'Sin asociar'}
+                    </td>
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-1 lg:space-x-2">
+                        {instance.status === 'connected' && (
+                          <button
+                            onClick={() => handleShowTestMessage(instance)}
+                            className="text-blue-600 hover:text-blue-900 p-1"
+                            title="Enviar mensaje de prueba"
+                          >
+                            <MessageSquare className="w-4 h-4 lg:w-5 lg:h-5" />
+                          </button>
+                        )}
+                        
+                        {(instance.status === 'qr_ready' || instance.status === 'disconnected') && (
+                          <button
+                            onClick={() => handleShowQR(instance)}
+                            className="text-blue-600 hover:text-blue-900 p-1"
+                            title="Ver código QR"
+                          >
+                            <QrCode className="w-4 h-4 lg:w-5 lg:h-5" />
+                          </button>
+                        )}
+                        
+                        <button
+                          onClick={() => handleReconnect(instance.instanceId)}
+                          className="text-green-600 hover:text-green-900 p-1"
+                          title="Reconectar"
+                        >
+                          <RefreshCw className="w-4 h-4 lg:w-5 lg:h-5" />
+                        </button>
+                        
+                        {instance.status === 'connected' && (
+                          <button
+                            onClick={() => handleDisconnect(instance.instanceId)}
+                            className="text-orange-600 hover:text-orange-900 p-1"
+                            title="Desconectar"
+                          >
+                            <Power className="w-4 h-4 lg:w-5 lg:h-5" />
+                          </button>
+                        )}
+                        
+                        <button
+                          onClick={() => handleDelete(instance.instanceId)}
+                          className="text-red-600 hover:text-red-900 p-1"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="w-4 h-4 lg:w-5 lg:h-5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

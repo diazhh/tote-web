@@ -18,6 +18,9 @@ const app = express();
 const server = createServer(app);
 const PORT = process.env.PORT || 3001;
 
+// Confiar en proxy (HAProxy/nginx)
+app.set('trust proxy', 1);
+
 // ============================================
 // MIDDLEWARES
 // ============================================
@@ -33,19 +36,45 @@ app.use(helmet({
   },
 }));
 
-// CORS
+// CORS - debe ir ANTES del rate limiter para manejar preflight requests
+const allowedOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',').map(origin => origin.trim())
+  : ['http://localhost:3000'];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: allowedOrigins,
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
-// Rate limiting
-const limiter = rateLimit({
+// Manejar preflight requests explícitamente
+app.options('*', cors({
+  origin: allowedOrigins,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+}));
+
+// Rate limiting - General (más permisivo)
+const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 100, // Límite de 100 requests por ventana
+  max: 1000, // Límite de 1000 requests por ventana
   message: 'Demasiadas peticiones desde esta IP, por favor intenta más tarde.',
+  standardHeaders: true,
+  legacyHeaders: false,
 });
-app.use('/api/', limiter);
+
+// Rate limiting - Auth (más estricto para prevenir brute force, pero suficiente para uso normal)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutos
+  max: 50, // 50 intentos de login por ventana
+  message: 'Demasiados intentos de autenticación, por favor intenta más tarde.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/', generalLimiter);
 
 // Body parsing
 app.use(express.json());
@@ -113,6 +142,7 @@ app.use('/api/pauses', drawPauseRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/game-channels', gameChannelsRoutes);
 app.use('/api/images', imageRoutes);
+// app.use('/api/system', systemConfigRoutes); // TODO: Importar systemConfigRoutes si es necesario
 
 // Rutas de plataformas de canales
 app.use('/api/whatsapp', whatsappBaileysRoutes);

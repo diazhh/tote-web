@@ -112,15 +112,6 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Info */}
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <p className="text-sm text-blue-800 font-medium mb-2">Usuarios por defecto:</p>
-            <ul className="text-xs text-blue-700 space-y-1">
-              <li>• <strong>admin</strong> / admin123 (Administrador)</li>
-              <li>• <strong>operator</strong> / operator123 (Operador)</li>
-            </ul>
-          </div>
-
           {/* Footer */}
           <div className="mt-6 text-center">
             <a

@@ -1,6 +1,9 @@
 import cron from 'node-cron';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import systemConfigService from '../services/system-config.service.js';
+import telegramService from '../services/telegram.service.js';
+import whatsappBaileysService from '../services/whatsapp-baileys.service.js';
 import publicationService from '../services/publication.service.js';
 import { emitToAll } from '../lib/socket.js';
 
@@ -40,6 +43,13 @@ class PublishDrawJob {
    */
   async execute() {
     try {
+      // Verificar parada de emergencia
+      const isEmergencyStop = await systemConfigService.isEmergencyStop();
+      if (isEmergencyStop) {
+        logger.warn('🚨 Sistema en parada de emergencia - Publicaciones canceladas');
+        return;
+      }
+
       // Buscar sorteos con status DRAWN que no han sido publicados
       const drawsToPublish = await prisma.draw.findMany({
         where: {

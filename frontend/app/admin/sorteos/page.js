@@ -137,7 +137,7 @@ export default function SorteosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Sorteos</h1>
           <p className="text-gray-600 mt-1">Administra los sorteos del sistema</p>
@@ -152,47 +152,52 @@ export default function SorteosPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center space-x-4 flex-wrap gap-2">
-          <Filter className="w-5 h-5 text-gray-400" />
-          
+      <div className="bg-white rounded-lg shadow p-4 lg:p-6">
+        <div className="flex flex-col lg:flex-row lg:items-center space-y-4 lg:space-y-0 lg:space-x-4 gap-2">
           <div className="flex items-center space-x-2">
-            <Calendar className="w-4 h-4 text-gray-500" />
-            <input
-              type="date"
-              value={filters.date}
-              onChange={(e) => setFilters({ ...filters, date: e.target.value, page: 1 })}
-              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-            />
+            <Filter className="w-5 h-5 text-gray-400 flex-shrink-0" />
+            <span className="text-sm font-medium text-gray-700 hidden lg:block">Filtros:</span>
           </div>
+          
+          <div className="flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 lg:flex-1">
+            <div className="flex items-center space-x-2">
+              <Calendar className="w-4 h-4 text-gray-500 flex-shrink-0" />
+              <input
+                type="date"
+                value={filters.date}
+                onChange={(e) => setFilters({ ...filters, date: e.target.value, page: 1 })}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+              />
+            </div>
 
-          <select
-            value={filters.gameId}
-            onChange={(e) => setFilters({ ...filters, gameId: e.target.value, page: 1 })}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-          >
-            <option value="">Todos los juegos</option>
-            {games.map(game => (
-              <option key={game.id} value={game.id}>{game.name}</option>
-            ))}
-          </select>
+            <select
+              value={filters.gameId}
+              onChange={(e) => setFilters({ ...filters, gameId: e.target.value, page: 1 })}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            >
+              <option value="">Todos los juegos</option>
+              {games.map(game => (
+                <option key={game.id} value={game.id}>{game.name}</option>
+              ))}
+            </select>
 
-          <select
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
-            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-          >
-            <option value="">Todos los estados</option>
-            <option value="SCHEDULED">Programado</option>
-            <option value="PENDING">Pendiente</option>
-            <option value="CLOSED">Cerrado</option>
-            <option value="DRAWN">Sorteado</option>
-            <option value="PUBLISHED">Publicado</option>
-          </select>
+            <select
+              value={filters.status}
+              onChange={(e) => setFilters({ ...filters, status: e.target.value, page: 1 })}
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none text-sm"
+            >
+              <option value="">Todos los estados</option>
+              <option value="SCHEDULED">Programado</option>
+              <option value="PENDING">Pendiente</option>
+              <option value="CLOSED">Cerrado</option>
+              <option value="DRAWN">Sorteado</option>
+              <option value="PUBLISHED">Publicado</option>
+            </select>
+          </div>
 
           <button
             onClick={loadDraws}
-            className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+            className="flex items-center px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition text-sm"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Actualizar
@@ -215,23 +220,23 @@ export default function SorteosPage() {
             <p className="text-gray-600">No hay sorteos para mostrar</p>
           </div>
         ) : (
-          <>
+          <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Juego
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Fecha/Hora
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Estado
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Ganador
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
@@ -239,7 +244,7 @@ export default function SorteosPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {draws.map((draw) => (
                   <tr key={draw.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {draw.game?.name}
                       </div>
@@ -247,7 +252,7 @@ export default function SorteosPage() {
                         {draw.game?.type}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
                         {formatCaracasDate(draw.scheduledAt)}
                       </div>
@@ -255,10 +260,10 @@ export default function SorteosPage() {
                         {formatCaracasTime(draw.scheduledAt)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(draw.status)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                       {draw.winnerItem ? (
                         <div>
                           <div className="text-sm font-medium text-gray-900">
@@ -280,54 +285,56 @@ export default function SorteosPage() {
                         <span className="text-sm text-gray-400">-</span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <button
-                        onClick={() => handleViewDetail(draw)}
-                        className="text-gray-600 hover:text-gray-900 mr-3"
-                        title="Ver detalles"
-                      >
-                        <Eye className="w-4 h-4 inline" />
-                      </button>
-                      {draw.status === 'CLOSED' && (
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex justify-end space-x-2">
                         <button
-                          onClick={() => handleChangeWinner(draw)}
-                          className="text-blue-600 hover:text-blue-900 mr-3"
-                          title="Cambiar ganador"
+                          onClick={() => handleViewDetail(draw)}
+                          className="text-gray-600 hover:text-gray-900 p-1"
+                          title="Ver detalles"
                         >
-                          <Edit2 className="w-4 h-4 inline" />
+                          <Eye className="w-4 h-4" />
                         </button>
-                      )}
+                        {draw.status === 'CLOSED' && (
+                          <button
+                            onClick={() => handleChangeWinner(draw)}
+                            className="text-blue-600 hover:text-blue-900 p-1"
+                            title="Cambiar ganador"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        )}
 
-            {/* Pagination */}
-            {pagination.totalPages > 1 && (
-              <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between">
-                <div className="text-sm text-gray-700">
-                  Mostrando página {filters.page} de {pagination.totalPages}
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
-                    disabled={filters.page === 1}
-                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
-                    disabled={filters.page === pagination.totalPages}
-                    className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
+        {/* Pagination */}
+        {draws.length > 0 && pagination.totalPages > 1 && (
+          <div className="px-4 lg:px-6 py-4 border-t border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="text-sm text-gray-700">
+              Mostrando página {filters.page} de {pagination.totalPages}
+            </div>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setFilters({ ...filters, page: filters.page - 1 })}
+                disabled={filters.page === 1}
+                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                Anterior
+              </button>
+              <button
+                onClick={() => setFilters({ ...filters, page: filters.page + 1 })}
+                disabled={filters.page === pagination.totalPages}
+                className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              >
+                Siguiente
+              </button>
+            </div>
+          </div>
         )}
       </div>
 

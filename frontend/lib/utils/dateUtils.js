@@ -149,3 +149,44 @@ export function isToday(date) {
   const today = nowInCaracas();
   return format(zonedDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
 }
+
+/**
+ * Formatea fecha y hora en formato AM/PM en zona horaria de Caracas
+ * @param {string|Date} date - Fecha en formato ISO string o Date object
+ * @returns {string} Fecha y hora formateada (dd/MM/yyyy hh:mm a)
+ */
+export function formatDateTimeAMPM(date) {
+  return formatToCaracasTime(date, 'dd/MM/yyyy hh:mm a');
+}
+
+/**
+ * Extrae solo la hora de un string de fecha formateado (yyyy-MM-dd HH:mm:ss)
+ * @param {string} dateString - String de fecha en formato 'yyyy-MM-dd HH:mm:ss'
+ * @returns {string} Hora en formato HH:mm
+ */
+export function extractTimeFromCaracasString(dateString) {
+  if (!dateString) return '';
+  // Formato esperado: "2025-12-18 08:00:00"
+  const parts = dateString.split(' ');
+  if (parts.length >= 2) {
+    const timeParts = parts[1].split(':');
+    return `${timeParts[0]}:${timeParts[1]}`; // HH:mm
+  }
+  return '';
+}
+
+/**
+ * Extrae solo la fecha de un string de fecha formateado (yyyy-MM-dd HH:mm:ss)
+ * @param {string} dateString - String de fecha en formato 'yyyy-MM-dd HH:mm:ss'
+ * @returns {string} Fecha en formato dd/MM/yyyy
+ */
+export function extractDateFromCaracasString(dateString) {
+  if (!dateString) return '';
+  // Formato esperado: "2025-12-18 08:00:00"
+  const parts = dateString.split(' ');
+  if (parts.length >= 1) {
+    const dateParts = parts[0].split('-');
+    return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`; // dd/MM/yyyy
+  }
+  return '';
+}

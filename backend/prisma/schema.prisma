@@ -208,6 +208,22 @@ model DrawPause {
 }
 
 // ============================================
+// CONFIGURACIÓN DEL SISTEMA
+// ============================================
+
+model SystemConfig {
+  id          String    @id @default(uuid())
+  key         String    @unique // Clave de configuración (ej: "emergency_stop")
+  value       String    // Valor (JSON string)
+  description String?   // Descripción de la configuración
+  updatedBy   String?   // Usuario que actualizó
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([key])
+}
+
+// ============================================
 // CONFIGURACIÓN DE CANALES
 // ============================================
 

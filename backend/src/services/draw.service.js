@@ -407,8 +407,8 @@ export class DrawService {
         throw new Error('Sorteo no encontrado');
       }
 
-      if (draw.status !== 'CLOSED' && draw.status !== 'DRAWN') {
-        throw new Error('Solo se puede cambiar el ganador de sorteos cerrados o ejecutados');
+      if (draw.status === 'PUBLISHED' || draw.status === 'CANCELLED') {
+        throw new Error('No se puede cambiar el ganador de sorteos publicados o cancelados');
       }
 
       const updatedDraw = await prisma.draw.update({

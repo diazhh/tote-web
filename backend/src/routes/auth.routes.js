@@ -10,6 +10,7 @@ router.post('/login', authController.login.bind(authController));
 // Rutas protegidas
 router.get('/me', authenticate, authController.me.bind(authController));
 router.post('/change-password', authenticate, authController.changePassword.bind(authController));
+router.patch('/profile', authenticate, authController.updateProfile.bind(authController));
 
 // Rutas de administración
 router.post('/register', authenticate, authorize('ADMIN'), authController.register.bind(authController));
