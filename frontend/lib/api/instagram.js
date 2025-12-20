@@ -11,7 +11,7 @@ const instagramAPI = {
    * @param {string} data.redirectUri - URI de redirección OAuth
    */
   createInstance: async (data) => {
-    const response = await api.post('/api/instagram/instances', {
+    const response = await api.post('/instagram/instances', {
       instanceId: data.instanceId,
       name: data.name,
       appId: data.appId,
@@ -28,7 +28,7 @@ const instagramAPI = {
    * @param {string} redirectUri - URI de redirección
    */
   authorizeInstance: async (instanceId, code, redirectUri) => {
-    const response = await api.post(`/api/instagram/instances/${instanceId}/authorize`, {
+    const response = await api.post(`/instagram/instances/${instanceId}/authorize`, {
       code,
       redirectUri
     });
@@ -39,7 +39,7 @@ const instagramAPI = {
    * Obtener todas las instancias de Instagram
    */
   listInstances: async () => {
-    const response = await api.get('/api/instagram/instances');
+    const response = await api.get('/instagram/instances');
     return response.data;
   },
 
@@ -48,7 +48,7 @@ const instagramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   getInstance: async (instanceId) => {
-    const response = await api.get(`/api/instagram/instances/${instanceId}`);
+    const response = await api.get(`/instagram/instances/${instanceId}`);
     return response.data;
   },
 
@@ -58,7 +58,7 @@ const instagramAPI = {
    * @param {number} limit - Límite de elementos a obtener
    */
   getUserMedia: async (instanceId, limit = 25) => {
-    const response = await api.get(`/api/instagram/instances/${instanceId}/media`, {
+    const response = await api.get(`/instagram/instances/${instanceId}/media`, {
       params: { limit }
     });
     return response.data;
@@ -69,7 +69,7 @@ const instagramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   refreshToken: async (instanceId) => {
-    const response = await api.post(`/api/instagram/instances/${instanceId}/refresh-token`);
+    const response = await api.post(`/instagram/instances/${instanceId}/refresh-token`);
     return response.data;
   },
 
@@ -78,7 +78,7 @@ const instagramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   testConnection: async (instanceId) => {
-    const response = await api.post(`/api/instagram/instances/${instanceId}/test`);
+    const response = await api.post(`/instagram/instances/${instanceId}/test`);
     return response.data;
   },
 
@@ -87,7 +87,7 @@ const instagramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   disconnectInstance: async (instanceId) => {
-    const response = await api.post(`/api/instagram/instances/${instanceId}/disconnect`);
+    const response = await api.post(`/instagram/instances/${instanceId}/disconnect`);
     return response.data;
   },
 
@@ -96,7 +96,7 @@ const instagramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   deleteInstance: async (instanceId) => {
-    const response = await api.delete(`/api/instagram/instances/${instanceId}`);
+    const response = await api.delete(`/instagram/instances/${instanceId}`);
     return response.data;
   },
 

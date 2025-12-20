@@ -10,7 +10,7 @@ const whatsappAPI = {
    */
   createWhatsAppInstance: async (data) => {
     // Crear instancia y canal en una sola llamada
-    const response = await api.post('/api/whatsapp/instances', {
+    const response = await api.post('/whatsapp/instances', {
       instanceId: data.instanceId,
       name: data.name,
       channelData: {
@@ -28,7 +28,7 @@ const whatsappAPI = {
    * @param {string} channelConfigId - ID de la configuración del canal (opcional)
    */
   initializeInstance: async (instanceId, name = null, channelConfigId = null) => {
-    const response = await api.post('/api/whatsapp/instances', {
+    const response = await api.post('/whatsapp/instances', {
       instanceId,
       name,
       channelConfigId
@@ -40,7 +40,7 @@ const whatsappAPI = {
    * Obtener todas las instancias de WhatsApp
    */
   listInstances: async () => {
-    const response = await api.get('/api/whatsapp/instances');
+    const response = await api.get('/whatsapp/instances');
     return response.data;
   },
 
@@ -49,7 +49,7 @@ const whatsappAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   getQRCode: async (instanceId) => {
-    const response = await api.get(`/api/whatsapp/instances/${instanceId}/qr`);
+    const response = await api.get(`/whatsapp/instances/${instanceId}/qr`);
     return response.data;
   },
 
@@ -58,7 +58,7 @@ const whatsappAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   getInstanceStatus: async (instanceId) => {
-    const response = await api.get(`/api/whatsapp/instances/${instanceId}/status`);
+    const response = await api.get(`/whatsapp/instances/${instanceId}/status`);
     return response.data;
   },
 
@@ -67,7 +67,7 @@ const whatsappAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   reinitializeInstance: async (instanceId) => {
-    const response = await api.post(`/api/whatsapp/instances/${instanceId}/reinitialize`);
+    const response = await api.post(`/whatsapp/instances/${instanceId}/reinitialize`);
     return response.data;
   },
 
@@ -76,7 +76,7 @@ const whatsappAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   reconnectInstance: async (instanceId) => {
-    const response = await api.post(`/api/whatsapp/instances/${instanceId}/reconnect`);
+    const response = await api.post(`/whatsapp/instances/${instanceId}/reconnect`);
     return response.data;
   },
 
@@ -85,7 +85,7 @@ const whatsappAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   disconnectInstance: async (instanceId) => {
-    const response = await api.post(`/api/whatsapp/instances/${instanceId}/disconnect`);
+    const response = await api.post(`/whatsapp/instances/${instanceId}/disconnect`);
     return response.data;
   },
 
@@ -94,7 +94,7 @@ const whatsappAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   deleteInstance: async (instanceId) => {
-    const response = await api.delete(`/api/whatsapp/instances/${instanceId}`);
+    const response = await api.delete(`/whatsapp/instances/${instanceId}`);
     return response.data;
   },
 
@@ -105,7 +105,7 @@ const whatsappAPI = {
    * @param {string} message - Mensaje a enviar
    */
   sendTestMessage: async (instanceId, phoneNumber, message) => {
-    const response = await api.post(`/api/whatsapp/instances/${instanceId}/test`, {
+    const response = await api.post(`/whatsapp/instances/${instanceId}/test`, {
       phoneNumber,
       message
     });
@@ -118,7 +118,7 @@ const whatsappAPI = {
    * @param {string} phoneNumber - Número de teléfono con código de país
    */
   checkNumber: async (instanceId, phoneNumber) => {
-    const response = await api.post(`/api/whatsapp/instances/${instanceId}/check-number`, {
+    const response = await api.post(`/whatsapp/instances/${instanceId}/check-number`, {
       phoneNumber
     });
     return response.data;
@@ -128,7 +128,7 @@ const whatsappAPI = {
    * Limpiar sesiones inactivas
    */
   cleanupSessions: async () => {
-    const response = await api.post('/api/whatsapp/cleanup');
+    const response = await api.post('/whatsapp/cleanup');
     return response.data;
   }
 };

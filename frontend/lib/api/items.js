@@ -9,7 +9,7 @@ const itemsAPI = {
    * Get item by ID
    */
   async getById(id) {
-    const response = await api.get(`/api/items/${id}`);
+    const response = await api.get(`/items/${id}`);
     return response.data;
   },
 
@@ -17,7 +17,7 @@ const itemsAPI = {
    * Create new item
    */
   async create(data) {
-    const response = await api.post('/api/items', data);
+    const response = await api.post('/items', data);
     return response.data;
   },
 
@@ -25,7 +25,7 @@ const itemsAPI = {
    * Update item
    */
   async update(id, data) {
-    const response = await api.put(`/api/items/${id}`, data);
+    const response = await api.put(`/items/${id}`, data);
     return response.data;
   },
 
@@ -33,7 +33,7 @@ const itemsAPI = {
    * Delete item
    */
   async delete(id) {
-    const response = await api.delete(`/api/items/${id}`);
+    const response = await api.delete(`/items/${id}`);
     return response.data;
   },
 

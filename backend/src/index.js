@@ -133,6 +133,8 @@ import pagoMovilAccountRoutes from './routes/pago-movil-account.routes.js';
 import ticketRoutes from './routes/ticket.routes.js';
 import prizeRoutes from './routes/prize.routes.js';
 import playerQueryRoutes from './routes/player-query.routes.js';
+import systemConfigRoutes from './routes/system-config.routes.js';
+import pageVisitRoutes from './routes/page-visit.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -151,7 +153,7 @@ app.use('/api/pauses', drawPauseRoutes);
 app.use('/api/channels', channelRoutes);
 app.use('/api/game-channels', gameChannelsRoutes);
 app.use('/api/images', imageRoutes);
-// app.use('/api/system', systemConfigRoutes); // TODO: Importar systemConfigRoutes si es necesario
+app.use('/api/system', systemConfigRoutes);
 
 // Rutas de plataformas de canales
 app.use('/api/whatsapp', whatsappBaileysRoutes);
@@ -173,6 +175,7 @@ app.use('/api/pago-movil-accounts', pagoMovilAccountRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/prizes', prizeRoutes);
 app.use('/api/player', playerQueryRoutes);
+app.use('/api/page-visits', pageVisitRoutes);
 
 // Rutas anidadas para items de juegos
 import gameItemController from './controllers/game-item.controller.js';

@@ -9,7 +9,7 @@ const templatesAPI = {
    * Get all templates
    */
   async getAll(filters = {}) {
-    const response = await api.get('/api/templates', { params: filters });
+    const response = await api.get('/templates', { params: filters });
     return response.data;
   },
 
@@ -17,7 +17,7 @@ const templatesAPI = {
    * Get template by ID
    */
   async getById(id) {
-    const response = await api.get(`/api/templates/${id}`);
+    const response = await api.get(`/templates/${id}`);
     return response.data;
   },
 
@@ -25,7 +25,7 @@ const templatesAPI = {
    * Create new template
    */
   async create(data) {
-    const response = await api.post('/api/templates', data);
+    const response = await api.post('/templates', data);
     return response.data;
   },
 
@@ -33,7 +33,7 @@ const templatesAPI = {
    * Update template
    */
   async update(id, data) {
-    const response = await api.patch(`/api/templates/${id}`, data);
+    const response = await api.patch(`/templates/${id}`, data);
     return response.data;
   },
 
@@ -41,7 +41,7 @@ const templatesAPI = {
    * Delete template
    */
   async delete(id) {
-    const response = await api.delete(`/api/templates/${id}`);
+    const response = await api.delete(`/templates/${id}`);
     return response.data;
   },
 };

@@ -317,6 +317,7 @@ model User {
   deposits        Deposit[]
   withdrawals     Withdrawal[]
   pagoMovilAccounts PagoMovilAccount[]
+  pageVisits      PageVisit[]
   
   @@index([username])
   @@index([email])
@@ -796,4 +797,59 @@ model TicketDetail {
   
   @@index([ticketId])
   @@index([gameItemId])
+}
+
+// ============================================
+// SISTEMA DE RASTREO DE VISITAS
+// ============================================
+
+enum PageType {
+  LANDING         // Página de inicio
+  ADMIN_DASHBOARD // Dashboard principal de admin
+  ADMIN_SORTEOS   // Módulo de sorteos
+  ADMIN_JUEGOS    // Módulo de juegos
+  ADMIN_USUARIOS  // Módulo de usuarios
+  ADMIN_JUGADORES // Módulo de jugadores
+  ADMIN_DEPOSITOS // Módulo de depósitos
+  ADMIN_RETIROS   // Módulo de retiros
+  ADMIN_TICKETS   // Módulo de tickets
+  ADMIN_REPORTES  // Módulo de reportes
+  ADMIN_TELEGRAM  // Módulo de Telegram
+  ADMIN_WHATSAPP  // Módulo de WhatsApp
+  ADMIN_FACEBOOK  // Módulo de Facebook
+  ADMIN_INSTAGRAM // Módulo de Instagram
+  ADMIN_TIKTOK    // Módulo de TikTok
+  ADMIN_BOTS      // Módulo de bots admin
+  ADMIN_PAUSAS    // Módulo de pausas
+  ADMIN_CONFIG    // Módulo de configuración
+  ADMIN_PERFIL    // Perfil de usuario
+  ADMIN_CUENTAS   // Cuentas del sistema
+  ADMIN_PAGO_MOVIL // Pago móvil
+  PLAYER_DASHBOARD // Dashboard de jugador
+  PLAYER_JUGAR    // Página de jugar
+  PLAYER_BALANCE  // Balance histórico
+  PLAYER_CUENTAS  // Cuentas de pago móvil
+  PLAYER_DEPOSITOS // Depósitos del jugador
+  PLAYER_RETIROS  // Retiros del jugador
+}
+
+model PageVisit {
+  id          String    @id @default(uuid())
+  userId      String?   // Opcional, puede ser anónimo
+  pageType    PageType
+  pagePath    String    // Ruta completa de la página
+  userAgent   String?   // User agent del navegador
+  ipAddress   String?   // IP del visitante
+  referrer    String?   // De dónde viene
+  sessionId   String?   // ID de sesión para agrupar visitas
+  duration    Int?      // Duración en segundos (si se registra)
+  createdAt   DateTime  @default(now())
+  
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  
+  @@index([userId])
+  @@index([pageType])
+  @@index([createdAt])
+  @@index([sessionId])
+  @@index([pageType, createdAt])
 }

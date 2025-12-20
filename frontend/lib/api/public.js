@@ -9,7 +9,7 @@ import api from './axios';
  * @returns {Promise<Array>} List of games
  */
 export async function getGames() {
-  const response = await api.get('/api/public/games');
+  const response = await api.get('/public/games');
   return response.data?.data || response.data || [];
 }
 
@@ -18,7 +18,7 @@ export async function getGames() {
  * @returns {Promise<Array>} List of draws
  */
 export async function getTodayDraws() {
-  const response = await api.get('/api/public/draws/today');
+  const response = await api.get('/public/draws/today');
   return response.data?.data || response.data || [];
 }
 
@@ -28,7 +28,7 @@ export async function getTodayDraws() {
  * @returns {Promise<Array>} List of draws
  */
 export async function getDrawsByDate(date) {
-  const response = await api.get('/api/public/draws/by-date', { params: { date } });
+  const response = await api.get('/public/draws/by-date', { params: { date } });
   return response.data?.data || response.data || [];
 }
 
@@ -38,7 +38,7 @@ export async function getDrawsByDate(date) {
  * @returns {Promise<Array>} List of draws
  */
 export async function getNextDraws(limit = 5) {
-  const response = await api.get('/api/public/draws/next', { params: { limit } });
+  const response = await api.get('/public/draws/next', { params: { limit } });
   return response.data?.data || response.data || [];
 }
 
@@ -48,7 +48,7 @@ export async function getNextDraws(limit = 5) {
  * @returns {Promise<Array>} List of draws
  */
 export async function getGameTodayDraws(slug) {
-  const response = await api.get(`/api/public/draws/game/${slug}/today`);
+  const response = await api.get(`/public/draws/game/${slug}/today`);
   return response.data?.data || response.data || [];
 }
 
@@ -59,7 +59,7 @@ export async function getGameTodayDraws(slug) {
  * @returns {Promise<Object>} Paginated draws
  */
 export async function getGameHistory(slug, params = {}) {
-  const response = await api.get(`/api/public/draws/game/${slug}/history`, { params });
+  const response = await api.get(`/public/draws/game/${slug}/history`, { params });
   return response.data?.data || response.data || { draws: [], total: 0, page: 1, limit: 10 };
 }
 
@@ -70,7 +70,7 @@ export async function getGameHistory(slug, params = {}) {
  * @returns {Promise<Object>} Game statistics
  */
 export async function getGameStats(slug, params = {}) {
-  const response = await api.get(`/api/public/stats/game/${slug}`, { params });
+  const response = await api.get(`/public/stats/game/${slug}`, { params });
   return response.data?.data || response.data || {};
 }
 

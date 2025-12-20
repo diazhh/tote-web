@@ -12,7 +12,7 @@ const facebookAPI = {
    * @param {string} data.pageId - ID de la página de Facebook
    */
   createInstance: async (data) => {
-    const response = await api.post('/api/facebook/instances', {
+    const response = await api.post('/facebook/instances', {
       instanceId: data.instanceId,
       name: data.name,
       pageAccessToken: data.pageAccessToken,
@@ -27,7 +27,7 @@ const facebookAPI = {
    * Obtener todas las instancias de Facebook
    */
   listInstances: async () => {
-    const response = await api.get('/api/facebook/instances');
+    const response = await api.get('/facebook/instances');
     return response.data;
   },
 
@@ -36,7 +36,7 @@ const facebookAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   getInstance: async (instanceId) => {
-    const response = await api.get(`/api/facebook/instances/${instanceId}`);
+    const response = await api.get(`/facebook/instances/${instanceId}`);
     return response.data;
   },
 
@@ -48,7 +48,7 @@ const facebookAPI = {
    * @param {Object} options - Opciones adicionales
    */
   sendMessage: async (instanceId, recipientId, message, options = {}) => {
-    const response = await api.post(`/api/facebook/instances/${instanceId}/send-message`, {
+    const response = await api.post(`/facebook/instances/${instanceId}/send-message`, {
       recipientId,
       message,
       options
@@ -64,7 +64,7 @@ const facebookAPI = {
    * @param {Object} options - Opciones adicionales
    */
   sendImage: async (instanceId, recipientId, imageUrl, options = {}) => {
-    const response = await api.post(`/api/facebook/instances/${instanceId}/send-image`, {
+    const response = await api.post(`/facebook/instances/${instanceId}/send-image`, {
       recipientId,
       imageUrl,
       options
@@ -78,7 +78,7 @@ const facebookAPI = {
    * @param {string} userId - ID del usuario
    */
   getUserInfo: async (instanceId, userId) => {
-    const response = await api.get(`/api/facebook/instances/${instanceId}/user/${userId}`);
+    const response = await api.get(`/facebook/instances/${instanceId}/user/${userId}`);
     return response.data;
   },
 
@@ -88,7 +88,7 @@ const facebookAPI = {
    * @param {string} webhookUrl - URL del webhook
    */
   setupWebhook: async (instanceId, webhookUrl) => {
-    const response = await api.post(`/api/facebook/instances/${instanceId}/webhook`, {
+    const response = await api.post(`/facebook/instances/${instanceId}/webhook`, {
       webhookUrl
     });
     return response.data;
@@ -99,7 +99,7 @@ const facebookAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   testConnection: async (instanceId) => {
-    const response = await api.post(`/api/facebook/instances/${instanceId}/test`);
+    const response = await api.post(`/facebook/instances/${instanceId}/test`);
     return response.data;
   },
 
@@ -108,7 +108,7 @@ const facebookAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   disconnectInstance: async (instanceId) => {
-    const response = await api.post(`/api/facebook/instances/${instanceId}/disconnect`);
+    const response = await api.post(`/facebook/instances/${instanceId}/disconnect`);
     return response.data;
   },
 
@@ -117,7 +117,7 @@ const facebookAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   deleteInstance: async (instanceId) => {
-    const response = await api.delete(`/api/facebook/instances/${instanceId}`);
+    const response = await api.delete(`/facebook/instances/${instanceId}`);
     return response.data;
   }
 };

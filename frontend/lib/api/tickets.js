@@ -9,7 +9,7 @@ const ticketsAPI = {
    * Create a new ticket
    */
   async create(ticketData) {
-    const response = await api.post('/api/tickets', ticketData);
+    const response = await api.post('/tickets', ticketData);
     return response.data;
   },
 
@@ -23,7 +23,7 @@ const ticketsAPI = {
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.offset) queryParams.append('offset', params.offset);
 
-    const response = await api.get(`/api/tickets/my-tickets?${queryParams.toString()}`);
+    const response = await api.get(`/tickets/my-tickets?${queryParams.toString()}`);
     return response.data;
   },
 
@@ -31,7 +31,7 @@ const ticketsAPI = {
    * Get ticket by ID
    */
   async getById(id) {
-    const response = await api.get(`/api/tickets/${id}`);
+    const response = await api.get(`/tickets/${id}`);
     return response.data;
   },
 
@@ -39,7 +39,7 @@ const ticketsAPI = {
    * Cancel ticket
    */
   async cancel(id) {
-    const response = await api.delete(`/api/tickets/${id}`);
+    const response = await api.delete(`/tickets/${id}`);
     return response.data;
   }
 };

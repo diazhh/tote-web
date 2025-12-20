@@ -22,7 +22,7 @@ const drawsAPI = {
       }
     }
 
-    const response = await api.get(`/api/draws?${params.toString()}`);
+    const response = await api.get(`/draws?${params.toString()}`);
     return response.data;
   },
 
@@ -30,7 +30,7 @@ const drawsAPI = {
    * Obtener sorteo por ID
    */
   getById: async (id) => {
-    const response = await api.get(`/api/draws/${id}`);
+    const response = await api.get(`/draws/${id}`);
     return response.data;
   },
 
@@ -38,7 +38,7 @@ const drawsAPI = {
    * Crear sorteo manual
    */
   create: async (drawData) => {
-    const response = await api.post('/api/draws', drawData);
+    const response = await api.post('/draws', drawData);
     return response.data;
   },
 
@@ -46,7 +46,7 @@ const drawsAPI = {
    * Actualizar sorteo
    */
   update: async (id, updates) => {
-    const response = await api.put(`/api/draws/${id}`, updates);
+    const response = await api.put(`/draws/${id}`, updates);
     return response.data;
   },
 
@@ -54,7 +54,7 @@ const drawsAPI = {
    * Cancelar sorteo
    */
   cancel: async (id) => {
-    const response = await api.delete(`/api/draws/${id}`);
+    const response = await api.delete(`/draws/${id}`);
     return response.data;
   },
 
@@ -62,7 +62,7 @@ const drawsAPI = {
    * Generar sorteos del día
    */
   generateDaily: async (date) => {
-    const response = await api.post('/api/draws/generate-daily', { date });
+    const response = await api.post('/draws/generate-daily', { date });
     return response.data;
   },
 
@@ -70,7 +70,7 @@ const drawsAPI = {
    * Sorteos de hoy
    */
   today: async () => {
-    const response = await api.get('/api/draws/today');
+    const response = await api.get('/draws/today');
     return response.data;
   },
 
@@ -78,7 +78,7 @@ const drawsAPI = {
    * Próximos sorteos
    */
   upcoming: async (limit = 10) => {
-    const response = await api.get(`/api/draws?limit=${limit}&orderBy=asc`);
+    const response = await api.get(`/draws?limit=${limit}&orderBy=asc`);
     return response.data;
   },
 
@@ -86,7 +86,7 @@ const drawsAPI = {
    * Preseleccionar ganador
    */
   preselect: async (id, itemId = null) => {
-    const response = await api.post(`/api/draws/${id}/preselect`, { itemId });
+    const response = await api.post(`/draws/${id}/preselect`, { itemId });
     return response.data;
   },
 
@@ -94,7 +94,7 @@ const drawsAPI = {
    * Cambiar ganador
    */
   changeWinner: async (id, itemId) => {
-    const response = await api.post(`/api/draws/${id}/change-winner`, { newWinnerItemId: itemId });
+    const response = await api.post(`/draws/${id}/change-winner`, { newWinnerItemId: itemId });
     return response.data;
   },
 
@@ -102,7 +102,7 @@ const drawsAPI = {
    * Forzar publicación
    */
   publish: async (id, channels = null) => {
-    const response = await api.post(`/api/draws/${id}/publish`, { channels });
+    const response = await api.post(`/draws/${id}/publish`, { channels });
     return response.data;
   },
 
@@ -110,7 +110,7 @@ const drawsAPI = {
    * Obtener publicaciones
    */
   getPublications: async (id) => {
-    const response = await api.get(`/api/draws/${id}/publications`);
+    const response = await api.get(`/draws/${id}/publications`);
     return response.data;
   }
 };

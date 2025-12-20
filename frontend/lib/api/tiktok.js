@@ -11,7 +11,7 @@ const tiktokAPI = {
    * @param {string} data.redirectUri - URI de redirección OAuth
    */
   createInstance: async (data) => {
-    const response = await api.post('/api/tiktok/instances', {
+    const response = await api.post('/tiktok/instances', {
       instanceId: data.instanceId,
       name: data.name,
       clientKey: data.clientKey,
@@ -28,7 +28,7 @@ const tiktokAPI = {
    * @param {string} redirectUri - URI de redirección
    */
   authorizeInstance: async (instanceId, code, redirectUri) => {
-    const response = await api.post(`/api/tiktok/instances/${instanceId}/authorize`, {
+    const response = await api.post(`/tiktok/instances/${instanceId}/authorize`, {
       code,
       redirectUri
     });
@@ -39,7 +39,7 @@ const tiktokAPI = {
    * Obtener todas las instancias de TikTok
    */
   listInstances: async () => {
-    const response = await api.get('/api/tiktok/instances');
+    const response = await api.get('/tiktok/instances');
     return response.data;
   },
 
@@ -48,7 +48,7 @@ const tiktokAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   getInstance: async (instanceId) => {
-    const response = await api.get(`/api/tiktok/instances/${instanceId}`);
+    const response = await api.get(`/tiktok/instances/${instanceId}`);
     return response.data;
   },
 
@@ -58,7 +58,7 @@ const tiktokAPI = {
    * @param {number} limit - Límite de videos a obtener
    */
   getUserVideos: async (instanceId, limit = 20) => {
-    const response = await api.get(`/api/tiktok/instances/${instanceId}/videos`, {
+    const response = await api.get(`/tiktok/instances/${instanceId}/videos`, {
       params: { limit }
     });
     return response.data;
@@ -69,7 +69,7 @@ const tiktokAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   refreshToken: async (instanceId) => {
-    const response = await api.post(`/api/tiktok/instances/${instanceId}/refresh-token`);
+    const response = await api.post(`/tiktok/instances/${instanceId}/refresh-token`);
     return response.data;
   },
 
@@ -78,7 +78,7 @@ const tiktokAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   revokeAccess: async (instanceId) => {
-    const response = await api.post(`/api/tiktok/instances/${instanceId}/revoke`);
+    const response = await api.post(`/tiktok/instances/${instanceId}/revoke`);
     return response.data;
   },
 
@@ -87,7 +87,7 @@ const tiktokAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   testConnection: async (instanceId) => {
-    const response = await api.post(`/api/tiktok/instances/${instanceId}/test`);
+    const response = await api.post(`/tiktok/instances/${instanceId}/test`);
     return response.data;
   },
 
@@ -96,7 +96,7 @@ const tiktokAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   disconnectInstance: async (instanceId) => {
-    const response = await api.post(`/api/tiktok/instances/${instanceId}/disconnect`);
+    const response = await api.post(`/tiktok/instances/${instanceId}/disconnect`);
     return response.data;
   },
 
@@ -105,7 +105,7 @@ const tiktokAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   deleteInstance: async (instanceId) => {
-    const response = await api.delete(`/api/tiktok/instances/${instanceId}`);
+    const response = await api.delete(`/tiktok/instances/${instanceId}`);
     return response.data;
   },
 

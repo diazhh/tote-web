@@ -8,7 +8,7 @@ const authAPI = {
    * Login de usuario
    */
   login: async (username, password) => {
-    const response = await api.post('/api/auth/login', { username, password });
+    const response = await api.post('/auth/login', { username, password });
     return response.data;
   },
 
@@ -16,7 +16,7 @@ const authAPI = {
    * Obtener usuario actual
    */
   me: async () => {
-    const response = await api.get('/api/auth/me');
+    const response = await api.get('/auth/me');
     return response.data;
   },
 
@@ -24,7 +24,7 @@ const authAPI = {
    * Cambiar contraseña
    */
   changePassword: async (currentPassword, newPassword) => {
-    const response = await api.post('/api/auth/change-password', {
+    const response = await api.post('/auth/change-password', {
       currentPassword,
       newPassword
     });
@@ -35,7 +35,7 @@ const authAPI = {
    * Actualizar perfil del usuario actual
    */
   updateProfile: async (updates) => {
-    const response = await api.patch('/api/auth/profile', updates);
+    const response = await api.patch('/auth/profile', updates);
     return response.data;
   },
 
@@ -43,7 +43,7 @@ const authAPI = {
    * Listar usuarios (solo ADMIN)
    */
   listUsers: async () => {
-    const response = await api.get('/api/auth/users');
+    const response = await api.get('/auth/users');
     return response.data;
   },
 
@@ -51,7 +51,7 @@ const authAPI = {
    * Registrar nuevo usuario (solo ADMIN)
    */
   register: async (userData) => {
-    const response = await api.post('/api/auth/register', userData);
+    const response = await api.post('/auth/register', userData);
     return response.data;
   },
 
@@ -59,7 +59,7 @@ const authAPI = {
    * Actualizar usuario (solo ADMIN)
    */
   updateUser: async (userId, updates) => {
-    const response = await api.patch(`/api/auth/users/${userId}`, updates);
+    const response = await api.patch(`/auth/users/${userId}`, updates);
     return response.data;
   },
 
@@ -67,7 +67,7 @@ const authAPI = {
    * Registrar nuevo jugador (público)
    */
   registerPlayer: async (userData) => {
-    const response = await api.post('/api/auth/register-player', userData);
+    const response = await api.post('/auth/register-player', userData);
     return response.data;
   }
 };

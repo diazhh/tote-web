@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import depositsApi from '@/lib/api/deposits';
 import pagoMovilApi from '@/lib/api/pago-movil';
 import { toast } from 'sonner';
-import { ArrowLeft, Building2, Phone, CreditCard, Hash, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Building2, Phone, CreditCard, Hash, Clock, CheckCircle, XCircle, AlertCircle, Calendar } from 'lucide-react';
 
 export default function DepositosPage() {
   const router = useRouter();

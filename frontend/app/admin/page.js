@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePageVisit, PAGE_TYPES } from '@/hooks/usePageVisit';
 import drawsAPI from '@/lib/api/draws';
 import publicAPI from '@/lib/api/public';
 import { Trophy, Calendar, Clock, CheckCircle, AlertCircle } from 'lucide-react';
@@ -9,6 +10,8 @@ import Link from 'next/link';
 import { formatCaracasDateTime } from '@/lib/utils/dateUtils';
 
 export default function AdminDashboard() {
+  usePageVisit(PAGE_TYPES.ADMIN_DASHBOARD, '/admin');
+  
   const [stats, setStats] = useState({
     todayDraws: [],
     upcomingDraws: [],

@@ -11,7 +11,7 @@ const telegramAPI = {
    * @param {string} data.webhookUrl - URL del webhook (opcional)
    */
   createInstance: async (data) => {
-    const response = await api.post('/api/telegram/instances', {
+    const response = await api.post('/telegram/instances', {
       instanceId: data.instanceId,
       name: data.name,
       botToken: data.botToken,
@@ -25,7 +25,7 @@ const telegramAPI = {
    * Obtener todas las instancias de Telegram
    */
   listInstances: async () => {
-    const response = await api.get('/api/telegram/instances');
+    const response = await api.get('/telegram/instances');
     return response.data;
   },
 
@@ -34,7 +34,7 @@ const telegramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   getInstance: async (instanceId) => {
-    const response = await api.get(`/api/telegram/instances/${instanceId}`);
+    const response = await api.get(`/telegram/instances/${instanceId}`);
     return response.data;
   },
 
@@ -46,7 +46,7 @@ const telegramAPI = {
    * @param {Object} options - Opciones adicionales
    */
   sendMessage: async (instanceId, chatId, message, options = {}) => {
-    const response = await api.post(`/api/telegram/instances/${instanceId}/send-message`, {
+    const response = await api.post(`/telegram/instances/${instanceId}/send-message`, {
       chatId,
       message,
       options
@@ -63,7 +63,7 @@ const telegramAPI = {
    * @param {Object} options - Opciones adicionales
    */
   sendPhoto: async (instanceId, chatId, photo, caption = '', options = {}) => {
-    const response = await api.post(`/api/telegram/instances/${instanceId}/send-photo`, {
+    const response = await api.post(`/telegram/instances/${instanceId}/send-photo`, {
       chatId,
       photo,
       caption,
@@ -78,7 +78,7 @@ const telegramAPI = {
    * @param {string} chatId - ID del chat
    */
   getChatInfo: async (instanceId, chatId) => {
-    const response = await api.get(`/api/telegram/instances/${instanceId}/chat/${chatId}`);
+    const response = await api.get(`/telegram/instances/${instanceId}/chat/${chatId}`);
     return response.data;
   },
 
@@ -88,7 +88,7 @@ const telegramAPI = {
    * @param {string} webhookUrl - URL del webhook
    */
   setupWebhook: async (instanceId, webhookUrl) => {
-    const response = await api.post(`/api/telegram/instances/${instanceId}/webhook`, {
+    const response = await api.post(`/telegram/instances/${instanceId}/webhook`, {
       webhookUrl
     });
     return response.data;
@@ -99,7 +99,7 @@ const telegramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   testConnection: async (instanceId) => {
-    const response = await api.post(`/api/telegram/instances/${instanceId}/test`);
+    const response = await api.post(`/telegram/instances/${instanceId}/test`);
     return response.data;
   },
 
@@ -108,7 +108,7 @@ const telegramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   disconnectInstance: async (instanceId) => {
-    const response = await api.post(`/api/telegram/instances/${instanceId}/disconnect`);
+    const response = await api.post(`/telegram/instances/${instanceId}/disconnect`);
     return response.data;
   },
 
@@ -117,7 +117,7 @@ const telegramAPI = {
    * @param {string} instanceId - ID de la instancia
    */
   deleteInstance: async (instanceId) => {
-    const response = await api.delete(`/api/telegram/instances/${instanceId}`);
+    const response = await api.delete(`/telegram/instances/${instanceId}`);
     return response.data;
   }
 };

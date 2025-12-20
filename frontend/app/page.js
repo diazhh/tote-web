@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useDrawsByDate, useNextDraws } from '@/hooks/useDraws';
 import { useGames } from '@/hooks/useGames';
 import { useCountdown } from '@/hooks/useCountdown';
+import { usePageVisit, PAGE_TYPES } from '@/hooks/usePageVisit';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import ErrorMessage from '@/components/common/ErrorMessage';
 import ImageModal from '@/components/common/ImageModal';
@@ -343,6 +344,8 @@ function ScheduleSection({ games }) {
 }
 
 export default function HomePage() {
+  usePageVisit(PAGE_TYPES.LANDING, '/');
+  
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedDraw, setSelectedDraw] = useState(null);

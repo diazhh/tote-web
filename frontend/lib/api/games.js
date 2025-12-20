@@ -9,7 +9,7 @@ const gamesAPI = {
    * Get all games
    */
   async getAll() {
-    const response = await api.get('/api/games');
+    const response = await api.get('/games');
     return response.data;
   },
 
@@ -17,7 +17,7 @@ const gamesAPI = {
    * Get game by ID
    */
   async getById(id) {
-    const response = await api.get(`/api/games/${id}`);
+    const response = await api.get(`/games/${id}`);
     return response.data;
   },
 
@@ -25,7 +25,7 @@ const gamesAPI = {
    * Get game by slug
    */
   async getBySlug(slug) {
-    const response = await api.get(`/api/games/slug/${slug}`);
+    const response = await api.get(`/games/slug/${slug}`);
     return response.data;
   },
 
@@ -33,7 +33,7 @@ const gamesAPI = {
    * Get game stats
    */
   async getStats(id) {
-    const response = await api.get(`/api/games/${id}/stats`);
+    const response = await api.get(`/games/${id}/stats`);
     return response.data;
   },
 
@@ -41,7 +41,7 @@ const gamesAPI = {
    * Get game items
    */
   async getItems(id) {
-    const response = await api.get(`/api/games/${id}/items`);
+    const response = await api.get(`/games/${id}/items`);
     return response.data;
   },
 
@@ -49,7 +49,7 @@ const gamesAPI = {
    * Create new game
    */
   async create(data) {
-    const response = await api.post('/api/games', data);
+    const response = await api.post('/games', data);
     return response.data;
   },
 
@@ -57,7 +57,7 @@ const gamesAPI = {
    * Update game
    */
   async update(id, data) {
-    const response = await api.put(`/api/games/${id}`, data);
+    const response = await api.put(`/games/${id}`, data);
     return response.data;
   },
 
@@ -65,7 +65,7 @@ const gamesAPI = {
    * Delete game
    */
   async delete(id) {
-    const response = await api.delete(`/api/games/${id}`);
+    const response = await api.delete(`/games/${id}`);
     return response.data;
   },
 };
