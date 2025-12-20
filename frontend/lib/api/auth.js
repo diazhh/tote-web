@@ -61,6 +61,14 @@ const authAPI = {
   updateUser: async (userId, updates) => {
     const response = await api.patch(`/api/auth/users/${userId}`, updates);
     return response.data;
+  },
+
+  /**
+   * Registrar nuevo jugador (público)
+   */
+  registerPlayer: async (userData) => {
+    const response = await api.post('/api/auth/register-player', userData);
+    return response.data;
   }
 };
 

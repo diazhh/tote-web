@@ -103,6 +103,44 @@ const useAuthStore = create(
       },
 
       /**
+       * Registrar nuevo jugador
+       */
+      register: async (username, email, password, phone) => {
+        set({ isLoading: true, error: null });
+        try {
+          const response = await authAPI.registerPlayer({ username, email, password, phone });
+          
+          if (response.success) {
+            const { user, token } = response.data;
+            
+            // Guardar en localStorage y cookies
+            if (typeof window !== 'undefined') {
+              localStorage.setItem('accessToken', token);
+              localStorage.setItem('user', JSON.stringify(user));
+              
+              // Guardar en cookies para el middleware
+              document.cookie = `accessToken=${token}; path=/; max-age=604800`; // 7 días
+              document.cookie = `user=${JSON.stringify(user)}; path=/; max-age=604800`;
+            }
+
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+              error: null
+            });
+
+            return { success: true, user };
+          }
+        } catch (error) {
+          const errorMessage = error.response?.data?.error || 'Error al registrar usuario';
+          set({ isLoading: false, error: errorMessage });
+          return { success: false, error: errorMessage };
+        }
+      },
+
+      /**
        * Cambiar contraseña
        */
       changePassword: async (currentPassword, newPassword) => {

@@ -8,13 +8,14 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "Totalizador de Loterías",
-  description: "Sistema de gestión y resultados de loterías en tiempo real",
+  title: "Totalizador - Loterías en Línea | Triple Pantera, Animalitos y Más",
+  description: "Juega loterías en línea de forma segura. Triple Pantera, Animalitos y más juegos. Sorteos cada hora, premios garantizados, resultados en tiempo real.",
+  keywords: "lotería, triple pantera, animalitos, juegos en línea, sorteos, premios",
 };
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="es">
+    <html lang="es" className="scroll-smooth">
       <body className={`${inter.variable} antialiased`}>
         {children}
         <Toaster position="top-right" richColors />
