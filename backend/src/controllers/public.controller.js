@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import { formatToCaracasTime } from '../lib/dateUtils.js';
 
 // Helper para obtener inicio y fin del día en Venezuela (UTC-4)
 function getVenezuelaDayBounds(date) {
@@ -117,8 +118,11 @@ class PublicController {
       });
 
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      // Formatear scheduledAt en hora de Caracas para el frontend
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
+        scheduledAt: draw.scheduledAt.toISOString(),
+        scheduledAtCaracas: formatToCaracasTime(draw.scheduledAt, 'yyyy-MM-dd HH:mm:ss'),
         winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
       }));
 
@@ -187,8 +191,11 @@ class PublicController {
       });
 
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      // Formatear scheduledAt en hora de Caracas para el frontend
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
+        scheduledAt: draw.scheduledAt.toISOString(), // Mantener UTC ISO para compatibilidad
+        scheduledAtCaracas: formatToCaracasTime(draw.scheduledAt, 'yyyy-MM-dd HH:mm:ss'), // Hora de Caracas formateada
         winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
       }));
 
@@ -258,8 +265,11 @@ class PublicController {
       });
 
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      // Formatear scheduledAt en hora de Caracas para el frontend
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
+        scheduledAt: draw.scheduledAt.toISOString(),
+        scheduledAtCaracas: formatToCaracasTime(draw.scheduledAt, 'yyyy-MM-dd HH:mm:ss'),
         winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
       }));
 

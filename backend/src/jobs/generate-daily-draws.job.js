@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import drawTemplateService from '../services/draw-template.service.js';
 import drawPauseService from '../services/draw-pause.service.js';
+import systemConfigService from '../services/system-config.service.js';
 import { emitToAll } from '../lib/socket.js';
 import { nowInCaracas, getDayOfWeekInCaracas, timeStringToCaracasDate } from '../lib/dateUtils.js';
 
@@ -12,7 +13,7 @@ import { nowInCaracas, getDayOfWeekInCaracas, timeStringToCaracasDate } from '..
  */
 class GenerateDailyDrawsJob {
   constructor() {
-    this.cronExpression = '5 0 * * *'; // 00:05 AM todos los días
+    this.cronExpression = '5 1 * * *'; // 01:05 AM todos los días (para que en Caracas UTC-4 ya sea el nuevo día)
     this.task = null;
   }
 
@@ -24,7 +25,7 @@ class GenerateDailyDrawsJob {
       await this.execute();
     }, { timezone: 'America/Caracas' });
 
-    logger.info('✅ Job GenerateDailyDraws iniciado (00:05 AM diario, TZ: America/Caracas)');
+    logger.info('✅ Job GenerateDailyDraws iniciado (01:05 AM diario, TZ: America/Caracas)');
   }
 
   /**
@@ -43,6 +44,13 @@ class GenerateDailyDrawsJob {
   async execute() {
     try {
       logger.info('🔄 Iniciando generación de sorteos diarios...');
+
+      // Verificar parada de emergencia
+      const isEmergencyStop = await systemConfigService.isEmergencyStop();
+      if (isEmergencyStop) {
+        logger.warn('🚨 Sistema en parada de emergencia - Generación de sorteos cancelada');
+        return;
+      }
 
       // Get current date in Caracas timezone
       const today = nowInCaracas();

@@ -9,6 +9,7 @@ import ErrorMessage from '@/components/common/ErrorMessage';
 import ImageModal from '@/components/common/ImageModal';
 import { Calendar, Clock, Trophy } from 'lucide-react';
 import { formatTime, formatDate } from '@/lib/utils/format';
+import { extractTimeFromCaracasString, extractDateFromCaracasString } from '@/lib/utils/dateUtils';
 
 // Componente para mostrar próximo sorteo con countdown
 function NextDrawCard({ game, nextDraw }) {
@@ -23,7 +24,7 @@ function NextDrawCard({ game, nextDraw }) {
       {nextDraw ? (
         <div className="space-y-1">
           <div className="text-xs text-gray-600">
-            Próximo: <span className="font-semibold">{formatTime(nextDraw.scheduledAt)}</span>
+            Próximo: <span className="font-semibold">{nextDraw.scheduledAtCaracas ? extractTimeFromCaracasString(nextDraw.scheduledAtCaracas) : formatTime(nextDraw.scheduledAt)}</span>
           </div>
           <div className="text-xs text-blue-600 font-medium">
             {timeLeft}
@@ -97,9 +98,17 @@ export default function HomePage() {
     <div className="min-h-screen bg-gray-50">
       {/* Compact Header */}
       <header className="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-6 shadow-lg">
-        <div className="container mx-auto px-4">
-          <h1 className="text-3xl font-bold">🎰 Totalizador</h1>
-          <p className="text-sm text-white/80 mt-1">Resultados en tiempo real</p>
+        <div className="container mx-auto px-4 flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">🎰 Totalizador</h1>
+            <p className="text-sm text-white/80 mt-1">Resultados en tiempo real</p>
+          </div>
+          <a
+            href="/login"
+            className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg text-sm font-medium transition"
+          >
+            Iniciar Sesión
+          </a>
         </div>
       </header>
 
@@ -207,9 +216,9 @@ export default function HomePage() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
                       <Calendar className="h-3 w-3" />
-                      <span>{formatDate(draw.scheduledAt)}</span>
+                      <span>{draw.scheduledAtCaracas ? extractDateFromCaracasString(draw.scheduledAtCaracas) : formatDate(draw.scheduledAt)}</span>
                       <Clock className="h-3 w-3 ml-2" />
-                      <span className="font-semibold">{formatTime(draw.scheduledAt)}</span>
+                      <span className="font-semibold">{draw.scheduledAtCaracas ? extractTimeFromCaracasString(draw.scheduledAtCaracas) : formatTime(draw.scheduledAt)}</span>
                     </div>
                   </div>
 

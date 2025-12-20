@@ -7,9 +7,13 @@ let io = null;
  * Inicializar Socket.io
  */
 export function initializeSocket(server) {
+  const allowedOrigins = process.env.FRONTEND_URL 
+    ? process.env.FRONTEND_URL.split(',').map(origin => origin.trim())
+    : ['http://localhost:3000'];
+
   io = new Server(server, {
     cors: {
-      origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+      origin: allowedOrigins,
       credentials: true
     }
   });

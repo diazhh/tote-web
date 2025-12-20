@@ -181,12 +181,12 @@ export default function BotsAdminPage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-4 lg:p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <Bot className="w-7 h-7 text-blue-600" />
+          <h1 className="text-xl lg:text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Bot className="w-6 h-6 lg:w-7 lg:h-7 text-blue-600" />
             Bots de Administración
           </h1>
           <p className="text-gray-600 mt-1">
@@ -204,10 +204,10 @@ export default function BotsAdminPage() {
 
       {/* Error Alert */}
       {error && (
-        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
-          <AlertCircle className="w-5 h-5" />
-          {error}
-          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700">
+        <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2 text-red-700">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">{error}</div>
+          <button onClick={() => setError(null)} className="ml-auto text-red-500 hover:text-red-700 flex-shrink-0">
             ×
           </button>
         </div>
@@ -229,19 +229,19 @@ export default function BotsAdminPage() {
       ) : (
         <div className="grid gap-4">
           {bots.map((bot) => (
-            <div key={bot.id} className="bg-white rounded-lg border shadow-sm p-5">
-              <div className="flex items-start justify-between">
+            <div key={bot.id} className="bg-white rounded-lg border shadow-sm p-4 lg:p-5">
+              <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                 <div className="flex items-start gap-4">
-                  <div className={`p-3 rounded-lg ${bot.isActive ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                  <div className={`p-3 rounded-lg flex-shrink-0 ${bot.isActive ? 'bg-blue-100' : 'bg-gray-100'}`}>
                     <Bot className={`w-6 h-6 ${bot.isActive ? 'text-blue-600' : 'text-gray-400'}`} />
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{bot.name}</h3>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-gray-900 truncate">{bot.name}</h3>
                     {bot.botUsername && (
                       <p className="text-sm text-blue-600">@{bot.botUsername}</p>
                     )}
-                    <p className="text-xs text-gray-500 mt-1">Token: {bot.botToken}</p>
-                    <div className="flex items-center gap-2 mt-2">
+                    <p className="text-xs text-gray-500 mt-1 break-all">Token: {bot.botToken}</p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {getStatusBadge(bot.status)}
                       {!bot.isActive && (
                         <span className="text-xs text-gray-500">(Desactivado)</span>
@@ -253,7 +253,7 @@ export default function BotsAdminPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => handleToggleActive(bot)}
-                    className={`px-3 py-1.5 text-sm rounded-lg transition ${
+                    className={`px-3 py-1.5 text-sm rounded-lg transition whitespace-nowrap ${
                       bot.isActive 
                         ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' 
                         : 'bg-green-100 text-green-700 hover:bg-green-200'
@@ -304,8 +304,8 @@ export default function BotsAdminPage() {
 
       {/* Modal Crear Bot */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
             <h2 className="text-xl font-bold mb-4">Crear Bot de Administración</h2>
             
             <form onSubmit={handleCreateBot}>
@@ -404,8 +404,8 @@ function AssignGamesModal({ bot, games, onClose, onSave }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-xl p-6 w-full max-w-md mx-4">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md">
         <h2 className="text-xl font-bold mb-2">Asignar Juegos</h2>
         <p className="text-gray-600 text-sm mb-4">
           Selecciona los juegos que usarán el bot <strong>@{bot.botUsername}</strong> para notificaciones
@@ -427,8 +427,8 @@ function AssignGamesModal({ bot, games, onClose, onSave }) {
                 onChange={() => toggleGame(game.id)}
                 className="w-4 h-4 text-blue-600 rounded"
               />
-              <div>
-                <p className="font-medium text-gray-900">{game.name}</p>
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-gray-900 truncate">{game.name}</p>
                 <p className="text-xs text-gray-500">{game.slug}</p>
               </div>
             </label>

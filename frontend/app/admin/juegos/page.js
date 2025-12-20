@@ -71,7 +71,7 @@ export default function JuegosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Gestión de Juegos</h1>
           <p className="text-gray-600 mt-1">Administra los juegos del sistema</p>
@@ -86,15 +86,15 @@ export default function JuegosPage() {
       </div>
 
       {/* Games Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
         {games.map((game) => (
           <div
             key={game.id}
-            className="bg-white rounded-lg shadow hover:shadow-lg transition p-6"
+            className="bg-white rounded-lg shadow hover:shadow-lg transition p-4 lg:p-6"
           >
             <div className="flex items-start justify-between mb-4">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <Gamepad2 className="w-6 h-6 text-blue-600" />
+              <div className="w-10 h-10 lg:w-12 lg:h-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <Gamepad2 className="w-5 h-5 lg:w-6 lg:h-6 text-blue-600" />
               </div>
               <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                 game.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
@@ -114,11 +114,11 @@ export default function JuegosPage() {
               </div>
               <div className="flex items-center justify-between">
                 <span>Slug:</span>
-                <span className="font-mono text-xs">{game.slug}</span>
+                <span className="font-mono text-xs break-all">{game.slug}</span>
               </div>
             </div>
 
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <Link
                 href={`/admin/juegos/${game.id}`}
                 className="flex-1 flex items-center justify-center px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
@@ -126,20 +126,22 @@ export default function JuegosPage() {
                 <Eye className="w-4 h-4 mr-2" />
                 Configurar
               </Link>
-              <button
-                onClick={() => handleEdit(game)}
-                className="flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-                title="Editar juego"
-              >
-                <Edit2 className="w-4 h-4 text-blue-600" />
-              </button>
-              <button
-                onClick={() => handleDelete(game)}
-                className="flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-red-50 transition"
-                title="Eliminar juego"
-              >
-                <Trash2 className="w-4 h-4 text-red-600" />
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => handleEdit(game)}
+                  className="flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                  title="Editar juego"
+                >
+                  <Edit2 className="w-4 h-4 text-blue-600" />
+                </button>
+                <button
+                  onClick={() => handleDelete(game)}
+                  className="flex items-center justify-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-red-50 transition"
+                  title="Eliminar juego"
+                >
+                  <Trash2 className="w-4 h-4 text-red-600" />
+                </button>
+              </div>
             </div>
           </div>
         ))}

@@ -32,6 +32,14 @@ const authAPI = {
   },
 
   /**
+   * Actualizar perfil del usuario actual
+   */
+  updateProfile: async (updates) => {
+    const response = await api.patch('/api/auth/profile', updates);
+    return response.data;
+  },
+
+  /**
    * Listar usuarios (solo ADMIN)
    */
   listUsers: async () => {

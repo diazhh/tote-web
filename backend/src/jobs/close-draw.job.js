@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import systemConfigService from '../services/system-config.service.js';
 import { emitToAll, emitToGame } from '../lib/socket.js';
 import apiIntegrationService from '../services/api-integration.service.js';
 import adminNotificationService from '../services/admin-notification.service.js';
@@ -44,6 +45,12 @@ class CloseDrawJob {
    */
   async execute() {
     try {
+      // Verificar parada de emergencia
+      const isEmergencyStop = await systemConfigService.isEmergencyStop();
+      if (isEmergencyStop) {
+        return; // Silenciosamente no hacer nada
+      }
+
       const now = new Date();
       const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
 
