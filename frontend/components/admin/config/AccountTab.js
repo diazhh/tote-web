@@ -144,7 +144,7 @@ export default function AccountTab() {
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Información del Sistema</h2>
         <div className="space-y-2 text-sm text-gray-600 bg-gray-50 rounded-lg p-4">
-          <p>• Backend API: {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}</p>
+          <p>• Backend API: {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}</p>
           <p>• Versión: 1.0.0</p>
         </div>
       </div>

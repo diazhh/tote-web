@@ -181,7 +181,7 @@ export default function HomePage() {
               // Mostrar imágenes para todos los juegos que tengan imageUrl
               const hasImages = draw.game?.slug === 'lotoanimalito' || draw.game?.slug === 'lottopantera' || draw.game?.slug === 'triple-pantera';
               const drawImageUrl = draw.imageUrl && hasImages
-                ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}${draw.imageUrl}`
+                ? `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}${draw.imageUrl}`
                 : null;
               
               // Debug URL construction

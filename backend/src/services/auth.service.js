@@ -257,6 +257,97 @@ class AuthService {
       throw error;
     }
   }
+
+  /**
+   * Registrar un nuevo jugador (público)
+   */
+  async registerPlayer({ username, email, password, phone }) {
+    try {
+      // Validar formato de email
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        throw new Error('Formato de email inválido');
+      }
+
+      // Validar longitud de contraseña
+      if (password.length < 6) {
+        throw new Error('La contraseña debe tener al menos 6 caracteres');
+      }
+
+      // Validar formato de teléfono (opcional)
+      if (phone) {
+        const phoneRegex = /^(\+58|0)?4\d{9}$/;
+        if (!phoneRegex.test(phone.replace(/\s|-/g, ''))) {
+          throw new Error('Formato de teléfono inválido. Debe ser un número venezolano válido');
+        }
+      }
+
+      // Verificar si el usuario ya existe
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { username },
+            { email },
+            ...(phone ? [{ phone }] : [])
+          ]
+        }
+      });
+
+      if (existingUser) {
+        if (existingUser.username === username) {
+          throw new Error('El nombre de usuario ya está en uso');
+        }
+        if (existingUser.email === email) {
+          throw new Error('El email ya está registrado');
+        }
+        if (phone && existingUser.phone === phone) {
+          throw new Error('El teléfono ya está registrado');
+        }
+      }
+
+      // Hash de la contraseña
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Crear usuario jugador
+      const user = await prisma.user.create({
+        data: {
+          username,
+          email,
+          password: hashedPassword,
+          phone: phone || null,
+          role: 'PLAYER',
+          isActive: true,
+          phoneVerified: false,
+          balance: 0,
+          blockedBalance: 0
+        },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          phone: true,
+          role: true,
+          balance: true,
+          phoneVerified: true,
+          isActive: true,
+          createdAt: true
+        }
+      });
+
+      logger.info(`Jugador registrado: ${username}`);
+
+      // Generar token JWT
+      const token = this.generateToken(user);
+
+      return {
+        user,
+        token
+      };
+    } catch (error) {
+      logger.error('Error al registrar jugador:', error);
+      throw error;
+    }
+  }
 }
 
 export default new AuthService();

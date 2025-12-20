@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/authStore';
-import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle } from 'lucide-react';
+import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle, DollarSign } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -18,6 +18,15 @@ export default function AdminLayout({ children }) {
       const isValid = await checkAuth();
       if (!isValid) {
         router.push('/login');
+        return;
+      }
+      
+      const userData = localStorage.getItem('user');
+      if (userData) {
+        const userObj = JSON.parse(userData);
+        if (userObj.role === 'PLAYER') {
+          router.push('/dashboard');
+        }
       }
     };
     verify();
@@ -40,9 +49,16 @@ export default function AdminLayout({ children }) {
   }
 
   const navigation = [
-    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-    { name: 'Sorteos', href: '/admin/sorteos', icon: Trophy },
-    { name: 'Juegos', href: '/admin/juegos', icon: Calendar },
+    { name: 'Dashboard', href: '/admin', icon: LayoutDashboard, excludeForTaquilla: true },
+    { name: 'Sorteos', href: '/admin/sorteos', icon: Trophy, excludeForTaquilla: true },
+    { name: 'Juegos', href: '/admin/juegos', icon: Calendar, excludeForTaquilla: true },
+    { name: 'Depósitos', href: '/admin/depositos', icon: DollarSign, taquillaAccess: true },
+    { name: 'Retiros', href: '/admin/retiros', icon: DollarSign, taquillaAccess: true },
+    { name: 'Cuentas Sistema', href: '/admin/cuentas-sistema', icon: DollarSign, taquillaAccess: true },
+    { name: 'Jugadores', href: '/admin/jugadores', icon: Users, taquillaAccess: true },
+    { name: 'Tickets', href: '/admin/tickets', icon: Trophy, taquillaAccess: true },
+    { name: 'Reportes Taquilla', href: '/admin/reportes-taquilla', icon: LayoutDashboard, taquillaAccess: true },
+    { name: 'Cuentas Pago Móvil', href: '/admin/pago-movil', icon: DollarSign, excludeForTaquilla: true },
     { name: 'Pausas y Emergencia', href: '/admin/pausas', icon: PauseCircle, adminOnly: true },
     { name: 'Usuarios', href: '/admin/usuarios', icon: Users, adminOnly: true },
     { name: 'Bots Admin', href: '/admin/bots-admin', icon: Bot, adminOnly: true },
@@ -50,6 +66,7 @@ export default function AdminLayout({ children }) {
       name: 'Canales', 
       icon: MessageSquare,
       isSection: true,
+      excludeForTaquilla: true,
       children: [
         { name: 'WhatsApp', href: '/admin/whatsapp', icon: MessageSquare },
         { name: 'Telegram', href: '/admin/telegram', icon: Send },
@@ -58,12 +75,24 @@ export default function AdminLayout({ children }) {
         { name: 'TikTok', href: '/admin/tiktok', icon: Music },
       ]
     },
-    { name: 'Configuración', href: '/admin/configuracion', icon: Settings },
+    { name: 'Configuración', href: '/admin/configuracion', icon: Settings, excludeForTaquilla: true },
   ];
 
-  const filteredNav = navigation.filter(item => 
-    !item.adminOnly || user?.role === 'ADMIN'
-  );
+  const filteredNav = navigation.filter(item => {
+    // Filter for TAQUILLA_ADMIN: only show taquilla-related items
+    if (user?.role === 'TAQUILLA_ADMIN') {
+      return item.taquillaAccess === true;
+    }
+    // Filter for ADMIN: show everything except items that require adminOnly if not ADMIN
+    if (item.adminOnly && user?.role !== 'ADMIN') {
+      return false;
+    }
+    // For ADMIN and OPERATOR: exclude items marked as taquilla-only
+    if (item.excludeForTaquilla && user?.role === 'TAQUILLA_ADMIN') {
+      return false;
+    }
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50">

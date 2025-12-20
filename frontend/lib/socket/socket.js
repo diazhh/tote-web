@@ -18,7 +18,7 @@ class SocketService {
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     
-    this.socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:3001', {
+    this.socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:10000', {
       auth: {
         token
       },

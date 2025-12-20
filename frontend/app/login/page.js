@@ -17,7 +17,14 @@ export default function LoginPage() {
   // Redirigir si ya está autenticado
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/admin');
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (user.role === 'ADMIN' || user.role === 'OPERATOR') {
+        router.push('/admin');
+      } else if (user.role === 'TAQUILLA_ADMIN') {
+        router.push('/admin/depositos');
+      } else if (user.role === 'PLAYER') {
+        router.push('/dashboard');
+      }
     }
   }, [isAuthenticated, router]);
 
@@ -42,7 +49,14 @@ export default function LoginPage() {
     
     if (result.success) {
       toast.success('¡Bienvenido!');
-      router.push('/admin');
+      const user = result.user || JSON.parse(localStorage.getItem('user') || '{}');
+      if (user.role === 'ADMIN' || user.role === 'OPERATOR') {
+        router.push('/admin');
+      } else if (user.role === 'TAQUILLA_ADMIN') {
+        router.push('/admin/depositos');
+      } else if (user.role === 'PLAYER') {
+        router.push('/dashboard');
+      }
     }
   };
 

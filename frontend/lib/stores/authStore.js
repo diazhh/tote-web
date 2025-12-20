@@ -26,10 +26,14 @@ const useAuthStore = create(
           if (response.success) {
             const { user, token } = response.data;
             
-            // Guardar en localStorage
+            // Guardar en localStorage y cookies
             if (typeof window !== 'undefined') {
               localStorage.setItem('accessToken', token);
               localStorage.setItem('user', JSON.stringify(user));
+              
+              // Guardar en cookies para el middleware
+              document.cookie = `accessToken=${token}; path=/; max-age=604800`; // 7 días
+              document.cookie = `user=${JSON.stringify(user)}; path=/; max-age=604800`;
             }
 
             set({
@@ -53,10 +57,14 @@ const useAuthStore = create(
        * Logout
        */
       logout: () => {
-        // Limpiar localStorage
+        // Limpiar localStorage y cookies
         if (typeof window !== 'undefined') {
           localStorage.removeItem('accessToken');
           localStorage.removeItem('user');
+          
+          // Limpiar cookies
+          document.cookie = 'accessToken=; path=/; max-age=0';
+          document.cookie = 'user=; path=/; max-age=0';
         }
 
         set({

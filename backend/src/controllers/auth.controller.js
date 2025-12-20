@@ -200,6 +200,41 @@ class AuthController {
       });
     }
   }
+
+  /**
+   * POST /api/auth/register-player
+   * Registrar nuevo jugador (público)
+   */
+  async registerPlayer(req, res) {
+    try {
+      const { username, email, password, phone } = req.body;
+
+      if (!username || !email || !password) {
+        return res.status(400).json({
+          success: false,
+          error: 'Username, email y password son requeridos'
+        });
+      }
+
+      const result = await authService.registerPlayer({
+        username,
+        email,
+        password,
+        phone
+      });
+
+      res.status(201).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      logger.error('Error en registerPlayer:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
 }
 
 export default new AuthController();

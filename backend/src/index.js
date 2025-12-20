@@ -125,6 +125,15 @@ import instagramRoutes from './routes/instagram.routes.js';
 import facebookRoutes from './routes/facebook.routes.js';
 import tiktokRoutes from './routes/tiktok.routes.js';
 
+// Importar rutas de taquilla online
+import systemPagoMovilRoutes from './routes/system-pago-movil.routes.js';
+import depositRoutes from './routes/deposit.routes.js';
+import withdrawalRoutes from './routes/withdrawal.routes.js';
+import pagoMovilAccountRoutes from './routes/pago-movil-account.routes.js';
+import ticketRoutes from './routes/ticket.routes.js';
+import prizeRoutes from './routes/prize.routes.js';
+import playerQueryRoutes from './routes/player-query.routes.js';
+
 // ============================================
 // REGISTRAR RUTAS
 // ============================================
@@ -152,8 +161,18 @@ app.use('/api/facebook', facebookRoutes);
 app.use('/api/tiktok', tiktokRoutes);
 
 // Rutas de bots de administración y vinculación Telegram
-app.use('/api/admin', adminBotRoutes);
+import adminRoutes from './routes/admin.routes.js';
+app.use('/api/admin', adminRoutes);
 app.use('/api/users', adminBotRoutes);
+
+// Rutas de taquilla online
+app.use('/api/system-pago-movil', systemPagoMovilRoutes);
+app.use('/api/deposits', depositRoutes);
+app.use('/api/withdrawals', withdrawalRoutes);
+app.use('/api/pago-movil-accounts', pagoMovilAccountRoutes);
+app.use('/api/tickets', ticketRoutes);
+app.use('/api/prizes', prizeRoutes);
+app.use('/api/player', playerQueryRoutes);
 
 // Rutas anidadas para items de juegos
 import gameItemController from './controllers/game-item.controller.js';

@@ -19,7 +19,7 @@ export default function BotsAdminPage() {
   const [creating, setCreating] = useState(false);
   const [newBot, setNewBot] = useState({ name: '', botToken: '' });
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
 
   useEffect(() => {
     fetchBots();
