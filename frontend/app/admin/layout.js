@@ -107,7 +107,7 @@ export default function AdminLayout({ children }) {
       <div className="flex h-screen">
         {/* Sidebar */}
         <div className={`
-          fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 lg:flex-shrink-0
+          fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 lg:flex-shrink-0 flex flex-col
           ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}>
         {/* Logo */}
@@ -139,7 +139,7 @@ export default function AdminLayout({ children }) {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-1">
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {filteredNav.map((item) => {
             if (item.isSection && item.children) {
               // Render section with children
@@ -157,6 +157,7 @@ export default function AdminLayout({ children }) {
                       <Link
                         key={child.name}
                         href={child.href}
+                        onClick={() => setSidebarOpen(false)}
                         className={`flex items-center px-6 py-2 text-sm font-medium rounded-lg transition ml-4 ${
                           isActive
                             ? 'bg-blue-50 text-blue-700'
@@ -179,6 +180,7 @@ export default function AdminLayout({ children }) {
                 <Link
                   key={item.name}
                   href={item.href}
+                  onClick={() => setSidebarOpen(false)}
                   className={`flex items-center px-3 py-2 text-sm font-medium rounded-lg transition ${
                     isActive
                       ? 'bg-blue-50 text-blue-700'
@@ -194,7 +196,7 @@ export default function AdminLayout({ children }) {
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 flex-shrink-0">
           <button
             onClick={handleLogout}
             className="flex items-center w-full px-3 py-2 text-sm font-medium text-red-700 hover:bg-red-50 rounded-lg transition"
