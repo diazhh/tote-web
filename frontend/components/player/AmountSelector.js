@@ -32,14 +32,14 @@ export default function AmountSelector({ amount, onChangeAmount }) {
     <>
       <div className="space-y-2">
         <p className="text-sm font-semibold text-gray-700">Monto por número:</p>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex lg:grid lg:grid-cols-4 gap-2 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0">
           {amounts.map(value => (
             <button
               key={value}
               onClick={() => onChangeAmount(value)}
-              className={`flex-shrink-0 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+              className={`flex-shrink-0 lg:flex-shrink px-4 py-2 lg:py-3 rounded-lg font-semibold text-sm lg:text-base transition-all ${
                 amount === value
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-blue-600 text-white shadow-md'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
@@ -48,9 +48,9 @@ export default function AmountSelector({ amount, onChangeAmount }) {
           ))}
           <button
             onClick={() => setShowCustomModal(true)}
-            className={`flex-shrink-0 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
+            className={`flex-shrink-0 lg:flex-shrink px-4 py-2 lg:py-3 rounded-lg font-semibold text-sm lg:text-base transition-all ${
               isCustomAmount
-                ? 'bg-blue-600 text-white'
+                ? 'bg-blue-600 text-white shadow-md'
                 : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
             }`}
           >

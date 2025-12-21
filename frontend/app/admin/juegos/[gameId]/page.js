@@ -6,7 +6,8 @@ import gamesAPI from '@/lib/api/games';
 import ItemsTab from '@/components/admin/config/ItemsTab';
 import TemplatesTab from '@/components/admin/config/TemplatesTab';
 import ChannelsTab from '@/components/admin/config/ChannelsTab';
-import { Gamepad2, Hash, Clock, MessageSquare, CalendarDays } from 'lucide-react';
+import TripletaTab from '@/components/admin/config/TripletaTab';
+import { Gamepad2, Hash, Clock, MessageSquare, CalendarDays, Trophy } from 'lucide-react';
 import Link from 'next/link';
 
 export default function GameConfigPage() {
@@ -54,6 +55,7 @@ export default function GameConfigPage() {
     { id: 'items', name: 'Items', icon: Hash },
     { id: 'draws', name: 'Sorteos', icon: CalendarDays },
     { id: 'channels', name: 'Canales', icon: MessageSquare },
+    { id: 'tripleta', name: 'Tripleta', icon: Trophy },
   ]), []);
 
   const onSelectTab = (id) => {
@@ -65,6 +67,18 @@ export default function GameConfigPage() {
       current.set('tab', id);
     }
     router.push(`/admin/juegos/${gameId}${current.toString() ? `?${current.toString()}` : ''}`);
+  };
+
+  const loadGame = async () => {
+    if (!gameId) return;
+    try {
+      const response = await gamesAPI.getById(gameId);
+      const data = response.data || response;
+      setGame(data);
+      setNameDraft(data?.name || '');
+    } catch (e) {
+      console.error('Error loading game:', e);
+    }
   };
 
   const saveName = async () => {
@@ -213,6 +227,10 @@ export default function GameConfigPage() {
 
           {activeTab === 'channels' && (
             <ChannelsTab gameId={game.id} />
+          )}
+
+          {activeTab === 'tripleta' && (
+            <TripletaTab game={game} onUpdate={loadGame} />
           )}
         </div>
       </div>

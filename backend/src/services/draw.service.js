@@ -335,6 +335,16 @@ export class DrawService {
           logger.error(`Error creando publicación para ${channel}:`, pubError);
         }
       }
+
+      // Verificar apuestas Tripleta activas
+      try {
+        const tripletaService = (await import('./tripleta.service.js')).default;
+        const tripletaResult = await tripletaService.checkTripleBetsForDraw(updatedDraw.id);
+        logger.info(`Tripletas verificadas: ${tripletaResult.winners} ganadores, ${tripletaResult.expired} expiradas`);
+      } catch (tripletaError) {
+        logger.error('Error verificando apuestas tripleta:', tripletaError);
+        // No detener el flujo si falla la verificación de tripletas
+      }
       
       return updatedDraw;
     } catch (error) {

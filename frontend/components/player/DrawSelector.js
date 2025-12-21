@@ -33,10 +33,11 @@ export default function DrawSelector({ draws, selectedDraw, onSelectDraw, isOpen
 
   return (
     <>
+      {/* Mobile: Button with Modal */}
       <button
         onClick={onToggle}
         disabled={availableDraws.length === 0}
-        className={`w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-between transition-all ${
+        className={`lg:hidden w-full py-3 px-4 rounded-lg font-semibold flex items-center justify-between transition-all ${
           selectedDraw
             ? 'bg-green-100 text-green-800 border-2 border-green-300'
             : 'bg-white text-gray-700 border-2 border-gray-200'
@@ -55,8 +56,43 @@ export default function DrawSelector({ draws, selectedDraw, onSelectDraw, isOpen
         <ChevronDown className="w-5 h-5" />
       </button>
 
+      {/* Desktop: Direct Selection */}
+      <div className="hidden lg:block space-y-2">
+        {availableDraws.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 bg-gray-50 rounded-lg">
+            No hay sorteos disponibles
+          </div>
+        ) : (
+          availableDraws.map(draw => (
+            <button
+              key={draw.id}
+              onClick={() => onSelectDraw(draw)}
+              className={`w-full p-4 rounded-xl text-left transition-all ${
+                selectedDraw?.id === draw.id
+                  ? 'bg-green-50 border-2 border-green-500 shadow-sm'
+                  : 'bg-gray-50 border-2 border-transparent hover:border-green-300 hover:bg-green-50'
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Clock className={`w-5 h-5 ${selectedDraw?.id === draw.id ? 'text-green-600' : 'text-gray-500'}`} />
+                  <div>
+                    <p className="font-bold text-lg text-gray-900">{formatDrawTime(draw.drawTime)}</p>
+                    <p className="text-sm text-gray-600">{draw.game?.name}</p>
+                  </div>
+                </div>
+                <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">
+                  Activo
+                </span>
+              </div>
+            </button>
+          ))
+        )}
+      </div>
+
+      {/* Mobile Modal */}
       {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="lg:hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-md rounded-2xl max-h-[80vh] overflow-y-auto">
             <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
               <h3 className="font-bold text-lg">Seleccionar Sorteo</h3>

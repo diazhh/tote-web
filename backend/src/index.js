@@ -135,6 +135,8 @@ import prizeRoutes from './routes/prize.routes.js';
 import playerQueryRoutes from './routes/player-query.routes.js';
 import systemConfigRoutes from './routes/system-config.routes.js';
 import pageVisitRoutes from './routes/page-visit.routes.js';
+import providerRoutes from './routes/provider.routes.js';
+import tripletaRoutes from './routes/tripleta.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -176,6 +178,8 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/prizes', prizeRoutes);
 app.use('/api/player', playerQueryRoutes);
 app.use('/api/page-visits', pageVisitRoutes);
+app.use('/api/providers', providerRoutes);
+app.use('/api/tripleta', tripletaRoutes);
 
 // Rutas anidadas para items de juegos
 import gameItemController from './controllers/game-item.controller.js';
