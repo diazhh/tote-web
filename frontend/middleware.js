@@ -58,8 +58,20 @@ export function middleware(request) {
   }
   
   // Verificar acceso a rutas de jugador
-  if (pathname.startsWith('/dashboard') || pathname.startsWith('/depositos') || 
-      pathname.startsWith('/retiros') || pathname.startsWith('/cuentas')) {
+  const playerRoutes = [
+    '/dashboard',
+    '/depositos',
+    '/retiros',
+    '/cuentas',
+    '/jugar',
+    '/tripletas',
+    '/balance-historico',
+    '/juego'
+  ];
+  
+  const isPlayerRoute = playerRoutes.some(route => pathname.startsWith(route));
+  
+  if (isPlayerRoute) {
     try {
       const user = userCookie ? JSON.parse(userCookie.value) : null;
       
@@ -81,6 +93,10 @@ export const config = {
     '/dashboard/:path*',
     '/depositos/:path*',
     '/retiros/:path*',
-    '/cuentas/:path*'
+    '/cuentas/:path*',
+    '/jugar/:path*',
+    '/tripletas/:path*',
+    '/balance-historico/:path*',
+    '/juego/:path*'
   ]
 };

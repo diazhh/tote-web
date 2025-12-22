@@ -7,12 +7,14 @@ import { startOfDay, endOfDay, addMinutes, subMinutes } from 'date-fns';
 
 /**
  * Job para sincronizar tickets de APIs externas
- * Se ejecuta cada minuto y verifica si hay sorteos próximos a cerrar
+ * Se ejecuta cada 5 minutos y verifica si hay sorteos próximos a cerrar
  * Importa tickets 5 minutos antes de la hora de totalización
+ * NOTA: Cada sincronización elimina los tickets anteriores del sorteo para
+ * asegurar que los datos estén actualizados con el proveedor
  */
 class SyncApiTicketsJob {
   constructor() {
-    this.cronExpression = '* * * * *'; // Cada minuto
+    this.cronExpression = '*/5 * * * *'; // Cada 5 minutos
     this.minutesBefore = 5; // Minutos antes del sorteo para importar tickets
     this.task = null;
   }

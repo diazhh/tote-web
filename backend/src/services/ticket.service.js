@@ -1,10 +1,11 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import taquillaWebService from './taquilla-web.service.js';
 
 class TicketService {
   async create(userId, data) {
     try {
-      return await prisma.$transaction(async (tx) => {
+      const ticket = await prisma.$transaction(async (tx) => {
         const user = await tx.user.findUnique({
           where: { id: userId }
         });
@@ -83,7 +84,7 @@ class TicketService {
           }
         });
 
-        const ticket = await tx.ticket.create({
+        const createdTicket = await tx.ticket.create({
           data: {
             userId,
             drawId: data.drawId,
@@ -116,15 +117,24 @@ class TicketService {
         });
 
         logger.info('Ticket created', { 
-          id: ticket.id, 
+          id: createdTicket.id, 
           userId, 
           drawId: data.drawId,
           totalAmount,
           detailsCount: detailsToCreate.length
         });
 
-        return ticket;
+        return createdTicket;
       });
+
+      // Crear ExternalTickets equivalentes para reportes (fuera de la transacción)
+      try {
+        await taquillaWebService.createExternalTicketEquivalent(ticket, ticket.draw);
+      } catch (externalError) {
+        logger.warn('Error creando ExternalTicket equivalente (no crítico):', externalError.message);
+      }
+
+      return ticket;
     } catch (error) {
       logger.error('Error creating ticket:', error);
       throw error;

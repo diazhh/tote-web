@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import providerEntitiesService from './provider-entities.service.js';
 
 /**
  * Servicio para integración con APIs externas de ventas
@@ -148,8 +149,9 @@ class ApiIntegrationService {
   /**
    * Importar tickets vendidos de un sorteo desde la API SRQ
    * @param {string} drawId - ID del Draw
+   * @param {boolean} clearExisting - Si debe limpiar tickets existentes antes de importar
    */
-  async importSRQTickets(drawId) {
+  async importSRQTickets(drawId, clearExisting = true) {
     try {
       logger.info(`🎫 Importando tickets para draw ${drawId}...`);
 
@@ -161,7 +163,8 @@ class ApiIntegrationService {
         include: {
           apiConfig: {
             include: {
-              game: true
+              game: true,
+              apiSystem: true
             }
           },
           draw: true
@@ -170,7 +173,7 @@ class ApiIntegrationService {
 
       if (!mapping) {
         logger.warn(`No hay mapping para draw ${drawId}`);
-        return { imported: 0, skipped: 0 };
+        return { imported: 0, skipped: 0, deleted: 0 };
       }
 
       // Obtener la configuración de ventas para este juego
@@ -179,12 +182,27 @@ class ApiIntegrationService {
           gameId: mapping.apiConfig.gameId,
           type: 'SALES',
           isActive: true
+        },
+        include: {
+          apiSystem: true
         }
       });
 
       if (!salesConfig) {
         logger.warn(`No hay configuración de ventas para juego ${mapping.apiConfig.game.name}`);
-        return { imported: 0, skipped: 0 };
+        return { imported: 0, skipped: 0, deleted: 0 };
+      }
+
+      // Limpiar tickets existentes antes de importar (para sincronización completa)
+      let deleted = 0;
+      if (clearExisting) {
+        const deleteResult = await prisma.externalTicket.deleteMany({
+          where: { mappingId: mapping.id }
+        });
+        deleted = deleteResult.count;
+        if (deleted > 0) {
+          logger.info(`  🗑️ ${deleted} tickets anteriores eliminados para mapping ${mapping.id}`);
+        }
       }
 
       // Llamar a la API de tickets (header APIKEY)
@@ -202,7 +220,7 @@ class ApiIntegrationService {
 
       if (data.result === 'error') {
         logger.error(`Error obteniendo tickets:`, data.errors);
-        return { imported: 0, skipped: 0 };
+        return { imported: 0, skipped: 0, deleted };
       }
 
       // Procesar tickets
@@ -211,9 +229,12 @@ class ApiIntegrationService {
       let skipped = 0;
       const tickets = Array.isArray(data) ? data : (data.tickets || []);
 
+      // Obtener el apiSystemId para crear entidades
+      const apiSystemId = salesConfig.apiSystemId || mapping.apiConfig.apiSystemId;
+
       if (tickets.length > 0) {
         for (const ticket of tickets) {
-          const saved = await this.saveTicket(mapping.id, mapping.apiConfig.gameId, ticket);
+          const saved = await this.saveTicket(mapping.id, mapping.apiConfig.gameId, ticket, apiSystemId);
           if (saved) {
             imported++;
           } else {
@@ -222,8 +243,8 @@ class ApiIntegrationService {
         }
       }
 
-      logger.info(`✅ Tickets importados para draw ${drawId}: ${imported} guardados, ${skipped} saltados`);
-      return { imported, skipped };
+      logger.info(`✅ Tickets importados para draw ${drawId}: ${imported} guardados, ${skipped} saltados, ${deleted} eliminados`);
+      return { imported, skipped, deleted };
     } catch (error) {
       logger.error('❌ Error en importSRQTickets:', error);
       throw error;
@@ -234,7 +255,7 @@ class ApiIntegrationService {
    * Guardar un ticket en la base de datos
    * SRQ format: { ticketID, numero, monto, premio, anulado, taquillaID, grupoID, bancaID, comercialID }
    */
-  async saveTicket(mappingId, gameId, ticket) {
+  async saveTicket(mappingId, gameId, ticket, apiSystemId = null) {
     try {
       // Ignorar tickets anulados
       if (ticket.anulado) {
@@ -274,6 +295,21 @@ class ApiIntegrationService {
         return false; // Ya existe
       }
 
+      // Asegurar que las entidades del proveedor existan
+      let entityIds = null;
+      if (apiSystemId && ticket.comercialID && ticket.bancaID && ticket.grupoID && ticket.taquillaID) {
+        try {
+          entityIds = await providerEntitiesService.ensureEntitiesExist(apiSystemId, {
+            comercialID: ticket.comercialID,
+            bancaID: ticket.bancaID,
+            grupoID: ticket.grupoID,
+            taquillaID: ticket.taquillaID
+          });
+        } catch (entityError) {
+          logger.warn(`Error creando entidades para ticket ${ticket.ticketID}: ${entityError.message}`);
+        }
+      }
+
       // Crear el registro de ticket
       await prisma.externalTicket.create({
         data: {
@@ -286,7 +322,16 @@ class ApiIntegrationService {
             grupoID: ticket.grupoID,
             bancaID: ticket.bancaID,
             comercialID: ticket.comercialID,
-            premio: ticket.premio
+            premio: ticket.premio,
+            // Guardar referencias a las entidades internas si se crearon
+            ...(entityIds && {
+              entityIds: {
+                comercialId: entityIds.comercialId,
+                bancaId: entityIds.bancaId,
+                grupoId: entityIds.grupoId,
+                taquillaId: entityIds.taquillaId
+              }
+            })
           }
         }
       });

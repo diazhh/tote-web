@@ -387,6 +387,7 @@ model ApiSystem {
   
   // Relaciones
   configurations ApiConfiguration[]
+  comerciales   ProviderComercial[]
   
   @@index([name])
 }
@@ -452,6 +453,78 @@ model ExternalTicket {
   
   @@index([mappingId])
   @@index([gameItemId])
+}
+
+// ============================================
+// ENTIDADES DE PROVEEDORES
+// Jerarquía: Comercial → Banca → Grupo → Taquilla
+// ============================================
+
+model ProviderComercial {
+  id            String          @id @default(uuid())
+  externalId    Int             // ID del proveedor externo
+  apiSystemId   String          // ID del ApiSystem (proveedor)
+  name          String?         // Nombre (se llenará después)
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  apiSystem     ApiSystem       @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
+  bancas        ProviderBanca[]
+  
+  @@unique([apiSystemId, externalId])
+  @@index([apiSystemId])
+  @@index([externalId])
+}
+
+model ProviderBanca {
+  id            String              @id @default(uuid())
+  externalId    Int                 // ID del proveedor externo
+  comercialId   String
+  name          String?
+  isActive      Boolean             @default(true)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  
+  comercial     ProviderComercial   @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+  grupos        ProviderGrupo[]
+  
+  @@unique([comercialId, externalId])
+  @@index([comercialId])
+  @@index([externalId])
+}
+
+model ProviderGrupo {
+  id            String          @id @default(uuid())
+  externalId    Int
+  bancaId       String
+  name          String?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  banca         ProviderBanca   @relation(fields: [bancaId], references: [id], onDelete: Cascade)
+  taquillas     ProviderTaquilla[]
+  
+  @@unique([bancaId, externalId])
+  @@index([bancaId])
+  @@index([externalId])
+}
+
+model ProviderTaquilla {
+  id            String          @id @default(uuid())
+  externalId    Int
+  grupoId       String
+  name          String?
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  grupo         ProviderGrupo   @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  
+  @@unique([grupoId, externalId])
+  @@index([grupoId])
+  @@index([externalId])
 }
 
 // ============================================

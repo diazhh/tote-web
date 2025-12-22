@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/authStore';
-import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle, DollarSign, Plug } from 'lucide-react';
+import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle, DollarSign, Plug, Activity, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -63,6 +63,8 @@ export default function AdminLayout({ children }) {
     { name: 'Usuarios', href: '/admin/usuarios', icon: Users, adminOnly: true },
     { name: 'Bots Admin', href: '/admin/bots-admin', icon: Bot, adminOnly: true },
     { name: 'Proveedores', href: '/admin/proveedores', icon: Plug, excludeForTaquilla: true },
+    { name: 'Monitor', href: '/admin/monitor', icon: Activity, adminOnly: true },
+    { name: 'Reportes', href: '/admin/reportes', icon: FileText, adminOnly: true },
     { 
       name: 'Canales', 
       icon: MessageSquare,
