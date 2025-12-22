@@ -26,10 +26,14 @@ export class DrawService {
       if (filters.dateFrom || filters.dateTo) {
         where.scheduledAt = {};
         if (filters.dateFrom) {
-          where.scheduledAt.gte = new Date(filters.dateFrom);
+          const fromDate = new Date(filters.dateFrom);
+          fromDate.setHours(0, 0, 0, 0);
+          where.scheduledAt.gte = fromDate;
         }
         if (filters.dateTo) {
-          where.scheduledAt.lte = new Date(filters.dateTo);
+          const toDate = new Date(filters.dateTo);
+          toDate.setHours(23, 59, 59, 999);
+          where.scheduledAt.lte = toDate;
         }
       }
 
