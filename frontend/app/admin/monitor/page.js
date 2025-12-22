@@ -55,7 +55,7 @@ export default function MonitorPage() {
 
   const fetchDraws = async () => {
     try {
-      const response = await axios.get(`/draws?gameId=${selectedGame}&date=${selectedDate}`);
+      const response = await axios.get(`/draws?gameId=${selectedGame}&dateFrom=${selectedDate}&dateTo=${selectedDate}`);
       const drawsList = response.data.data || [];
       setDraws(drawsList);
       if (drawsList.length > 0 && !selectedDraw) {
