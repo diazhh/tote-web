@@ -37,7 +37,8 @@ class PdfReportService {
       potentialPayout,
       allItems,
       salesByItem,
-      candidates
+      candidates,
+      tripletaRiskData
     } = data;
 
     const dateStr = format(new Date(scheduledAt), 'yyyy-MM-dd');
@@ -61,6 +62,11 @@ class PdfReportService {
 
         // Top 10 Candidates section
         this.drawCandidatesSection(doc, candidates, prewinnerItem);
+
+        // Triplet Risk section
+        if (tripletaRiskData && tripletaRiskData.activeTripletas > 0) {
+          this.drawTripletaRiskSection(doc, tripletaRiskData);
+        }
 
         // All items table
         this.drawItemsTable(doc, allItems, salesByItem, game);
@@ -318,6 +324,131 @@ class PdfReportService {
     }
 
     doc.y = y + 10;
+  }
+
+  /**
+   * Dibujar sección de riesgo de tripletas
+   */
+  drawTripletaRiskSection(doc, tripletaRiskData) {
+    const {
+      activeTripletas,
+      highRiskItems,
+      mediumRiskItems,
+      noRiskItems,
+      totalHighRiskPrize,
+      highRiskDetails
+    } = tripletaRiskData;
+
+    // Check if we need a new page
+    if (doc.y > 600) {
+      doc.addPage();
+    }
+
+    doc.fontSize(14).font('Helvetica-Bold')
+       .text('RIESGO DE TRIPLETAS');
+    
+    doc.moveDown(0.3);
+
+    // Summary boxes
+    const startX = 50;
+    let y = doc.y;
+    const boxWidth = 160;
+    const boxHeight = 50;
+    const boxSpacing = 10;
+
+    // High Risk Box
+    doc.rect(startX, y, boxWidth, boxHeight)
+       .fill('#fee2e2');
+    doc.fillColor('#991b1b')
+       .fontSize(10).font('Helvetica-Bold')
+       .text('ALTO RIESGO', startX + 10, y + 8, { width: boxWidth - 20 });
+    doc.fontSize(16)
+       .text(`${highRiskItems}`, startX + 10, y + 22, { width: boxWidth - 20 });
+    doc.fontSize(8).font('Helvetica')
+       .text(`Premio: $${totalHighRiskPrize.toFixed(2)}`, startX + 10, y + 38, { width: boxWidth - 20 });
+
+    // Medium Risk Box
+    doc.rect(startX + boxWidth + boxSpacing, y, boxWidth, boxHeight)
+       .fill('#fef3c7');
+    doc.fillColor('#92400e')
+       .fontSize(10).font('Helvetica-Bold')
+       .text('RIESGO MEDIO', startX + boxWidth + boxSpacing + 10, y + 8, { width: boxWidth - 20 });
+    doc.fontSize(16)
+       .text(`${mediumRiskItems}`, startX + boxWidth + boxSpacing + 10, y + 22, { width: boxWidth - 20 });
+    doc.fontSize(8).font('Helvetica')
+       .text('En tripletas activas', startX + boxWidth + boxSpacing + 10, y + 38, { width: boxWidth - 20 });
+
+    // No Risk Box
+    doc.rect(startX + (boxWidth + boxSpacing) * 2, y, boxWidth, boxHeight)
+       .fill('#dcfce7');
+    doc.fillColor('#166534')
+       .fontSize(10).font('Helvetica-Bold')
+       .text('SIN RIESGO', startX + (boxWidth + boxSpacing) * 2 + 10, y + 8, { width: boxWidth - 20 });
+    doc.fontSize(16)
+       .text(`${noRiskItems}`, startX + (boxWidth + boxSpacing) * 2 + 10, y + 22, { width: boxWidth - 20 });
+    doc.fontSize(8).font('Helvetica')
+       .text('Opciones seguras', startX + (boxWidth + boxSpacing) * 2 + 10, y + 38, { width: boxWidth - 20 });
+
+    doc.fillColor('black');
+    doc.y = y + boxHeight + 15;
+
+    // High risk details table
+    if (highRiskDetails && highRiskDetails.length > 0) {
+      doc.fontSize(11).font('Helvetica-Bold')
+         .text('Detalle de Tripletas de Alto Riesgo:');
+      doc.moveDown(0.3);
+
+      const headers = ['Número', 'Nombre', 'Tripletas', 'Premio Tripletas'];
+      const colWidths = [60, 150, 80, 100];
+      let x = startX;
+      y = doc.y;
+
+      doc.fontSize(9).font('Helvetica-Bold');
+      headers.forEach((header, i) => {
+        doc.text(header, x, y, { width: colWidths[i], align: 'left' });
+        x += colWidths[i];
+      });
+
+      y += 15;
+      doc.moveTo(startX, y).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y).stroke();
+      y += 5;
+
+      doc.fontSize(9).font('Helvetica');
+      
+      for (const item of highRiskDetails.slice(0, 10)) {
+        x = startX;
+        
+        // Highlight row
+        doc.rect(startX - 5, y - 2, colWidths.reduce((a, b) => a + b, 0) + 10, 14)
+           .fill('#fef2f2');
+        doc.fillColor('black');
+
+        const rowData = [
+          item.number,
+          item.name.substring(0, 20),
+          `${item.completedCount} completarían`,
+          `$${item.totalPrize.toFixed(2)}`
+        ];
+
+        rowData.forEach((cell, i) => {
+          doc.text(cell, x, y, { width: colWidths[i], align: 'left' });
+          x += colWidths[i];
+        });
+
+        y += 14;
+
+        if (y > 700) {
+          doc.addPage();
+          y = 50;
+        }
+      }
+
+      doc.y = y + 10;
+    }
+
+    // Separator line
+    doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
+    doc.moveDown(0.5);
   }
 
   /**

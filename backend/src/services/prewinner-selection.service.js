@@ -8,10 +8,12 @@ import { startOfDay, subDays, differenceInDays } from 'date-fns';
  * Servicio para selección de pre-ganadores
  * 
  * Criterios de selección:
- * 1. El pago potencial (monto jugado × multiplicador) debe estar ligeramente por debajo
+ * 1. El pago potencial (monto jugado × multiplicador + tripletas) debe estar por debajo
  *    del máximo a repartir (percentageToDistribute del total de ventas)
  * 2. El item NO debe haber sido pre-seleccionado o ganado en el mismo día
  * 3. Para juegos TRIPLE: distribuir en diferentes centenas (0XX, 1XX, 2XX, etc.)
+ * 4. Considerar riesgo de tripletas: evitar items que completarían tripletas costosas
+ * 5. Favorecer items con más tickets vendidos (más personas ganan)
  */
 class PrewinnerSelectionService {
   /**
@@ -89,6 +91,17 @@ class PrewinnerSelectionService {
         ? await this.getUsedCentenasToday(draw.gameId, draw.scheduledAt)
         : new Set();
 
+      // Obtener tripletas activas para calcular riesgo
+      const activeTripletas = await prisma.tripleBet.findMany({
+        where: {
+          gameId: draw.gameId,
+          status: 'ACTIVE',
+          expiresAt: { gte: draw.scheduledAt }
+        }
+      });
+
+      logger.info(`  Tripletas activas: ${activeTripletas.length}`);
+
       // Evaluar cada item
       const candidates = [];
       const now = new Date();
@@ -120,17 +133,45 @@ class PrewinnerSelectionService {
           ? differenceInDays(now, new Date(item.lastWin))
           : 999; // Nunca ha ganado
 
+        // Calcular impacto de tripletas si este item gana
+        const tripletaImpact = await this.calculateTripletaImpact(
+          draw.gameId,
+          item.id,
+          drawId,
+          activeTripletas
+        );
+
+        // Pago total incluyendo tripletas
+        const totalPayout = potentialPayout + tripletaImpact.totalPrize;
+
+        // Si el pago total (incluyendo tripletas) excede las ventas, descartar
+        if (totalPayout > totalSales) {
+          logger.debug(`  Descartado ${item.number}: pago total $${totalPayout.toFixed(2)} > ventas $${totalSales.toFixed(2)}`);
+          continue;
+        }
+
         // Calcular score (mayor es mejor)
         // - Preferir items que no han ganado hace más tiempo
         // - Preferir items con pago cercano pero debajo del máximo
-        // - Preferir items con más tickets vendidos
+        // - Preferir items con más tickets vendidos (más personas ganan)
+        // - Penalizar items que completarían tripletas
         const payoutRatio = maxPayout > 0 ? potentialPayout / maxPayout : 0;
-        const score = this.calculateScore(daysSinceLastWin, payoutRatio, sales.amount, sales.count);
+        const score = this.calculateScore(
+          daysSinceLastWin, 
+          payoutRatio, 
+          sales.amount, 
+          sales.count,
+          tripletaImpact.completedCount,
+          tripletaImpact.totalPrize,
+          totalSales
+        );
 
         candidates.push({
           item,
           sales,
           potentialPayout,
+          tripletaImpact,
+          totalPayout,
           daysSinceLastWin,
           score
         });
@@ -149,7 +190,10 @@ class PrewinnerSelectionService {
       
       logger.info(`  ✅ Pre-ganador seleccionado: ${selected.item.number} (${selected.item.name})`);
       logger.info(`     - Ventas: $${selected.sales.amount.toFixed(2)} (${selected.sales.count} tickets)`);
-      logger.info(`     - Pago potencial: $${selected.potentialPayout.toFixed(2)}`);
+      logger.info(`     - Pago potencial directo: $${selected.potentialPayout.toFixed(2)}`);
+      logger.info(`     - Tripletas que se completarían: ${selected.tripletaImpact?.completedCount || 0}`);
+      logger.info(`     - Pago tripletas: $${(selected.tripletaImpact?.totalPrize || 0).toFixed(2)}`);
+      logger.info(`     - Pago total: $${(selected.totalPayout || selected.potentialPayout).toFixed(2)}`);
       logger.info(`     - Días sin ganar: ${selected.daysSinceLastWin}`);
       logger.info(`     - Score: ${selected.score.toFixed(2)}`);
 
@@ -177,6 +221,22 @@ class PrewinnerSelectionService {
         }
       }
 
+      // Preparar datos de riesgo de tripletas para el PDF
+      const highRiskItems = candidates.filter(c => c.tripletaImpact?.completedCount > 0);
+      const tripletaRiskData = {
+        activeTripletas: activeTripletas.length,
+        highRiskItems: highRiskItems.length,
+        mediumRiskItems: candidates.filter(c => c.tripletaImpact?.count > 0 && c.tripletaImpact?.completedCount === 0).length,
+        noRiskItems: candidates.filter(c => !c.tripletaImpact || c.tripletaImpact.count === 0).length,
+        totalHighRiskPrize: highRiskItems.reduce((sum, c) => sum + (c.tripletaImpact?.totalPrize || 0), 0),
+        highRiskDetails: highRiskItems.map(c => ({
+          number: c.item.number,
+          name: c.item.name,
+          completedCount: c.tripletaImpact?.completedCount || 0,
+          totalPrize: c.tripletaImpact?.totalPrize || 0
+        }))
+      };
+
       // Generar PDF de cierre de sorteo primero
       let pdfPath = null;
       try {
@@ -190,7 +250,8 @@ class PrewinnerSelectionService {
           potentialPayout: selected.potentialPayout,
           allItems: gameItems,
           salesByItem: this.convertSalesByItemForPdf(salesByItem, gameItems),
-          candidates: candidates.slice(0, 10) // Top 10 candidatos
+          candidates: candidates.slice(0, 10), // Top 10 candidatos
+          tripletaRiskData
         });
         logger.info(`  📄 PDF generado: ${pdfPath}`);
       } catch (pdfError) {
@@ -258,25 +319,128 @@ class PrewinnerSelectionService {
    * @param {number} payoutRatio - Ratio del pago potencial vs máximo (0-1)
    * @param {number} salesAmount - Monto vendido para este item
    * @param {number} ticketCount - Cantidad de tickets vendidos para este item
+   * @param {number} tripletaCompletedCount - Cantidad de tripletas que se completarían
+   * @param {number} tripletaPrize - Premio total de tripletas que se pagarían
+   * @param {number} totalSales - Ventas totales del sorteo
    */
-  calculateScore(daysSinceLastWin, payoutRatio, salesAmount, ticketCount = 0) {
+  calculateScore(daysSinceLastWin, payoutRatio, salesAmount, ticketCount = 0, tripletaCompletedCount = 0, tripletaPrize = 0, totalSales = 0) {
     // Peso para días sin ganar (más días = mejor, pero con límite)
-    const daysWeight = 0.3;
+    const daysWeight = 0.15;
     const daysScore = Math.min(daysSinceLastWin / 30, 1); // Normalizar a 30 días máx
 
     // Peso para ratio de pago (queremos cercano a 1 pero no mayor)
-    const payoutWeight = 0.3;
+    const payoutWeight = 0.15;
     const payoutScore = payoutRatio; // Ya está entre 0 y 1
 
     // Peso para ventas en monto (preferir items con algunas ventas)
-    const salesWeight = 0.15;
+    const salesWeight = 0.10;
     const salesScore = salesAmount > 0 ? Math.min(salesAmount / 100, 1) : 0;
 
-    // Peso para cantidad de tickets (más tickets = mejor)
-    const ticketWeight = 0.25;
+    // Peso para cantidad de tickets (más tickets = más personas ganan = mejor)
+    // Este es el factor más importante para maximizar ganadores
+    const ticketWeight = 0.35;
     const ticketScore = ticketCount > 0 ? Math.min(ticketCount / 50, 1) : 0; // Normalizar a 50 tickets máx
 
-    return (daysScore * daysWeight) + (payoutScore * payoutWeight) + (salesScore * salesWeight) + (ticketScore * ticketWeight);
+    // Penalización por riesgo de tripletas (muy importante para evitar pérdidas)
+    const tripletaWeight = 0.25;
+    let tripletaPenalty = 0;
+    
+    if (tripletaCompletedCount > 0) {
+      // Penalizar fuertemente si se completarían tripletas
+      // La penalización es proporcional al premio de tripletas vs ventas totales
+      const tripletaRiskRatio = totalSales > 0 ? tripletaPrize / totalSales : 1;
+      tripletaPenalty = Math.min(tripletaRiskRatio * 2, 1); // Máximo penalización de 1
+      
+      // Penalización adicional por cantidad de tripletas
+      tripletaPenalty += Math.min(tripletaCompletedCount * 0.2, 0.5);
+      tripletaPenalty = Math.min(tripletaPenalty, 1); // Cap at 1
+    }
+
+    const baseScore = (daysScore * daysWeight) + (payoutScore * payoutWeight) + (salesScore * salesWeight) + (ticketScore * ticketWeight);
+    const tripletaDeduction = tripletaPenalty * tripletaWeight;
+    
+    return Math.max(baseScore - tripletaDeduction, 0);
+  }
+
+  /**
+   * Calcular impacto en tripletas si un item gana
+   * @param {string} gameId - ID del juego
+   * @param {string} itemId - ID del item
+   * @param {string} drawId - ID del sorteo
+   * @param {Array} activeTripletas - Tripletas activas
+   */
+  async calculateTripletaImpact(gameId, itemId, drawId, activeTripletas) {
+    try {
+      // Filtrar tripletas que incluyen este item
+      const relevantTripletas = activeTripletas.filter(t => 
+        t.item1Id === itemId || t.item2Id === itemId || t.item3Id === itemId
+      );
+
+      if (relevantTripletas.length === 0) {
+        return { count: 0, completedCount: 0, totalPrize: 0, details: [] };
+      }
+
+      const details = [];
+      let completedCount = 0;
+      let totalPrize = 0;
+
+      for (const tripleta of relevantTripletas) {
+        // Obtener sorteo inicial de la tripleta
+        const startDraw = await prisma.draw.findUnique({
+          where: { id: tripleta.startDrawId }
+        });
+
+        if (!startDraw) continue;
+
+        // Obtener sorteos ejecutados en el rango de la tripleta
+        const executedDraws = await prisma.draw.findMany({
+          where: {
+            gameId,
+            scheduledAt: {
+              gte: startDraw.scheduledAt,
+              lte: tripleta.expiresAt
+            },
+            status: { in: ['DRAWN', 'PUBLISHED'] },
+            winnerItemId: { not: null }
+          },
+          select: { id: true, winnerItemId: true }
+        });
+
+        const winnerItemIds = executedDraws.map(d => d.winnerItemId);
+        
+        // Verificar si este item es el que falta para completar
+        const itemIds = [tripleta.item1Id, tripleta.item2Id, tripleta.item3Id];
+        const otherItems = itemIds.filter(id => id !== itemId);
+        const otherItemsWon = otherItems.every(id => winnerItemIds.includes(id));
+
+        // Si los otros 2 ya salieron, este item completaría la tripleta
+        const wouldComplete = otherItemsWon && !winnerItemIds.includes(itemId);
+        const prize = parseFloat(tripleta.amount) * parseFloat(tripleta.multiplier);
+
+        if (wouldComplete) {
+          completedCount++;
+          totalPrize += prize;
+        }
+
+        details.push({
+          tripletaId: tripleta.id,
+          amount: parseFloat(tripleta.amount),
+          multiplier: parseFloat(tripleta.multiplier),
+          prize,
+          wouldComplete
+        });
+      }
+
+      return {
+        count: relevantTripletas.length,
+        completedCount,
+        totalPrize,
+        details: details.sort((a, b) => b.wouldComplete - a.wouldComplete)
+      };
+    } catch (error) {
+      logger.error('Error en calculateTripletaImpact:', error);
+      return { count: 0, completedCount: 0, totalPrize: 0, details: [] };
+    }
   }
 
   /**

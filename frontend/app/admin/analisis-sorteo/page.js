@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { 
   Calendar, Gamepad2, Clock, DollarSign, Trophy, AlertTriangle,
-  CheckCircle, XCircle, TrendingUp, TrendingDown, Target, Info
+  CheckCircle, XCircle, TrendingUp, TrendingDown, Target, Info, 
+  Layers, Eye, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { toast } from 'sonner';
 import analysisApi from '@/lib/api/analysis';
@@ -288,6 +289,180 @@ export default function AnalisisSorteoPage() {
               </div>
             )}
           </div>
+
+          {/* Sección de Riesgo de Tripletas Detallado */}
+          {analysis.summary.activeTripletas > 0 && (
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Layers className="w-5 h-5 text-purple-600" />
+                Riesgo de Tripletas Activas
+              </h2>
+              
+              <div className="mb-4 p-4 bg-purple-50 rounded-lg border border-purple-200">
+                <div className="flex items-start gap-3">
+                  <Eye className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-purple-800">¿Qué es el riesgo de tripletas?</p>
+                    <p className="text-sm text-purple-700 mt-1">
+                      Las tripletas son apuestas que involucran 3 números en múltiples sorteos. Si los 3 números salen ganadores 
+                      en sus respectivos sorteos, se paga un premio multiplicado. El riesgo aumenta cuando 2 de los 3 números 
+                      ya han salido y solo falta 1 para completar la tripleta.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Resumen de riesgo por nivel */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                    <span className="font-bold text-red-800">Alto Riesgo</span>
+                  </div>
+                  <p className="text-2xl font-bold text-red-700">
+                    {analysis.analysis.filter(a => a.tripleta.completedCount > 0).length}
+                  </p>
+                  <p className="text-sm text-red-600">Números que completarían tripletas</p>
+                  <p className="text-xs text-red-500 mt-1">
+                    Pago potencial: {formatCurrency(
+                      analysis.analysis
+                        .filter(a => a.tripleta.completedCount > 0)
+                        .reduce((sum, a) => sum + a.tripleta.totalPrize, 0)
+                    )}
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Info className="w-5 h-5 text-yellow-600" />
+                    <span className="font-bold text-yellow-800">Riesgo Medio</span>
+                  </div>
+                  <p className="text-2xl font-bold text-yellow-700">
+                    {analysis.analysis.filter(a => a.tripleta.count > 0 && a.tripleta.completedCount === 0).length}
+                  </p>
+                  <p className="text-sm text-yellow-600">Números en tripletas activas</p>
+                  <p className="text-xs text-yellow-500 mt-1">
+                    (Aún no se completarían)
+                  </p>
+                </div>
+                
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="w-5 h-5 text-green-600" />
+                    <span className="font-bold text-green-800">Sin Riesgo</span>
+                  </div>
+                  <p className="text-2xl font-bold text-green-700">
+                    {analysis.analysis.filter(a => a.tripleta.count === 0).length}
+                  </p>
+                  <p className="text-sm text-green-600">Números sin tripletas</p>
+                  <p className="text-xs text-green-500 mt-1">
+                    Opciones más seguras
+                  </p>
+                </div>
+              </div>
+
+              {/* Lista detallada de tripletas de alto riesgo */}
+              {analysis.analysis.filter(a => a.tripleta.completedCount > 0).length > 0 && (
+                <div className="mt-4">
+                  <h3 className="font-semibold text-red-800 mb-3 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Detalle de Tripletas de Alto Riesgo
+                  </h3>
+                  <div className="space-y-4">
+                    {analysis.analysis
+                      .filter(a => a.tripleta.completedCount > 0)
+                      .map((item, idx) => (
+                        <div key={idx} className="border border-red-200 rounded-lg overflow-hidden">
+                          <div 
+                            className="bg-red-100 p-3 flex items-center justify-between cursor-pointer hover:bg-red-150"
+                            onClick={() => setExpandedItem(expandedItem === item.itemId ? null : item.itemId)}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="w-10 h-10 bg-red-600 text-white rounded-full flex items-center justify-center font-bold">
+                                {item.number}
+                              </span>
+                              <div>
+                                <p className="font-bold text-red-800">{item.name}</p>
+                                <p className="text-sm text-red-600">
+                                  {item.tripleta.completedCount} tripleta(s) se completarían
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <p className="font-bold text-red-700">{formatCurrency(item.tripleta.totalPrize)}</p>
+                                <p className="text-xs text-red-500">Premio tripletas</p>
+                              </div>
+                              {expandedItem === item.itemId ? (
+                                <ChevronUp className="w-5 h-5 text-red-600" />
+                              ) : (
+                                <ChevronDown className="w-5 h-5 text-red-600" />
+                              )}
+                            </div>
+                          </div>
+                          
+                          {expandedItem === item.itemId && (
+                            <div className="p-4 bg-white border-t border-red-200">
+                              <p className="text-sm text-gray-600 mb-3">
+                                Sorteos involucrados en las tripletas:
+                              </p>
+                              <div className="space-y-3">
+                                {item.tripleta.details.filter(t => t.wouldComplete).map((t, tIdx) => (
+                                  <div key={tIdx} className="bg-red-50 rounded-lg p-3 border border-red-100">
+                                    <div className="flex items-center justify-between mb-2">
+                                      <span className="text-xs text-gray-500">Tripleta ID: {t.tripletaId.slice(0, 8)}...</span>
+                                      <span className="px-2 py-0.5 bg-red-200 text-red-800 rounded text-xs font-medium">
+                                        ¡Se completaría!
+                                      </span>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {t.items.map((ti, i) => (
+                                        <div key={i} className="flex items-center gap-1">
+                                          <span className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 ${
+                                            ti.won ? 'bg-green-100 text-green-800 border border-green-300' : 
+                                            ti.isTarget ? 'bg-blue-100 text-blue-800 border-2 border-blue-400' :
+                                            'bg-gray-100 text-gray-800 border border-gray-300'
+                                          }`}>
+                                            <span className="font-bold">{ti.number}</span>
+                                            <span className="text-xs opacity-75">{ti.name?.substring(0, 8)}</span>
+                                            {ti.won && <CheckCircle className="w-3 h-3 ml-1" />}
+                                            {ti.isTarget && <Target className="w-3 h-3 ml-1" />}
+                                          </span>
+                                          {i < t.items.length - 1 && (
+                                            <span className="text-gray-400 mx-1">→</span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="mt-2 flex items-center justify-between text-sm">
+                                      <span className="text-gray-600">
+                                        Apuesta: {formatCurrency(t.amount)} × {t.multiplier}
+                                      </span>
+                                      <span className="font-bold text-purple-700">
+                                        Premio: {formatCurrency(t.prize)}
+                                      </span>
+                                    </div>
+                                    <div className="mt-2 text-xs text-gray-500">
+                                      <span className="inline-flex items-center gap-1">
+                                        <CheckCircle className="w-3 h-3 text-green-600" /> Ya salió
+                                      </span>
+                                      <span className="inline-flex items-center gap-1 ml-3">
+                                        <Target className="w-3 h-3 text-blue-600" /> Falta (este sorteo)
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Recomendaciones rápidas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

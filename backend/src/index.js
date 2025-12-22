@@ -37,24 +37,38 @@ app.use(helmet({
 }));
 
 // CORS - debe ir ANTES del rate limiter para manejar preflight requests
-const allowedOrigins = process.env.FRONTEND_URL 
-  ? process.env.FRONTEND_URL.split(',').map(origin => origin.trim())
-  : ['http://localhost:3000'];
+const isProduction = process.env.NODE_ENV === 'production';
 
-app.use(cors({
-  origin: allowedOrigins,
+// En producción: solo https://tote.atilax.io
+// En desarrollo: permitir cualquier origen localhost
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (isProduction) {
+      // Producción: solo el dominio específico
+      const allowedOrigins = ['https://tote.atilax.io'];
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    } else {
+      // Desarrollo: permitir localhost en cualquier puerto
+      if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
+};
+
+app.use(cors(corsOptions));
 
 // Manejar preflight requests explícitamente
-app.options('*', cors({
-  origin: allowedOrigins,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-}));
+app.options('*', cors(corsOptions));
 
 // Rate limiting - General (más permisivo)
 const generalLimiter = rateLimit({
