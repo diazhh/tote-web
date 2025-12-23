@@ -491,9 +491,9 @@ class PdfReportService {
         include: {
           game: true,
           preselectedItem: true,
-          apiMappings: {
+          tickets: {
             include: {
-              tickets: {
+              details: {
                 include: {
                   gameItem: true
                 }
@@ -517,18 +517,20 @@ class PdfReportService {
       });
 
       // Calcular ventas por item
-      const tickets = draw.apiMappings.flatMap(m => m.tickets);
+      const tickets = draw.tickets || [];
       const salesByItem = {};
       
       for (const ticket of tickets) {
-        if (!salesByItem[ticket.gameItemId]) {
-          salesByItem[ticket.gameItemId] = { amount: 0, count: 0 };
+        for (const detail of ticket.details) {
+          if (!salesByItem[detail.gameItemId]) {
+            salesByItem[detail.gameItemId] = { amount: 0, count: 0 };
+          }
+          salesByItem[detail.gameItemId].amount += parseFloat(detail.amount);
+          salesByItem[detail.gameItemId].count += 1;
         }
-        salesByItem[ticket.gameItemId].amount += parseFloat(ticket.amount);
-        salesByItem[ticket.gameItemId].count += 1;
       }
 
-      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
       const percentageToDistribute = draw.game.config?.percentageToDistribute || 70;
       const maxPayout = (totalSales * percentageToDistribute) / 100;
 

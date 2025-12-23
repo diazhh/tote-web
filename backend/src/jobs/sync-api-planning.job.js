@@ -41,15 +41,30 @@ class SyncApiPlanningJob {
       logger.info('🔄 Iniciando sincronización de planificación con APIs externas...');
 
       const today = new Date();
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
-      // Sincronizar con SRQ
-      const result = await apiIntegrationService.syncSRQPlanning(today);
+      // Sincronizar con SRQ para HOY
+      logger.info('📅 Sincronizando sorteos de HOY...');
+      const resultToday = await apiIntegrationService.syncSRQPlanning(today);
+
+      // Sincronizar con SRQ para MAÑANA (necesario para tripletas)
+      logger.info('📅 Sincronizando sorteos de MAÑANA...');
+      const resultTomorrow = await apiIntegrationService.syncSRQPlanning(tomorrow);
+
+      const totalMapped = resultToday.mapped + resultTomorrow.mapped;
+      const totalSkipped = resultToday.skipped + resultTomorrow.skipped;
 
       logger.info(
-        `✅ Sincronización completada: ${result.mapped} sorteos mapeados, ${result.skipped} saltados`
+        `✅ Sincronización completada: ${totalMapped} sorteos mapeados (${resultToday.mapped} hoy, ${resultTomorrow.mapped} mañana), ${totalSkipped} saltados`
       );
 
-      return result;
+      return { 
+        today: resultToday, 
+        tomorrow: resultTomorrow,
+        mapped: totalMapped,
+        skipped: totalSkipped
+      };
     } catch (error) {
       logger.error('❌ Error en SyncApiPlanningJob:', error);
       throw error;

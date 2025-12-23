@@ -4,12 +4,17 @@ import { useState, useEffect } from 'react';
 import { DollarSign, TrendingUp, TrendingDown, Users, Ticket, Trophy, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from '@/lib/api/axios';
+import { getTodayVenezuela } from '@/lib/dateUtils';
 
 export default function ReportesTaquillaPage() {
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState({
-    startDate: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    endDate: new Date().toISOString().split('T')[0]
+  const [dateRange, setDateRange] = useState(() => {
+    const today = getTodayVenezuela();
+    const thirtyDaysAgo = new Date(new Date(today).getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    return {
+      startDate: thirtyDaysAgo,
+      endDate: today
+    };
   });
   const [reportData, setReportData] = useState({
     financial: {

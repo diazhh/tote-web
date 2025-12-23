@@ -13,6 +13,7 @@ export class DrawController {
       const filters = {
         gameId: req.query.gameId,
         status: req.query.status,
+        date: req.query.date, // Filtro por fecha específica
         dateFrom: req.query.dateFrom,
         dateTo: req.query.dateTo,
         orderBy: req.query.orderBy || 'desc',

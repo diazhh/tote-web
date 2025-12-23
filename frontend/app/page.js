@@ -5,6 +5,7 @@ import { useDrawsByDate, useNextDraws } from '@/hooks/useDraws';
 import { useGames } from '@/hooks/useGames';
 import { useCountdown } from '@/hooks/useCountdown';
 import { usePageVisit, PAGE_TYPES } from '@/hooks/usePageVisit';
+import { getTodayVenezuela } from '@/lib/dateUtils';
 import LoadingSpinner from '@/components/common/LoadingSpinner';
 import ErrorMessage from '@/components/common/ErrorMessage';
 import ImageModal from '@/components/common/ImageModal';
@@ -346,7 +347,7 @@ function ScheduleSection({ games }) {
 export default function HomePage() {
   usePageVisit(PAGE_TYPES.LANDING, '/');
   
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayVenezuela());
   const [selectedGame, setSelectedGame] = useState(null);
   const [selectedDraw, setSelectedDraw] = useState(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState(null);
@@ -434,7 +435,7 @@ export default function HomePage() {
                   className="border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
                 <button
-                  onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
+                  onClick={() => setSelectedDate(getTodayVenezuela())}
                   className="px-4 py-2 rounded-lg text-sm font-medium bg-white text-gray-700 hover:bg-gray-100 transition border border-gray-300"
                 >
                   Hoy

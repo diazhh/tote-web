@@ -326,16 +326,20 @@ class SRQService {
       });
     }
 
-    // Guardar en ExternalTicket
+    // Guardar tickets agrupados por ticketID
     let created = 0;
     
-    // Primero eliminar tickets anteriores de este mapping
-    if (mapping) {
-      await prisma.externalTicket.deleteMany({
-        where: { mappingId: mapping.id },
-      });
-    }
+    // Primero eliminar tickets anteriores de este sorteo
+    await prisma.ticket.deleteMany({
+      where: { 
+        drawId: draw.id,
+        source: 'EXTERNAL_API'
+      },
+    });
 
+    // Agrupar por ticketID
+    const ticketsGrouped = new Map();
+    
     for (const [number, data] of ticketsByNumber) {
       // Buscar GameItem
       const gameItem = await prisma.gameItem.findFirst({
@@ -350,16 +354,56 @@ class SRQService {
         continue;
       }
 
-      await prisma.externalTicket.create({
-        data: {
-          mappingId: mapping?.id || draw.apiMappings[0].id,
+      // Agrupar tickets por ticketID
+      for (const ticket of data.tickets) {
+        const ticketId = ticket.ticketID?.toString();
+        if (!ticketId) continue;
+
+        if (!ticketsGrouped.has(ticketId)) {
+          ticketsGrouped.set(ticketId, {
+            externalTicketId: ticketId,
+            providerData: {
+              ticketID: ticketId,
+              taquillaID: ticket.taquillaID,
+              grupoID: ticket.grupoID,
+              bancaID: ticket.bancaID,
+              comercialID: ticket.comercialID
+            },
+            details: []
+          });
+        }
+
+        ticketsGrouped.get(ticketId).details.push({
           gameItemId: gameItem.id,
-          amount: data.amount,
-          externalData: {
-            ticketCount: data.tickets.length,
-            tickets: data.tickets,
-          },
-        },
+          amount: parseFloat(ticket.monto || 0),
+          multiplier: 30.00
+        });
+      }
+    }
+
+    // Crear Ticket + TicketDetail para cada ticket agrupado
+    for (const ticketData of ticketsGrouped.values()) {
+      const totalAmount = ticketData.details.reduce((sum, d) => sum + d.amount, 0);
+      
+      await prisma.ticket.create({
+        data: {
+          drawId: draw.id,
+          source: 'EXTERNAL_API',
+          externalTicketId: ticketData.externalTicketId,
+          totalAmount,
+          totalPrize: 0,
+          status: 'ACTIVE',
+          providerData: ticketData.providerData,
+          details: {
+            create: ticketData.details.map(detail => ({
+              gameItemId: detail.gameItemId,
+              amount: detail.amount,
+              multiplier: detail.multiplier,
+              prize: 0,
+              status: 'ACTIVE'
+            }))
+          }
+        }
       });
       created++;
     }

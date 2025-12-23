@@ -44,7 +44,15 @@ class MonitorController {
   async getDailyReport(req, res) {
     try {
       const { date, gameId } = req.query;
-      const reportDate = date ? new Date(date) : new Date();
+      // Si se recibe una fecha string (YYYY-MM-DD), interpretarla como fecha de Caracas
+      // Si no se recibe fecha, usar la fecha actual
+      let reportDate;
+      if (date) {
+        // Crear fecha interpretando el string como medianoche en Caracas (UTC-4)
+        reportDate = new Date(date + 'T00:00:00-04:00');
+      } else {
+        reportDate = new Date();
+      }
       const report = await monitorService.getDailyReport(reportDate, gameId || null);
       res.json({ success: true, data: report });
     } catch (error) {

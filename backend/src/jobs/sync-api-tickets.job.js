@@ -3,19 +3,36 @@ import logger from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import apiIntegrationService from '../services/api-integration.service.js';
 import prewinnerSelectionService from '../services/prewinner-selection.service.js';
-import { startOfDay, endOfDay, addMinutes, subMinutes } from 'date-fns';
+import { addMinutes, subMinutes } from 'date-fns';
+import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 
 /**
- * Job para sincronizar tickets de APIs externas
- * Se ejecuta cada 5 minutos y verifica si hay sorteos próximos a cerrar
- * Importa tickets 5 minutos antes de la hora de totalización
- * NOTA: Cada sincronización elimina los tickets anteriores del sorteo para
- * asegurar que los datos estén actualizados con el proveedor
+ * Job para sincronizar tickets de APIs externas (SRQ)
+ * 
+ * LÓGICA:
+ * - Se ejecuta cada 5 minutos
+ * - Por cada juego activo, busca el sorteo PRÓXIMO a cerrar (status SCHEDULED)
+ * - Solo sincroniza sorteos que tengan mapping de SRQ (external_draw_id)
+ * - Sincroniza CONTINUAMENTE hasta que el sorteo cambie a CLOSED
+ * 
+ * Ejemplo:
+ * - 5:00pm → Sincroniza sorteo de 6:00pm
+ * - 5:05pm → Sincroniza sorteo de 6:00pm
+ * - 5:50pm → Sincroniza sorteo de 6:00pm
+ * - 5:55pm → Sorteo de 6:00pm se cierra (close-draw.job.js), deja de sincronizar
+ * - 6:00pm → Sincroniza sorteo de 7:00pm
+ * 
+ * Para cada sorteo:
+ *   1. Elimina todos los tickets y detalles existentes del sorteo
+ *   2. Consulta API de SRQ para obtener ventas actualizadas
+ *   3. Inserta todos los tickets y detalles asociados
+ * 
+ * IMPORTANTE: Este job NO selecciona pre-ganador. Eso lo hace close-draw.job.js
+ * exactamente 5 minutos antes de la hora del sorteo.
  */
 class SyncApiTicketsJob {
   constructor() {
     this.cronExpression = '*/5 * * * *'; // Cada 5 minutos
-    this.minutesBefore = 5; // Minutos antes del sorteo para importar tickets
     this.task = null;
   }
 
@@ -27,7 +44,7 @@ class SyncApiTicketsJob {
       await this.execute();
     }, { timezone: 'America/Caracas' });
 
-    logger.info(`✅ Job SyncApiTickets iniciado (cada minuto, ${this.minutesBefore} min antes del sorteo, TZ: America/Caracas)`);
+    logger.info(`✅ Job SyncApiTickets iniciado (cada 5 minutos, sorteos próximos a cerrar, TZ: America/Caracas)`);
   }
 
   /**
@@ -42,123 +59,92 @@ class SyncApiTicketsJob {
 
   /**
    * Ejecutar el job
+   * 
+   * Lógica:
+   * 1. Obtener todos los juegos activos
+   * 2. Por cada juego, buscar el sorteo PRÓXIMO a cerrar (SCHEDULED con mapping)
+   * 3. Sincronizar tickets de SRQ cada 5 minutos (elimina + inserta)
+   * 4. Continuar sincronizando hasta que el sorteo cambie a CLOSED
+   * 5. Seleccionar pre-ganador si no existe
+   * 
+   * Ejemplo:
+   * - Si son las 5:00pm, sincroniza el sorteo de las 6:00pm
+   * - Si son las 5:50pm, sincroniza el sorteo de las 6:00pm
+   * - A las 5:55pm cierra el sorteo y deja de sincronizar
    */
   async execute() {
     try {
       const now = new Date();
-      const targetTime = addMinutes(now, this.minutesBefore);
-      const windowStart = subMinutes(targetTime, 1); // Ventana de 2 minutos
 
-      // Buscar sorteos que cierran en los próximos 5 minutos (+/- 1 min)
-      const draws = await prisma.draw.findMany({
-        where: {
-          scheduledAt: {
-            gte: windowStart,
-            lte: targetTime,
-          },
-          status: {
-            in: ['SCHEDULED', 'CLOSED'],
-          },
-          apiMappings: {
-            some: {}, // Solo sorteos con mapping de API
-          },
-        },
-        include: {
-          game: true,
-          apiMappings: true,
-        },
+      // 1. Obtener todos los juegos activos
+      const games = await prisma.game.findMany({
+        where: { isActive: true }
       });
 
-      if (draws.length === 0) {
-        return; // No hay sorteos próximos
+      if (games.length === 0) {
+        return;
       }
 
-      logger.info(`🎫 Sincronizando tickets de ${draws.length} sorteos próximos a cerrar...`);
+      logger.info(`🎫 Sincronizando tickets de sorteos próximos a cerrar...`);
 
-      for (const draw of draws) {
+      // 2. Por cada juego, buscar el sorteo próximo a cerrar
+      for (const game of games) {
         try {
-          // 1. Importar tickets de TODOS los proveedores configurados para este juego
-          const importResults = await this.importTicketsFromAllProviders(draw);
+          // Buscar el sorteo SCHEDULED más próximo que tenga mapping de SRQ
+          // El sorteo cierra 5 minutos antes de su hora programada
+          // Ejemplo: Sorteo de 6pm cierra a las 5:55pm
+          // Entonces desde las 5:00pm hasta las 5:55pm sincronizamos el sorteo de 6pm
+          const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
           
-          const totalImported = importResults.reduce((sum, r) => sum + (r.imported || 0), 0);
-          const totalSkipped = importResults.reduce((sum, r) => sum + (r.skipped || 0), 0);
-          const allSuccessful = importResults.every(r => !r.error);
-          
-          logger.info(`  ✓ ${draw.game.name} ${draw.scheduledAt.toLocaleTimeString()}: ${totalImported} tickets de ${importResults.length} proveedor(es)`);
+          const draw = await prisma.draw.findFirst({
+            where: {
+              gameId: game.id,
+              status: 'SCHEDULED',
+              scheduledAt: {
+                gte: now,
+                lte: oneHourFromNow, // Sorteos en la próxima hora
+              },
+              apiMappings: {
+                some: {}, // Debe tener mapping de SRQ
+              },
+            },
+            include: {
+              apiMappings: true,
+            },
+            orderBy: {
+              scheduledAt: 'asc', // El más próximo
+            },
+          });
 
-          // 2. Seleccionar pre-ganador SOLO después de importar de TODOS los proveedores
-          if (allSuccessful && (totalImported > 0 || totalSkipped > 0)) {
-            // Verificar que el sorteo no tenga ya un pre-ganador
-            const currentDraw = await prisma.draw.findUnique({
-              where: { id: draw.id },
-              select: { preselectedItemId: true, status: true }
-            });
-
-            if (!currentDraw.preselectedItemId && currentDraw.status === 'SCHEDULED') {
-              try {
-                const prewinner = await prewinnerSelectionService.selectPrewinner(draw.id);
-                if (prewinner) {
-                  logger.info(`  🎯 Pre-ganador: ${prewinner.number} (${prewinner.name})`);
-                }
-              } catch (prewinnerError) {
-                logger.error(`  ⚠️ Error seleccionando pre-ganador: ${prewinnerError.message}`);
-              }
-            }
+          if (!draw) {
+            continue; // No hay sorteo próximo para este juego
           }
+
+          // Calcular minutos hasta el sorteo
+          const minutesUntilDraw = Math.floor((draw.scheduledAt - now) / (1000 * 60));
+          // Calcular minutos hasta el cierre (5 min antes del sorteo)
+          const minutesUntilClose = minutesUntilDraw - 5;
+
+          const hora = draw.scheduledAt.toLocaleTimeString('es-VE', { 
+            timeZone: 'America/Caracas', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          });
+
+          logger.info(`  📊 ${game.name} ${hora} (cierra en ${minutesUntilClose} min)`);
+
+          // 3. Importar tickets de SRQ (elimina tickets anteriores + inserta nuevos)
+          // Se ejecuta cada 5 minutos hasta que el sorteo cambie a CLOSED
+          const result = await apiIntegrationService.importSRQTickets(draw.id, true);
+          
+          logger.info(`     ✓ ${result.imported} tickets importados, ${result.deleted} eliminados`);
         } catch (error) {
-          logger.error(`  ✗ Error en ${draw.game.name}: ${error.message}`);
+          logger.error(`  ✗ Error en ${game.name}: ${error.message}`);
         }
       }
     } catch (error) {
       logger.error('❌ Error en SyncApiTicketsJob:', error);
     }
-  }
-
-  /**
-   * Importar tickets de todos los proveedores configurados para un sorteo
-   * @param {object} draw - Objeto Draw con game y apiMappings
-   * @returns {Promise<Array>} - Resultados de importación por proveedor
-   */
-  async importTicketsFromAllProviders(draw) {
-    const results = [];
-
-    // Obtener todas las configuraciones de SALES activas para este juego
-    const salesConfigs = await prisma.apiConfiguration.findMany({
-      where: {
-        gameId: draw.gameId,
-        type: 'SALES',
-        isActive: true
-      },
-      include: {
-        apiSystem: true
-      }
-    });
-
-    if (salesConfigs.length === 0) {
-      // Si no hay configuraciones de ventas, usar el método existente
-      const result = await apiIntegrationService.importSRQTickets(draw.id);
-      return [result];
-    }
-
-    // Importar de cada proveedor
-    for (const config of salesConfigs) {
-      try {
-        const result = await apiIntegrationService.importSRQTickets(draw.id);
-        results.push({
-          provider: config.apiSystem?.name || config.name,
-          ...result
-        });
-      } catch (error) {
-        results.push({
-          provider: config.apiSystem?.name || config.name,
-          error: error.message,
-          imported: 0,
-          skipped: 0
-        });
-      }
-    }
-
-    return results;
   }
 
   /**
@@ -186,8 +172,8 @@ class SyncApiTicketsJob {
       const draws = await prisma.draw.findMany({
         where: {
           scheduledAt: {
-            gte: startOfDay(today),
-            lte: endOfDay(today),
+            gte: startOfDayInCaracas(today),
+            lte: endOfDayInCaracas(today),
           },
           apiMappings: {
             some: {},

@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import providerEntitiesService from './provider-entities.service.js';
+import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 
 /**
  * Servicio para integración con APIs externas de ventas
@@ -30,6 +31,7 @@ class ApiIntegrationService {
 
       let totalMapped = 0;
       let totalSkipped = 0;
+      let totalWinners = 0;
 
       for (const config of planningConfigs) {
         try {
@@ -60,17 +62,12 @@ class ApiIntegrationService {
           }
 
           // Obtener sorteos locales del día para este juego, ordenados por hora
-          const startOfDay = new Date(date);
-          startOfDay.setHours(0, 0, 0, 0);
-          const endOfDay = new Date(date);
-          endOfDay.setHours(23, 59, 59, 999);
-
           const localDraws = await prisma.draw.findMany({
             where: {
               gameId: config.gameId,
               scheduledAt: {
-                gte: startOfDay,
-                lte: endOfDay
+                gte: startOfDayInCaracas(date),
+                lte: endOfDayInCaracas(date)
               }
             },
             orderBy: { scheduledAt: 'asc' }
@@ -105,6 +102,12 @@ class ApiIntegrationService {
             if (existingMapping) {
               logger.debug(`Mapping ya existe: ${externalId} ↔ ${localDraw.id}`);
               totalSkipped++;
+              
+              // Verificar si necesitamos actualizar el ganador
+              if (externalDraw.ganador && !localDraw.winnerItemId) {
+                const updated = await this.syncDrawWinner(localDraw.id, externalDraw.ganador, config.gameId);
+                if (updated) totalWinners++;
+              }
               continue;
             }
 
@@ -124,6 +127,12 @@ class ApiIntegrationService {
             });
             logger.info(`✅ Mapeado: ${config.game.name} ${hora} → SRQ ${externalId} (${externalDraw.descripcion || ''})`);
             totalMapped++;
+            
+            // Sincronizar ganador si existe
+            if (externalDraw.ganador) {
+              const updated = await this.syncDrawWinner(localDraw.id, externalDraw.ganador, config.gameId);
+              if (updated) totalWinners++;
+            }
           }
 
           // Reportar si hay diferencia en cantidad
@@ -138,8 +147,8 @@ class ApiIntegrationService {
         }
       }
 
-      logger.info(`✅ Sincronización SRQ completada: ${totalMapped} mapeados, ${totalSkipped} saltados`);
-      return { mapped: totalMapped, skipped: totalSkipped };
+      logger.info(`✅ Sincronización SRQ completada: ${totalMapped} mapeados, ${totalSkipped} saltados, ${totalWinners} ganadores`);
+      return { mapped: totalMapped, skipped: totalSkipped, winners: totalWinners };
     } catch (error) {
       logger.error('❌ Error en syncSRQPlanning:', error);
       throw error;
@@ -196,12 +205,15 @@ class ApiIntegrationService {
       // Limpiar tickets existentes antes de importar (para sincronización completa)
       let deleted = 0;
       if (clearExisting) {
-        const deleteResult = await prisma.externalTicket.deleteMany({
-          where: { mappingId: mapping.id }
+        const deleteResult = await prisma.ticket.deleteMany({
+          where: { 
+            drawId,
+            source: 'EXTERNAL_API'
+          }
         });
         deleted = deleteResult.count;
         if (deleted > 0) {
-          logger.info(`  🗑️ ${deleted} tickets anteriores eliminados para mapping ${mapping.id}`);
+          logger.info(`  🗑️ ${deleted} tickets externos anteriores eliminados para draw ${drawId}`);
         }
       }
 
@@ -223,27 +235,33 @@ class ApiIntegrationService {
         return { imported: 0, skipped: 0, deleted };
       }
 
-      // Procesar tickets
-      // SRQ devuelve array directamente
-      let imported = 0;
-      let skipped = 0;
-      const tickets = Array.isArray(data) ? data : (data.tickets || []);
-
+      // Procesar tickets - SRQ devuelve array directamente
+      const ticketsData = Array.isArray(data) ? data : (data.tickets || []);
+      
       // Obtener el apiSystemId para crear entidades
       const apiSystemId = salesConfig.apiSystemId || mapping.apiConfig.apiSystemId;
 
-      if (tickets.length > 0) {
-        for (const ticket of tickets) {
-          const saved = await this.saveTicket(mapping.id, mapping.apiConfig.gameId, ticket, apiSystemId);
-          if (saved) {
-            imported++;
-          } else {
-            skipped++;
-          }
+      // Agrupar tickets por ticketID
+      const ticketsGrouped = await this.groupTicketsByExternalId(
+        ticketsData, 
+        mapping.apiConfig.gameId, 
+        apiSystemId
+      );
+
+      let imported = 0;
+      let skipped = 0;
+
+      // Crear Ticket + TicketDetail para cada ticket agrupado
+      for (const ticketGroup of ticketsGrouped) {
+        const saved = await this.saveTicketWithDetails(drawId, ticketGroup);
+        if (saved) {
+          imported++;
+        } else {
+          skipped++;
         }
       }
 
-      logger.info(`✅ Tickets importados para draw ${drawId}: ${imported} guardados, ${skipped} saltados, ${deleted} eliminados`);
+      logger.info(`✅ Tickets importados para draw ${drawId}: ${imported} tickets (${ticketsGrouped.reduce((sum, t) => sum + t.details.length, 0)} jugadas), ${skipped} saltados, ${deleted} eliminados`);
       return { imported, skipped, deleted };
     } catch (error) {
       logger.error('❌ Error en importSRQTickets:', error);
@@ -252,17 +270,28 @@ class ApiIntegrationService {
   }
 
   /**
-   * Guardar un ticket en la base de datos
-   * SRQ format: { ticketID, numero, monto, premio, anulado, taquillaID, grupoID, bancaID, comercialID }
+   * Agrupar tickets de SRQ por ticketID
+   * @param {Array} ticketsData - Array de tickets de SRQ
+   * @param {string} gameId - ID del juego
+   * @param {string} apiSystemId - ID del sistema API
+   * @returns {Array} Tickets agrupados con sus detalles
    */
-  async saveTicket(mappingId, gameId, ticket, apiSystemId = null) {
-    try {
+  async groupTicketsByExternalId(ticketsData, gameId, apiSystemId) {
+    const grouped = new Map();
+
+    for (const ticket of ticketsData) {
       // Ignorar tickets anulados
       if (ticket.anulado) {
-        return false;
+        continue;
       }
 
-      // Buscar el game_item por número (SRQ usa 'numero')
+      const ticketId = ticket.ticketID?.toString();
+      if (!ticketId) {
+        logger.warn('Ticket sin ticketID, ignorando');
+        continue;
+      }
+
+      // Buscar el game_item por número
       const numero = ticket.numero?.toString() || ticket.number?.toString();
       const gameItem = await prisma.gameItem.findFirst({
         where: {
@@ -273,21 +302,67 @@ class ApiIntegrationService {
 
       if (!gameItem) {
         logger.warn(`No se encontró gameItem para número ${numero} en juego ${gameId}`);
-        return false;
+        continue;
       }
 
-      // SRQ usa 'monto' en lugar de 'amount'
       const amount = parseFloat(ticket.monto || ticket.amount || 0);
 
-      // Verificar si ya existe el ticket (evitar duplicados)
-      const existing = await prisma.externalTicket.findFirst({
-        where: {
-          mappingId,
-          gameItemId: gameItem.id,
-          externalData: {
-            path: ['ticketID'],
-            equals: ticket.ticketID
+      // Si no existe el ticket en el mapa, crearlo
+      if (!grouped.has(ticketId)) {
+        // Asegurar que las entidades del proveedor existan
+        let entityIds = null;
+        if (apiSystemId && ticket.comercialID && ticket.bancaID && ticket.grupoID && ticket.taquillaID) {
+          try {
+            entityIds = await providerEntitiesService.ensureEntitiesExist(apiSystemId, {
+              comercialID: ticket.comercialID,
+              bancaID: ticket.bancaID,
+              grupoID: ticket.grupoID,
+              taquillaID: ticket.taquillaID
+            });
+          } catch (entityError) {
+            logger.warn(`Error creando entidades para ticket ${ticketId}: ${entityError.message}`);
           }
+        }
+
+        grouped.set(ticketId, {
+          externalTicketId: ticketId,
+          providerData: {
+            ticketID: ticketId,
+            taquillaID: ticket.taquillaID,
+            grupoID: ticket.grupoID,
+            bancaID: ticket.bancaID,
+            comercialID: ticket.comercialID,
+            ...(entityIds && { entityIds })
+          },
+          details: []
+        });
+      }
+
+      // Agregar el detalle al ticket
+      grouped.get(ticketId).details.push({
+        gameItemId: gameItem.id,
+        amount,
+        multiplier: gameItem.multiplier
+      });
+    }
+
+    return Array.from(grouped.values());
+  }
+
+  /**
+   * Guardar un ticket con sus detalles
+   * @param {string} drawId - ID del sorteo
+   * @param {Object} ticketData - Datos del ticket agrupado
+   * @returns {boolean} True si se guardó correctamente
+   */
+  async saveTicketWithDetails(drawId, ticketData) {
+    try {
+      // Verificar si ya existe el ticket
+      const existing = await prisma.ticket.findFirst({
+        where: {
+          drawId,
+          source: 'EXTERNAL_API',
+          externalTicketId: ticketData.externalTicketId
         }
       });
 
@@ -295,50 +370,85 @@ class ApiIntegrationService {
         return false; // Ya existe
       }
 
-      // Asegurar que las entidades del proveedor existan
-      let entityIds = null;
-      if (apiSystemId && ticket.comercialID && ticket.bancaID && ticket.grupoID && ticket.taquillaID) {
-        try {
-          entityIds = await providerEntitiesService.ensureEntitiesExist(apiSystemId, {
-            comercialID: ticket.comercialID,
-            bancaID: ticket.bancaID,
-            grupoID: ticket.grupoID,
-            taquillaID: ticket.taquillaID
-          });
-        } catch (entityError) {
-          logger.warn(`Error creando entidades para ticket ${ticket.ticketID}: ${entityError.message}`);
-        }
-      }
+      // Calcular total
+      const totalAmount = ticketData.details.reduce((sum, d) => sum + d.amount, 0);
 
-      // Crear el registro de ticket
-      await prisma.externalTicket.create({
+      // Crear el ticket con sus detalles en una transacción
+      await prisma.ticket.create({
         data: {
-          mappingId,
-          gameItemId: gameItem.id,
-          amount,
-          externalData: {
-            ticketID: ticket.ticketID,
-            taquillaID: ticket.taquillaID,
-            grupoID: ticket.grupoID,
-            bancaID: ticket.bancaID,
-            comercialID: ticket.comercialID,
-            premio: ticket.premio,
-            // Guardar referencias a las entidades internas si se crearon
-            ...(entityIds && {
-              entityIds: {
-                comercialId: entityIds.comercialId,
-                bancaId: entityIds.bancaId,
-                grupoId: entityIds.grupoId,
-                taquillaId: entityIds.taquillaId
-              }
-            })
+          drawId,
+          source: 'EXTERNAL_API',
+          externalTicketId: ticketData.externalTicketId,
+          totalAmount,
+          totalPrize: 0,
+          status: 'ACTIVE',
+          providerData: ticketData.providerData,
+          details: {
+            create: ticketData.details.map(detail => ({
+              gameItemId: detail.gameItemId,
+              amount: detail.amount,
+              multiplier: detail.multiplier,
+              prize: 0,
+              status: 'ACTIVE'
+            }))
           }
         }
       });
 
       return true;
     } catch (error) {
-      logger.error('Error guardando ticket:', error.message);
+      logger.error(`Error guardando ticket ${ticketData.externalTicketId}:`, error.message);
+      return false;
+    }
+  }
+
+
+  /**
+   * Sincronizar ganador de un sorteo desde SRQ
+   * @param {string} drawId - ID del Draw
+   * @param {string} ganadorStr - String del ganador (ej: "32 ARDILLA")
+   * @param {string} gameId - ID del juego
+   */
+  async syncDrawWinner(drawId, ganadorStr, gameId) {
+    try {
+      if (!ganadorStr) return;
+
+      // Extraer número del ganador (ej: "32 ARDILLA" -> "32")
+      const match = ganadorStr.match(/^(\d+)/);
+      if (!match) {
+        logger.warn(`No se pudo extraer número de ganador: ${ganadorStr}`);
+        return;
+      }
+
+      const winnerNumber = match[1].padStart(2, '0');
+
+      // Buscar el GameItem correspondiente
+      const gameItem = await prisma.gameItem.findFirst({
+        where: {
+          gameId,
+          number: winnerNumber
+        }
+      });
+
+      if (!gameItem) {
+        logger.warn(`GameItem no encontrado: game=${gameId}, number=${winnerNumber}`);
+        return;
+      }
+
+      // Actualizar el sorteo con el ganador
+      await prisma.draw.update({
+        where: { id: drawId },
+        data: {
+          winnerItemId: gameItem.id,
+          status: 'DRAWN',
+          drawnAt: new Date()
+        }
+      });
+
+      logger.info(`🏆 Ganador sincronizado: ${winnerNumber} - ${gameItem.name}`);
+      return true;
+    } catch (error) {
+      logger.error(`Error sincronizando ganador para draw ${drawId}:`, error.message);
       return false;
     }
   }
@@ -349,10 +459,13 @@ class ApiIntegrationService {
    */
   async getDrawSalesStats(drawId) {
     try {
-      const mapping = await prisma.apiDrawMapping.findFirst({
-        where: { drawId },
+      const tickets = await prisma.ticket.findMany({
+        where: { 
+          drawId,
+          source: 'EXTERNAL_API'
+        },
         include: {
-          tickets: {
+          details: {
             include: {
               gameItem: true
             }
@@ -360,32 +473,34 @@ class ApiIntegrationService {
         }
       });
 
-      if (!mapping) {
+      if (tickets.length === 0) {
         return null;
       }
 
-      const totalSales = mapping.tickets.reduce((sum, ticket) => {
-        return sum + parseFloat(ticket.amount);
+      const totalSales = tickets.reduce((sum, ticket) => {
+        return sum + parseFloat(ticket.totalAmount);
       }, 0);
 
       const ticketsByItem = {};
-      mapping.tickets.forEach(ticket => {
-        const key = ticket.gameItem.number;
-        if (!ticketsByItem[key]) {
-          ticketsByItem[key] = {
-            number: ticket.gameItem.number,
-            name: ticket.gameItem.name,
-            amount: 0,
-            count: 0
-          };
-        }
-        ticketsByItem[key].amount += parseFloat(ticket.amount);
-        ticketsByItem[key].count += 1;
+      tickets.forEach(ticket => {
+        ticket.details.forEach(detail => {
+          const key = detail.gameItem.number;
+          if (!ticketsByItem[key]) {
+            ticketsByItem[key] = {
+              number: detail.gameItem.number,
+              name: detail.gameItem.name,
+              amount: 0,
+              count: 0
+            };
+          }
+          ticketsByItem[key].amount += parseFloat(detail.amount);
+          ticketsByItem[key].count += 1;
+        });
       });
 
       return {
         totalSales,
-        totalTickets: mapping.tickets.length,
+        totalTickets: tickets.length,
         ticketsByItem: Object.values(ticketsByItem)
       };
     } catch (error) {

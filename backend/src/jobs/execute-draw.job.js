@@ -4,6 +4,7 @@ import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
 import { emitToAll, emitToGame } from '../lib/socket.js';
 import adminNotificationService from '../services/admin-notification.service.js';
+import prizeProcessorService from '../services/prize-processor.service.js';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 
 /**
@@ -159,6 +160,19 @@ class ExecuteDrawJob {
             });
           }
 
+          // Totalizar premios: calcular ganadores/perdedores y actualizar tickets
+          try {
+            logger.info(`💰 Totalizando premios para sorteo ${updatedDraw.id}...`);
+            const prizeResult = await prizeProcessorService.processPrizesForDraw(updatedDraw.id);
+            logger.info(
+              `✅ Premios totalizados: ${prizeResult.winnersCount} ganadores, ` +
+              `${prizeResult.losersCount} perdedores, ` +
+              `$${prizeResult.totalPrizesAwarded.toFixed(2)} en premios`
+            );
+          } catch (prizeError) {
+            logger.error(`❌ Error totalizando premios para sorteo ${updatedDraw.id}:`, prizeError);
+          }
+
           // Calcular estadísticas y notificar a administradores
           try {
             const stats = await this.calculateDrawStats(updatedDraw);
@@ -199,20 +213,28 @@ class ExecuteDrawJob {
     const now = new Date();
     const gameId = draw.gameId;
 
-    // Obtener tickets del sorteo actual
-    const currentDrawTickets = await prisma.externalTicket.findMany({
+    // Obtener tickets del sorteo actual (todos los orígenes)
+    const currentDrawTickets = await prisma.ticket.findMany({
       where: {
-        mapping: {
-          drawId: draw.id
-        }
+        drawId: draw.id
+      },
+      include: {
+        details: true
       }
     });
 
-    const totalSales = currentDrawTickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    const totalSales = currentDrawTickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
     
     // Calcular pago del sorteo actual
-    const winnerTickets = currentDrawTickets.filter(t => t.gameItemId === draw.winnerItemId);
-    const winnerSales = winnerTickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    let winnerSales = 0;
+    currentDrawTickets.forEach(ticket => {
+      ticket.details.forEach(detail => {
+        if (detail.gameItemId === draw.winnerItemId) {
+          winnerSales += parseFloat(detail.amount);
+        }
+      });
+    });
+    
     const multiplier = parseFloat(draw.winnerItem?.multiplier || 30);
     const totalPayout = winnerSales * multiplier;
     const profit = totalSales - totalPayout;
@@ -259,9 +281,9 @@ class ExecuteDrawJob {
         },
         include: {
           winnerItem: true,
-          apiMappings: {
+          tickets: {
             include: {
-              tickets: true
+              details: true
             }
           }
         }
@@ -271,13 +293,19 @@ class ExecuteDrawJob {
       let payouts = 0;
 
       for (const draw of draws) {
-        const tickets = draw.apiMappings.flatMap(m => m.tickets);
-        const drawSales = tickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const tickets = draw.tickets || [];
+        const drawSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
         sales += drawSales;
 
         if (draw.winnerItemId && draw.winnerItem) {
-          const winnerTickets = tickets.filter(t => t.gameItemId === draw.winnerItemId);
-          const winnerSales = winnerTickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+          let winnerSales = 0;
+          tickets.forEach(ticket => {
+            ticket.details.forEach(detail => {
+              if (detail.gameItemId === draw.winnerItemId) {
+                winnerSales += parseFloat(detail.amount);
+              }
+            });
+          });
           const multiplier = parseFloat(draw.winnerItem.multiplier || 30);
           payouts += winnerSales * multiplier;
         }

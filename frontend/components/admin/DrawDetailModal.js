@@ -58,13 +58,10 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
     if (!drawData?.imageUrl) return;
     
     try {
-      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}${drawData.imageUrl}`;
+      // Backend stores imageUrl as /api/images/filename.png, remove /api/ prefix since NEXT_PUBLIC_API_URL already includes it
+      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api'}${drawData.imageUrl.replace('/api', '')}`;
       const response = await fetch(imageUrl, {
-        cache: 'no-cache',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
+        cache: 'no-cache'
       });
       
       if (!response.ok) {
@@ -91,7 +88,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
   const checkImageExists = async () => {
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}/api/images/check/${draw.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api'}/images/check/${draw.id}`,
         {
           credentials: 'include',
           cache: 'no-cache', // Force fresh request
@@ -122,7 +119,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}/api/images/generate/${draw.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api'}/images/generate/${draw.id}`,
         {
           method: 'POST',
           credentials: 'include',
@@ -163,7 +160,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
       }
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}/api/images/regenerate/${draw.id}`,
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api'}/images/regenerate/${draw.id}`,
         {
           method: 'POST',
           credentials: 'include',
@@ -208,7 +205,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
     setRepublishing(prev => ({ ...prev, [channel]: true }));
     try {
       // This endpoint needs to be created in the backend
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}/api/draws/${draw.id}/republish/${channel}`, {
+      await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api'}/draws/${draw.id}/republish/${channel}`, {
         method: 'POST',
         credentials: 'include',
       });
@@ -249,7 +246,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
     if (!drawData.imageUrl) return;
     
     try {
-      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000'}${drawData.imageUrl}`;
+      const imageUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api'}${drawData.imageUrl.replace('/api', '')}`;
       const response = await fetch(imageUrl);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

@@ -173,7 +173,7 @@ class ProviderController {
 
   async createConfiguration(req, res) {
     try {
-      const { name, apiSystemId, gameId, type, baseUrl, token, isActive } = req.body;
+      const { name, apiSystemId, gameId, type, baseUrl, token, tripletaUrl, tripletaToken, isActive } = req.body;
 
       if (!name || !apiSystemId || !gameId || !type || !baseUrl || !token) {
         return res.status(400).json({ 
@@ -195,6 +195,8 @@ class ProviderController {
           type,
           baseUrl,
           token,
+          tripletaUrl: tripletaUrl || null,
+          tripletaToken: tripletaToken || null,
           isActive: isActive !== undefined ? isActive : true
         },
         include: {
@@ -214,7 +216,7 @@ class ProviderController {
   async updateConfiguration(req, res) {
     try {
       const { id } = req.params;
-      const { name, apiSystemId, gameId, type, baseUrl, token, isActive } = req.body;
+      const { name, apiSystemId, gameId, type, baseUrl, token, tripletaUrl, tripletaToken, isActive } = req.body;
 
       const data = {};
       if (name !== undefined) data.name = name;
@@ -223,6 +225,8 @@ class ProviderController {
       if (type !== undefined) data.type = type;
       if (baseUrl !== undefined) data.baseUrl = baseUrl;
       if (token !== undefined) data.token = token;
+      if (tripletaUrl !== undefined) data.tripletaUrl = tripletaUrl || null;
+      if (tripletaToken !== undefined) data.tripletaToken = tripletaToken || null;
       if (isActive !== undefined) data.isActive = isActive;
 
       const configuration = await prisma.apiConfiguration.update({

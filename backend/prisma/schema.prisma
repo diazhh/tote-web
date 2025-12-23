@@ -66,7 +66,6 @@ model GameItem {
   game                Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
   drawsAsPreselected  Draw[]            @relation("PreselectedItem")
   drawsAsWinner       Draw[]            @relation("WinnerItem")
-  externalTickets     ExternalTicket[]
   ticketDetails       TicketDetail[]
   
   @@unique([gameId, number])
@@ -105,7 +104,9 @@ model Draw {
   id                  String        @id @default(uuid())
   gameId              String
   templateId          String?
-  scheduledAt         DateTime      // Hora programada del sorteo
+  drawDate            DateTime      @db.Date // Fecha del sorteo (solo fecha, sin hora)
+  drawTime            String        // Hora del sorteo en formato "HH:MM:SS"
+  scheduledAt         DateTime      // DEPRECATED: Mantener por compatibilidad temporal
   status              DrawStatus    @default(SCHEDULED)
   preselectedItemId   String?       // Número preseleccionado (opcional)
   winnerItemId        String?       // Número ganador
@@ -133,9 +134,10 @@ model Draw {
   tickets             Ticket[]
   
   @@index([gameId])
-  @@index([scheduledAt])
+  @@index([drawDate])
   @@index([status])
-  @@index([gameId, scheduledAt])
+  @@index([gameId, drawDate])
+  @@index([gameId, drawDate, drawTime])
   @@index([gameId, status])
 }
 
@@ -400,6 +402,8 @@ model ApiConfiguration {
   type          ApiConfigType     // "PLANNING" | "SALES"
   baseUrl       String            // URL base del endpoint
   token         String            // Token de autenticación
+  tripletaUrl   String?           // URL para tripleta (opcional, específico por juego)
+  tripletaToken String?           // Token para tripleta (opcional, específico por juego)
   isActive      Boolean           @default(true)
   createdAt     DateTime          @default(now())
   updatedAt     DateTime          @updatedAt
@@ -431,28 +435,11 @@ model ApiDrawMapping {
   // Relaciones
   apiConfig       ApiConfiguration  @relation(fields: [apiConfigId], references: [id], onDelete: Cascade)
   draw            Draw              @relation(fields: [drawId], references: [id], onDelete: Cascade)
-  tickets         ExternalTicket[]
   
   @@unique([externalDrawId])
   @@unique([drawId, apiConfigId])
   @@index([apiConfigId])
   @@index([drawId])
-}
-
-model ExternalTicket {
-  id              String            @id @default(uuid())
-  mappingId       String
-  gameItemId      String
-  amount          Decimal           @db.Decimal(10, 2)
-  externalData    Json?             // Datos adicionales del ticket (taquilla, grupo, etc)
-  createdAt       DateTime          @default(now())
-  
-  // Relaciones
-  mapping         ApiDrawMapping    @relation(fields: [mappingId], references: [id], onDelete: Cascade)
-  gameItem        GameItem          @relation(fields: [gameItemId], references: [id], onDelete: Cascade)
-  
-  @@index([mappingId])
-  @@index([gameItemId])
 }
 
 // ============================================
@@ -829,24 +816,35 @@ enum TicketStatus {
   CANCELLED   // Cancelado (reembolsado)
 }
 
+enum TicketSource {
+  TAQUILLA_ONLINE   // Jugado por usuario en la plataforma
+  EXTERNAL_API      // Importado de proveedor externo (SRQ, etc)
+}
+
 model Ticket {
-  id          String        @id @default(uuid())
-  userId      String
-  drawId      String
-  totalAmount Decimal       @db.Decimal(12, 2)
-  totalPrize  Decimal       @default(0) @db.Decimal(12, 2)
-  status      TicketStatus  @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id              String        @id @default(uuid())
+  userId          String?       // Null para tickets externos
+  drawId          String
+  source          TicketSource  @default(TAQUILLA_ONLINE)
+  externalTicketId String?      // ID del ticket en el sistema externo (para SRQ)
+  totalAmount     Decimal       @db.Decimal(12, 2)
+  totalPrize      Decimal       @default(0) @db.Decimal(12, 2)
+  status          TicketStatus  @default(ACTIVE)
+  providerData    Json?         // Datos del proveedor (comercial, banca, grupo, taquilla)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  draw        Draw          @relation(fields: [drawId], references: [id], onDelete: Cascade)
-  details     TicketDetail[]
+  user            User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  draw            Draw          @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  details         TicketDetail[]
   
   @@index([userId])
   @@index([drawId])
   @@index([status])
+  @@index([source])
+  @@index([externalTicketId])
   @@index([userId, status])
+  @@index([drawId, source])
   @@index([createdAt])
 }
 

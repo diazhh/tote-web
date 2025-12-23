@@ -4,6 +4,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 
 export class DrawService {
   /**
@@ -24,17 +25,25 @@ export class DrawService {
       }
       
       if (filters.dateFrom || filters.dateTo) {
-        where.scheduledAt = {};
+        where.drawDate = {};
         if (filters.dateFrom) {
-          const fromDate = new Date(filters.dateFrom);
-          fromDate.setHours(0, 0, 0, 0);
-          where.scheduledAt.gte = fromDate;
+          // Extraer solo la fecha si viene con timestamp
+          const dateStr = filters.dateFrom.split('T')[0];
+          const fromDate = new Date(dateStr + 'T00:00:00.000Z');
+          where.drawDate.gte = fromDate;
         }
         if (filters.dateTo) {
-          const toDate = new Date(filters.dateTo);
-          toDate.setHours(23, 59, 59, 999);
-          where.scheduledAt.lte = toDate;
+          // Extraer solo la fecha si viene con timestamp
+          const dateStr = filters.dateTo.split('T')[0];
+          const toDate = new Date(dateStr + 'T00:00:00.000Z');
+          where.drawDate.lte = toDate;
         }
+      }
+      
+      // Filtro por fecha específica (date)
+      if (filters.date) {
+        const dateStr = filters.date.split('T')[0];
+        where.drawDate = new Date(dateStr + 'T00:00:00.000Z');
       }
 
       // Obtener total de registros y los datos paginados en paralelo
@@ -48,9 +57,10 @@ export class DrawService {
             template: true,
             publications: true,
           },
-          orderBy: {
-            scheduledAt: filters.orderBy === 'asc' ? 'asc' : 'desc',
-          },
+          orderBy: [
+            { drawDate: filters.orderBy === 'asc' ? 'asc' : 'desc' },
+            { drawTime: filters.orderBy === 'asc' ? 'asc' : 'desc' }
+          ],
           ...(filters.limit && { take: filters.limit }),
           ...(filters.skip && { skip: filters.skip }),
         }),
@@ -102,15 +112,14 @@ export class DrawService {
    */
   async getTodayDraws(gameId = null) {
     try {
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
+      // Usar funciones de timezone de Caracas para obtener el día correcto
+      const today = startOfDayInCaracas(new Date());
+      const tomorrow = endOfDayInCaracas(new Date());
 
       const where = {
         scheduledAt: {
           gte: today,
-          lt: tomorrow,
+          lte: tomorrow,
         },
       };
 

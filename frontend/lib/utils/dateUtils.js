@@ -1,50 +1,35 @@
 /**
- * Utilidades para manejo de fechas con zona horaria de Caracas
- * Todas las fechas en la BD están en UTC y deben mostrarse en hora de Caracas (UTC-4)
+ * Utilidades para manejo de fechas - SIN conversiones de zona horaria
+ * Todas las fechas se manejan como fechas planas sin conversiones
  */
 
 import { format, parseISO } from 'date-fns';
-import { toZonedTime, fromZonedTime } from 'date-fns-tz';
 import { es } from 'date-fns/locale';
 
-// Zona horaria de Caracas, Venezuela
-export const CARACAS_TIMEZONE = 'America/Caracas';
-
 /**
- * Convierte una fecha UTC a la zona horaria de Caracas
+ * Convierte un string o Date a objeto Date
  * @param {string|Date} date - Fecha en formato ISO string o Date object
- * @returns {Date} Fecha convertida a zona horaria de Caracas
+ * @returns {Date} Objeto Date
  */
-export function toCaracasTime(date) {
+function toDate(date) {
   if (!date) return null;
-  const dateObj = typeof date === 'string' ? parseISO(date) : date;
-  return toZonedTime(dateObj, CARACAS_TIMEZONE);
+  return typeof date === 'string' ? parseISO(date) : date;
 }
 
 /**
- * Convierte una fecha de Caracas a UTC
- * @param {Date} date - Fecha en zona horaria de Caracas
- * @returns {Date} Fecha convertida a UTC
- */
-export function toUTC(date) {
-  if (!date) return null;
-  return fromZonedTime(date, CARACAS_TIMEZONE);
-}
-
-/**
- * Formatea una fecha UTC a string en zona horaria de Caracas
+ * Formatea una fecha a string
  * @param {string|Date} date - Fecha en formato ISO string o Date object
  * @param {string} formatStr - Formato de salida (por defecto: 'dd/MM/yyyy HH:mm')
- * @returns {string} Fecha formateada en zona horaria de Caracas
+ * @returns {string} Fecha formateada
  */
 export function formatToCaracasTime(date, formatStr = 'dd/MM/yyyy HH:mm') {
   if (!date) return '-';
-  const zonedDate = toCaracasTime(date);
-  return format(zonedDate, formatStr, { locale: es });
+  const dateObj = toDate(date);
+  return format(dateObj, formatStr, { locale: es });
 }
 
 /**
- * Formatea solo la fecha (sin hora) en zona horaria de Caracas
+ * Formatea solo la fecha (sin hora)
  * @param {string|Date} date - Fecha en formato ISO string o Date object
  * @returns {string} Fecha formateada (dd/MM/yyyy)
  */
@@ -53,7 +38,7 @@ export function formatCaracasDate(date) {
 }
 
 /**
- * Formatea solo la hora en zona horaria de Caracas
+ * Formatea solo la hora
  * @param {string|Date} date - Fecha en formato ISO string o Date object
  * @returns {string} Hora formateada (HH:mm)
  */
@@ -62,7 +47,7 @@ export function formatCaracasTime(date) {
 }
 
 /**
- * Formatea fecha y hora completa en zona horaria de Caracas
+ * Formatea fecha y hora completa
  * @param {string|Date} date - Fecha en formato ISO string o Date object
  * @returns {string} Fecha y hora formateada (dd/MM/yyyy HH:mm:ss)
  */
@@ -71,7 +56,7 @@ export function formatCaracasDateTime(date) {
 }
 
 /**
- * Formatea fecha en formato largo en zona horaria de Caracas
+ * Formatea fecha en formato largo
  * @param {string|Date} date - Fecha en formato ISO string o Date object
  * @returns {string} Fecha formateada (ej: "Lunes, 4 de octubre de 2025")
  */
@@ -80,78 +65,69 @@ export function formatCaracasDateLong(date) {
 }
 
 /**
- * Obtiene la fecha actual en zona horaria de Caracas
- * @returns {Date} Fecha actual en zona horaria de Caracas
+ * Obtiene la fecha actual
+ * @returns {Date} Fecha actual
  */
 export function nowInCaracas() {
-  return toCaracasTime(new Date());
+  return new Date();
 }
 
 /**
- * Obtiene la fecha de hoy (sin hora) en zona horaria de Caracas
+ * Obtiene la fecha de hoy (sin hora)
  * @returns {string} Fecha en formato YYYY-MM-DD
  */
 export function todayInCaracas() {
-  const now = nowInCaracas();
-  return format(now, 'yyyy-MM-dd');
+  return format(new Date(), 'yyyy-MM-dd');
 }
 
 /**
- * Crea una fecha en zona horaria de Caracas y la convierte a UTC
+ * Crea una fecha a partir de componentes de fecha/hora
  * @param {number} year - Año
  * @param {number} month - Mes (1-12)
  * @param {number} day - Día
  * @param {number} hour - Hora (0-23)
  * @param {number} minute - Minuto (0-59)
  * @param {number} second - Segundo (0-59)
- * @returns {Date} Fecha en UTC
+ * @returns {Date} Fecha creada
  */
 export function createCaracasDate(year, month, day, hour = 0, minute = 0, second = 0) {
-  // Crear fecha en zona horaria de Caracas
-  const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}`;
-  
-  // Convertir a UTC
-  return fromZonedTime(dateStr, CARACAS_TIMEZONE);
+  return new Date(year, month - 1, day, hour, minute, second);
 }
 
 /**
- * Verifica si una fecha está en el pasado (en zona horaria de Caracas)
+ * Verifica si una fecha está en el pasado
  * @param {string|Date} date - Fecha a verificar
  * @returns {boolean} True si la fecha es pasada
  */
 export function isPast(date) {
   if (!date) return false;
-  const zonedDate = toCaracasTime(date);
-  const now = nowInCaracas();
-  return zonedDate < now;
+  return toDate(date) < new Date();
 }
 
 /**
- * Verifica si una fecha está en el futuro (en zona horaria de Caracas)
+ * Verifica si una fecha está en el futuro
  * @param {string|Date} date - Fecha a verificar
  * @returns {boolean} True si la fecha es futura
  */
 export function isFuture(date) {
   if (!date) return false;
-  const zonedDate = toCaracasTime(date);
-  const now = nowInCaracas();
-  return zonedDate > now;
+  return toDate(date) > new Date();
 }
 
 /**
- * Verifica si una fecha es hoy (en zona horaria de Caracas)
+ * Verifica si una fecha es hoy
  * @param {string|Date} date - Fecha a verificar
  * @returns {boolean} True si la fecha es hoy
  */
 export function isToday(date) {
   if (!date) return false;
-  const zonedDate = toCaracasTime(date);
-  const today = nowInCaracas();
-  return format(zonedDate, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd');
+  const dateObj = toDate(date);
+  const todayDate = new Date();
+  return format(dateObj, 'yyyy-MM-dd') === format(todayDate, 'yyyy-MM-dd');
 }
 
 /**
- * Formatea fecha y hora en formato AM/PM en zona horaria de Caracas
+ * Formatea fecha y hora en formato AM/PM
  * @param {string|Date} date - Fecha en formato ISO string o Date object
  * @returns {string} Fecha y hora formateada (dd/MM/yyyy hh:mm a)
  */
@@ -166,11 +142,10 @@ export function formatDateTimeAMPM(date) {
  */
 export function extractTimeFromCaracasString(dateString) {
   if (!dateString) return '';
-  // Formato esperado: "2025-12-18 08:00:00"
   const parts = dateString.split(' ');
   if (parts.length >= 2) {
     const timeParts = parts[1].split(':');
-    return `${timeParts[0]}:${timeParts[1]}`; // HH:mm
+    return `${timeParts[0]}:${timeParts[1]}`;
   }
   return '';
 }
@@ -182,11 +157,10 @@ export function extractTimeFromCaracasString(dateString) {
  */
 export function extractDateFromCaracasString(dateString) {
   if (!dateString) return '';
-  // Formato esperado: "2025-12-18 08:00:00"
   const parts = dateString.split(' ');
   if (parts.length >= 1) {
     const dateParts = parts[0].split('-');
-    return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`; // dd/MM/yyyy
+    return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
   }
   return '';
 }

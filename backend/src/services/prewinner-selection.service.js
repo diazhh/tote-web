@@ -31,9 +31,9 @@ class PrewinnerSelectionService {
         include: {
           game: true,
           preselectedItem: true,
-          apiMappings: {
+          tickets: {
             include: {
-              tickets: {
+              details: {
                 include: {
                   gameItem: true
                 }
@@ -59,8 +59,8 @@ class PrewinnerSelectionService {
       const percentageToDistribute = gameConfig.percentageToDistribute || 70;
 
       // Calcular ventas totales del sorteo
-      const tickets = draw.apiMappings.flatMap(m => m.tickets);
-      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      const tickets = draw.tickets || [];
+      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
 
       if (totalSales === 0) {
         logger.info(`  No hay ventas para sorteo ${drawId}, selección aleatoria...`);
@@ -289,11 +289,13 @@ class PrewinnerSelectionService {
     const salesByItem = new Map();
     
     for (const ticket of tickets) {
-      const existing = salesByItem.get(ticket.gameItemId) || { amount: 0, count: 0 };
-      salesByItem.set(ticket.gameItemId, {
-        amount: existing.amount + parseFloat(ticket.amount),
-        count: existing.count + 1
-      });
+      for (const detail of ticket.details) {
+        const existing = salesByItem.get(detail.gameItemId) || { amount: 0, count: 0 };
+        salesByItem.set(detail.gameItemId, {
+          amount: existing.amount + parseFloat(detail.amount),
+          count: existing.count + 1
+        });
+      }
     }
 
     return salesByItem;

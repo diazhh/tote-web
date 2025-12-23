@@ -5,7 +5,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
-import { startOfDay, endOfDay } from 'date-fns';
+import { startOfDayDate, endOfDayDate } from '../lib/dateUtils.js';
 
 class MonitorService {
   /**
@@ -19,9 +19,10 @@ class MonitorService {
         include: {
           game: true,
           winnerItem: true,
-          apiMappings: {
+          tickets: {
+            where: { source: 'EXTERNAL_API' },
             include: {
-              tickets: {
+              details: {
                 include: {
                   gameItem: true
                 }
@@ -37,10 +38,9 @@ class MonitorService {
 
       // Agrupar tickets por banca
       const bancaMap = new Map();
-      const tickets = draw.apiMappings.flatMap(m => m.tickets);
 
-      for (const ticket of tickets) {
-        const bancaId = ticket.externalData?.bancaID;
+      for (const ticket of draw.tickets) {
+        const bancaId = ticket.providerData?.bancaID;
         if (!bancaId) continue;
 
         if (!bancaMap.has(bancaId)) {
@@ -50,18 +50,22 @@ class MonitorService {
             totalAmount: 0,
             totalPrize: 0,
             ticketCount: 0,
-            entityId: ticket.externalData?.entityIds?.bancaId || null
+            entityId: ticket.providerData?.entityIds?.bancaId || null
           });
         }
 
         const banca = bancaMap.get(bancaId);
-        banca.totalAmount += parseFloat(ticket.amount);
+        banca.totalAmount += parseFloat(ticket.totalAmount);
         banca.ticketCount += 1;
 
         // Calcular premio si el item ganó
-        if (draw.winnerItemId && ticket.gameItemId === draw.winnerItemId) {
-          const prize = parseFloat(ticket.amount) * parseFloat(ticket.gameItem.multiplier);
-          banca.totalPrize += prize;
+        if (draw.winnerItemId) {
+          for (const detail of ticket.details) {
+            if (detail.gameItemId === draw.winnerItemId) {
+              const prize = parseFloat(detail.amount) * parseFloat(detail.gameItem.multiplier);
+              banca.totalPrize += prize;
+            }
+          }
         }
       }
 
@@ -111,9 +115,9 @@ class MonitorService {
         include: {
           game: true,
           winnerItem: true,
-          apiMappings: {
+          tickets: {
             include: {
-              tickets: {
+              details: {
                 include: {
                   gameItem: true
                 }
@@ -133,8 +137,7 @@ class MonitorService {
         orderBy: { number: 'asc' }
       });
 
-      // Agrupar tickets por item
-      const tickets = draw.apiMappings.flatMap(m => m.tickets);
+      // Agrupar por item
       const itemMap = new Map();
 
       for (const item of gameItems) {
@@ -155,13 +158,15 @@ class MonitorService {
 
       // Calcular ventas totales
       let totalSales = 0;
-      for (const ticket of tickets) {
-        const item = itemMap.get(ticket.gameItemId);
-        if (item) {
-          const amount = parseFloat(ticket.amount);
-          item.totalAmount += amount;
-          item.ticketCount += 1;
-          totalSales += amount;
+      for (const ticket of draw.tickets) {
+        for (const detail of ticket.details) {
+          const item = itemMap.get(detail.gameItemId);
+          if (item) {
+            const amount = parseFloat(detail.amount);
+            item.totalAmount += amount;
+            item.ticketCount += 1;
+            totalSales += amount;
+          }
         }
       }
 
@@ -227,14 +232,20 @@ class MonitorService {
    */
   async getDailyReport(date, gameId = null) {
     try {
-      const start = startOfDay(date);
-      const end = endOfDay(date);
+      // Filtrar por drawDate (solo fecha, sin hora)
+      const drawDate = new Date(date);
+      if (typeof date === 'string') {
+        // Si es string, asegurar formato correcto
+        const dateStr = date.split('T')[0];
+        drawDate.setTime(new Date(dateStr + 'T00:00:00.000Z').getTime());
+      } else {
+        // Si es Date, extraer solo la fecha
+        const dateStr = date.toISOString().split('T')[0];
+        drawDate.setTime(new Date(dateStr + 'T00:00:00.000Z').getTime());
+      }
 
       const where = {
-        scheduledAt: {
-          gte: start,
-          lte: end
-        }
+        drawDate: drawDate
       };
 
       if (gameId) {
@@ -246,9 +257,9 @@ class MonitorService {
         include: {
           game: true,
           winnerItem: true,
-          apiMappings: {
+          tickets: {
             include: {
-              tickets: {
+              details: {
                 include: {
                   gameItem: true
                 }
@@ -262,14 +273,16 @@ class MonitorService {
       const report = [];
 
       for (const draw of draws) {
-        const tickets = draw.apiMappings.flatMap(m => m.tickets);
-        const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const tickets = draw.tickets || [];
+        const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
         
         let totalPrize = 0;
         if (draw.winnerItemId) {
           for (const ticket of tickets) {
-            if (ticket.gameItemId === draw.winnerItemId) {
-              totalPrize += parseFloat(ticket.amount) * parseFloat(ticket.gameItem.multiplier);
+            for (const detail of ticket.details) {
+              if (detail.gameItemId === draw.winnerItemId) {
+                totalPrize += parseFloat(detail.amount) * parseFloat(detail.gameItem.multiplier);
+              }
             }
           }
         }
@@ -324,9 +337,16 @@ class MonitorService {
         where: { id: drawId },
         include: {
           game: true,
-          apiMappings: {
+          tickets: {
+            where: { 
+              source: 'EXTERNAL_API',
+              providerData: {
+                path: ['bancaID'],
+                equals: parseInt(bancaExternalId)
+              }
+            },
             include: {
-              tickets: {
+              details: {
                 include: {
                   gameItem: true
                 }
@@ -340,20 +360,21 @@ class MonitorService {
         throw new Error('Sorteo no encontrado');
       }
 
-      const tickets = draw.apiMappings.flatMap(m => m.tickets)
-        .filter(t => t.externalData?.bancaID === parseInt(bancaExternalId))
-        .map(t => ({
-          id: t.id,
-          ticketId: t.externalData?.ticketID,
-          comercialId: t.externalData?.comercialID,
-          bancaId: t.externalData?.bancaID,
-          grupoId: t.externalData?.grupoID,
-          taquillaId: t.externalData?.taquillaID,
-          number: t.gameItem.number,
-          name: t.gameItem.name,
-          amount: parseFloat(t.amount),
-          createdAt: t.createdAt
-        }));
+      const tickets = draw.tickets.map(t => ({
+        id: t.id,
+        externalTicketId: t.externalTicketId,
+        comercialId: t.providerData?.comercialID,
+        bancaId: t.providerData?.bancaID,
+        grupoId: t.providerData?.grupoID,
+        taquillaId: t.providerData?.taquillaID,
+        totalAmount: parseFloat(t.totalAmount),
+        details: t.details.map(d => ({
+          number: d.gameItem.number,
+          name: d.gameItem.name,
+          amount: parseFloat(d.amount)
+        })),
+        createdAt: t.createdAt
+      }));
 
       return {
         drawId,
@@ -379,9 +400,9 @@ class MonitorService {
         where: { id: drawId },
         include: {
           game: true,
-          apiMappings: {
+          tickets: {
             include: {
-              tickets: {
+              details: {
                 where: { gameItemId: itemId },
                 include: {
                   gameItem: true
@@ -396,17 +417,25 @@ class MonitorService {
         throw new Error('Sorteo no encontrado');
       }
 
-      const tickets = draw.apiMappings.flatMap(m => m.tickets)
-        .map(t => ({
-          id: t.id,
-          ticketId: t.externalData?.ticketID,
-          comercialId: t.externalData?.comercialID,
-          bancaId: t.externalData?.bancaID,
-          grupoId: t.externalData?.grupoID,
-          taquillaId: t.externalData?.taquillaID,
-          amount: parseFloat(t.amount),
-          createdAt: t.createdAt
-        }));
+      // Filtrar solo tickets que tienen detalles del item solicitado
+      const ticketsWithItem = draw.tickets.filter(t => t.details.length > 0);
+      
+      const tickets = ticketsWithItem.map(t => ({
+        id: t.id,
+        externalTicketId: t.externalTicketId,
+        source: t.source,
+        comercialId: t.providerData?.comercialID,
+        bancaId: t.providerData?.bancaID,
+        grupoId: t.providerData?.grupoID,
+        taquillaId: t.providerData?.taquillaID,
+        totalAmount: parseFloat(t.totalAmount),
+        details: t.details.map(d => ({
+          amount: parseFloat(d.amount),
+          number: d.gameItem.number,
+          name: d.gameItem.name
+        })),
+        createdAt: t.createdAt
+      }));
 
       const gameItem = await prisma.gameItem.findUnique({
         where: { id: itemId }

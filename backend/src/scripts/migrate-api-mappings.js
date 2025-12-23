@@ -6,7 +6,7 @@
 import { PrismaClient } from '@prisma/client';
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
-import { createCaracasDate } from '../lib/dateUtils.js';
+import { createDate } from '../lib/dateUtils.js';
 
 dotenv.config();
 
@@ -74,8 +74,8 @@ async function main() {
         const timeStr = pd.time || '12:00:00';
         const [hours, minutes, seconds = 0] = timeStr.split(':').map(Number);
         
-        // Crear fecha en zona horaria de Caracas y convertir a UTC (igual que en migrate-legacy.js)
-        const scheduledAt = createCaracasDate(
+        // Crear fecha
+        const scheduledAt = createDate(
           date.getFullYear(),
           date.getMonth() + 1,
           date.getDate(),

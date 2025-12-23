@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Edit, Trash2, Power, PowerOff, TestTube, BarChart3, RefreshCw } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
 
 export default function ProveedoresPage() {
   const [systems, setSystems] = useState([]);
@@ -31,20 +31,23 @@ export default function ProveedoresPage() {
       };
 
       const [systemsRes, configurationsRes, gamesRes] = await Promise.all([
-        fetch(`${API_URL}/api/providers/systems`, { headers }),
-        fetch(`${API_URL}/api/providers/configurations`, { headers }),
-        fetch(`${API_URL}/api/games`, { headers })
+        fetch(`${API_URL}/providers/systems`, { headers }),
+        fetch(`${API_URL}/providers/configurations`, { headers }),
+        fetch(`${API_URL}/games`, { headers })
       ]);
 
       const systemsData = await systemsRes.json();
       const configurationsData = await configurationsRes.json();
       const gamesData = await gamesRes.json();
 
-      setSystems(systemsData);
-      setConfigurations(configurationsData);
-      setGames(gamesData);
+      setSystems(Array.isArray(systemsData) ? systemsData : []);
+      setConfigurations(Array.isArray(configurationsData) ? configurationsData : []);
+      setGames(Array.isArray(gamesData) ? gamesData : []);
     } catch (error) {
       console.error('Error cargando datos:', error);
+      setSystems([]);
+      setConfigurations([]);
+      setGames([]);
     } finally {
       setLoading(false);
     }
@@ -54,8 +57,8 @@ export default function ProveedoresPage() {
     try {
       const token = localStorage.getItem('token');
       const url = editingSystem 
-        ? `${API_URL}/api/providers/systems/${editingSystem.id}`
-        : `${API_URL}/api/providers/systems`;
+        ? `${API_URL}/providers/systems/${editingSystem.id}`
+        : `${API_URL}/providers/systems`;
       
       const response = await fetch(url, {
         method: editingSystem ? 'PUT' : 'POST',
@@ -83,7 +86,7 @@ export default function ProveedoresPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/providers/systems/${id}`, {
+      const response = await fetch(`${API_URL}/providers/systems/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -102,8 +105,8 @@ export default function ProveedoresPage() {
     try {
       const token = localStorage.getItem('token');
       const url = editingConfig 
-        ? `${API_URL}/api/providers/configurations/${editingConfig.id}`
-        : `${API_URL}/api/providers/configurations`;
+        ? `${API_URL}/providers/configurations/${editingConfig.id}`
+        : `${API_URL}/providers/configurations`;
       
       const response = await fetch(url, {
         method: editingConfig ? 'PUT' : 'POST',
@@ -131,7 +134,7 @@ export default function ProveedoresPage() {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/providers/configurations/${id}`, {
+      const response = await fetch(`${API_URL}/providers/configurations/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -149,7 +152,7 @@ export default function ProveedoresPage() {
   const handleToggleActive = async (id, currentStatus) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/providers/configurations/${id}`, {
+      const response = await fetch(`${API_URL}/providers/configurations/${id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -169,7 +172,7 @@ export default function ProveedoresPage() {
   const handleTestConfiguration = async (id) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/providers/configurations/${id}/test`, {
+      const response = await fetch(`${API_URL}/providers/configurations/${id}/test`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -250,72 +253,84 @@ export default function ProveedoresPage() {
           </div>
 
           <div className="grid gap-4">
-            {configurations.map((config) => (
-              <div key={config.id} className="bg-white border border-gray-200 rounded-lg p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-semibold text-gray-900">{config.name}</h3>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        config.type === 'PLANNING' 
-                          ? 'bg-purple-100 text-purple-700' 
-                          : 'bg-green-100 text-green-700'
-                      }`}>
-                        {config.type}
-                      </span>
-                      <span className={`px-2 py-1 text-xs font-medium rounded ${
-                        config.isActive 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-gray-100 text-gray-700'
-                      }`}>
-                        {config.isActive ? 'Activa' : 'Inactiva'}
-                      </span>
+            {Array.isArray(configurations) && configurations.length > 0 ? (
+              configurations.map((config) => (
+                <div key={config.id} className="bg-white border border-gray-200 rounded-lg p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h3 className="text-lg font-semibold text-gray-900">{config.name}</h3>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          config.type === 'PLANNING' 
+                            ? 'bg-purple-100 text-purple-700' 
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {config.type}
+                        </span>
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          config.isActive 
+                            ? 'bg-green-100 text-green-700' 
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {config.isActive ? 'Activa' : 'Inactiva'}
+                        </span>
+                      </div>
+                      <div className="mt-2 space-y-1 text-sm text-gray-600">
+                        <p><strong>Sistema:</strong> {config.apiSystem.name}</p>
+                        <p><strong>Juego:</strong> {config.game.name}</p>
+                        <p><strong>URL Base:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{config.baseUrl}</code></p>
+                        <p><strong>Token:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{config.token.substring(0, 20)}...</code></p>
+                        {config.tripletaUrl && (
+                          <>
+                            <p className="mt-2"><strong>Tripleta URL:</strong> <code className="bg-purple-100 px-2 py-1 rounded">{config.tripletaUrl}</code></p>
+                            <p><strong>Tripleta Token:</strong> <code className="bg-purple-100 px-2 py-1 rounded">{config.tripletaToken?.substring(0, 20)}...</code></p>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="mt-2 space-y-1 text-sm text-gray-600">
-                      <p><strong>Sistema:</strong> {config.apiSystem.name}</p>
-                      <p><strong>Juego:</strong> {config.game.name}</p>
-                      <p><strong>URL Base:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{config.baseUrl}</code></p>
-                      <p><strong>Token:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{config.token.substring(0, 20)}...</code></p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleTestConfiguration(config.id)}
+                        className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                        title="Probar conexión"
+                      >
+                        <TestTube className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleToggleActive(config.id, config.isActive)}
+                        className={`p-2 rounded ${
+                          config.isActive 
+                            ? 'text-green-600 hover:bg-green-50' 
+                            : 'text-gray-400 hover:bg-gray-50'
+                        }`}
+                        title={config.isActive ? 'Desactivar' : 'Activar'}
+                      >
+                        {config.isActive ? <Power className="w-5 h-5" /> : <PowerOff className="w-5 h-5" />}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingConfig(config);
+                          setShowConfigModal(true);
+                        }}
+                        className="p-2 text-gray-600 hover:bg-gray-50 rounded"
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteConfiguration(config.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleTestConfiguration(config.id)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded"
-                      title="Probar conexión"
-                    >
-                      <TestTube className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleToggleActive(config.id, config.isActive)}
-                      className={`p-2 rounded ${
-                        config.isActive 
-                          ? 'text-green-600 hover:bg-green-50' 
-                          : 'text-gray-400 hover:bg-gray-50'
-                      }`}
-                      title={config.isActive ? 'Desactivar' : 'Activar'}
-                    >
-                      {config.isActive ? <Power className="w-5 h-5" /> : <PowerOff className="w-5 h-5" />}
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingConfig(config);
-                        setShowConfigModal(true);
-                      }}
-                      className="p-2 text-gray-600 hover:bg-gray-50 rounded"
-                    >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteConfiguration(config.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No hay configuraciones disponibles
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -336,39 +351,45 @@ export default function ProveedoresPage() {
           </div>
 
           <div className="grid gap-4">
-            {systems.map((system) => (
-              <div key={system.id} className="bg-white border border-gray-200 rounded-lg p-6">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">{system.name}</h3>
-                    {system.description && (
-                      <p className="mt-1 text-sm text-gray-600">{system.description}</p>
-                    )}
-                    <p className="mt-2 text-sm text-gray-500">
-                      {system.configurations.length} configuración(es)
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingSystem(system);
-                        setShowSystemModal(true);
-                      }}
-                      className="p-2 text-gray-600 hover:bg-gray-50 rounded"
-                    >
-                      <Edit className="w-5 h-5" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSystem(system.id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded"
-                      disabled={system.configurations.length > 0}
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
+            {Array.isArray(systems) && systems.length > 0 ? (
+              systems.map((system) => (
+                <div key={system.id} className="bg-white border border-gray-200 rounded-lg p-6">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900">{system.name}</h3>
+                      {system.description && (
+                        <p className="mt-1 text-sm text-gray-600">{system.description}</p>
+                      )}
+                      <p className="mt-2 text-sm text-gray-500">
+                        {system.configurations.length} configuración(es)
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          setEditingSystem(system);
+                          setShowSystemModal(true);
+                        }}
+                        className="p-2 text-gray-600 hover:bg-gray-50 rounded"
+                      >
+                        <Edit className="w-5 h-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteSystem(system.id)}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        disabled={system.configurations.length > 0}
+                      >
+                        <Trash2 className="w-5 h-5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
+              ))
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                No hay sistemas disponibles
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
@@ -477,6 +498,8 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
     type: configuration?.type || 'PLANNING',
     baseUrl: configuration?.baseUrl || '',
     token: configuration?.token || '',
+    tripletaUrl: configuration?.tripletaUrl || '',
+    tripletaToken: configuration?.tripletaToken || '',
     isActive: configuration?.isActive !== undefined ? configuration.isActive : true
   });
 
@@ -581,6 +604,42 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
               required
             />
           </div>
+          
+          <div className="border-t pt-4 mt-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
+              <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs mr-2">TRIPLETA</span>
+              Configuración Opcional
+            </h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  URL Tripleta
+                </label>
+                <input
+                  type="text"
+                  value={formData.tripletaUrl}
+                  onChange={(e) => setFormData({ ...formData, tripletaUrl: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                  placeholder="https://api.ejemplo.com/tripleta/"
+                />
+                <p className="text-xs text-gray-500 mt-1">URL específica para obtener tickets de tripleta</p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Token Tripleta
+                </label>
+                <input
+                  type="text"
+                  value={formData.tripletaToken}
+                  onChange={(e) => setFormData({ ...formData, tripletaToken: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+                  placeholder="Token de autenticación para tripleta"
+                />
+                <p className="text-xs text-gray-500 mt-1">Token específico para la API de tripleta</p>
+              </div>
+            </div>
+          </div>
+
           <div className="flex items-center">
             <input
               type="checkbox"

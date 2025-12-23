@@ -127,13 +127,6 @@ class TicketService {
         return createdTicket;
       });
 
-      // Crear ExternalTickets equivalentes para reportes (fuera de la transacción)
-      try {
-        await taquillaWebService.createExternalTicketEquivalent(ticket, ticket.draw);
-      } catch (externalError) {
-        logger.warn('Error creando ExternalTicket equivalente (no crítico):', externalError.message);
-      }
-
       return ticket;
     } catch (error) {
       logger.error('Error creating ticket:', error);

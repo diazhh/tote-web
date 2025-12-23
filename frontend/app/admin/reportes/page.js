@@ -8,10 +8,11 @@ import {
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
 import axios from '@/lib/api/axios';
+import { getTodayVenezuela } from '@/lib/dateUtils';
 
 export default function ReportesPage() {
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayVenezuela());
   const [games, setGames] = useState([]);
   const [selectedGame, setSelectedGame] = useState('');
   const [report, setReport] = useState(null);
@@ -56,11 +57,10 @@ export default function ReportesPage() {
   };
 
   const formatTime = (dateStr) => {
-    return new Date(dateStr).toLocaleTimeString('es-VE', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/Caracas'
-    });
+    const date = new Date(dateStr);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   };
 
   const getStatusBadge = (status) => {

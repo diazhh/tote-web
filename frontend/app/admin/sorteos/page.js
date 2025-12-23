@@ -54,11 +54,9 @@ export default function SorteosPage() {
       // Convert date to dateFrom and dateTo for the API
       const apiFilters = { ...filters };
       if (filters.date) {
-        const selectedDate = new Date(filters.date);
-        apiFilters.startDate = selectedDate.toISOString();
-        const nextDay = new Date(selectedDate);
-        nextDay.setDate(nextDay.getDate() + 1);
-        apiFilters.endDate = nextDay.toISOString();
+        // Send only the date string (YYYY-MM-DD) to match backend expectations
+        apiFilters.startDate = filters.date;
+        apiFilters.endDate = filters.date;
         delete apiFilters.date;
       }
       

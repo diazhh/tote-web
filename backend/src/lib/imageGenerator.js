@@ -2,7 +2,6 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
-import { toCaracasTime } from './dateUtils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -130,8 +129,7 @@ function createTextSVG(text, x, y, fontSize, fontFamily, fontPath, color = '#000
  */
 export async function generateRouletteImage(drawData) {
   const { result, scheduledAt, gameId } = drawData;
-  // Convert UTC date to Caracas timezone for display
-  const date = toCaracasTime(scheduledAt);
+  const date = new Date(scheduledAt);
   
   const basePath = path.join(BASES_PATH, '1');
   const layers = [];
@@ -208,8 +206,7 @@ export async function generateRouletteImage(drawData) {
  */
 export async function generateAnimalitosImage(drawData) {
   const { result, scheduledAt, gameId } = drawData;
-  // Convert UTC date to Caracas timezone for display
-  const date = toCaracasTime(scheduledAt);
+  const date = new Date(scheduledAt);
   
   const basePath = path.join(BASES_PATH, '2');
   const layers = [];
@@ -263,8 +260,7 @@ export async function generateAnimalitosImage(drawData) {
  */
 export async function generateTripleImage(drawData) {
   const { result, scheduledAt, gameId } = drawData;
-  // Convert UTC date to Caracas timezone for display
-  const date = toCaracasTime(scheduledAt);
+  const date = new Date(scheduledAt);
   
   const basePath = path.join(BASES_PATH, '3');
   const numerosPath = path.join(basePath, 'numeros');

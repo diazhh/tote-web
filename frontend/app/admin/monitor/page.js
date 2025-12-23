@@ -4,16 +4,18 @@ import { useState, useEffect } from 'react';
 import { 
   Building2, Hash, FileText, Calendar, Gamepad2, Clock,
   DollarSign, Trophy, Ticket, AlertTriangle, ChevronRight,
-  X, Eye
+  X, Eye, Layers
 } from 'lucide-react';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
 import axios from '@/lib/api/axios';
+import TripletaDetailModal from '@/components/shared/TripletaDetailModal';
+import { getTodayVenezuela } from '@/lib/dateUtils';
 
 export default function MonitorPage() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('bancas');
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayVenezuela());
   const [games, setGames] = useState([]);
   const [selectedGame, setSelectedGame] = useState('');
   const [draws, setDraws] = useState([]);
@@ -58,8 +60,28 @@ export default function MonitorPage() {
       const response = await axios.get(`/draws?gameId=${selectedGame}&dateFrom=${selectedDate}&dateTo=${selectedDate}`);
       const drawsList = response.data.data || [];
       setDraws(drawsList);
+      
       if (drawsList.length > 0 && !selectedDraw) {
-        setSelectedDraw(drawsList[0].id);
+        const now = new Date();
+        
+        // Sort draws by scheduledAt to find the next one chronologically
+        const sortedDraws = [...drawsList].sort((a, b) => 
+          new Date(a.scheduledAt) - new Date(b.scheduledAt)
+        );
+        
+        // Find the next draw that hasn't happened yet (SCHEDULED or CLOSED status)
+        let nextDraw = sortedDraws.find(draw => {
+          const scheduledTime = new Date(draw.scheduledAt);
+          return (draw.status === 'SCHEDULED' || draw.status === 'CLOSED') && scheduledTime >= now;
+        });
+        
+        // If no future draw, find the most recent CLOSED draw
+        if (!nextDraw) {
+          nextDraw = sortedDraws.reverse().find(d => d.status === 'CLOSED');
+        }
+        
+        // Fallback to first draw
+        setSelectedDraw(nextDraw?.id || sortedDraws[0].id);
       }
     } catch (error) {
       toast.error('Error cargando sorteos');
@@ -152,11 +174,10 @@ export default function MonitorPage() {
   };
 
   const formatTime = (dateStr) => {
-    return new Date(dateStr).toLocaleTimeString('es-VE', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/Caracas'
-    });
+    const date = new Date(dateStr);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   };
 
   return (
@@ -373,12 +394,7 @@ export default function MonitorPage() {
                               <td className="px-3 py-2 text-sm text-right text-gray-500">{item.percentageOfSales}%</td>
                               <td className="px-3 py-2 text-sm text-right">
                                 {item.tripletaCount > 0 ? (
-                                  <button
-                                    onClick={() => handleViewTripletas(item.itemId)}
-                                    className="text-purple-600 hover:text-purple-800 font-medium"
-                                  >
-                                    {item.tripletaCount}
-                                  </button>
+                                  <span className="text-purple-600 font-medium">{item.tripletaCount}</span>
                                 ) : (
                                   <span className="text-gray-400">0</span>
                                 )}
@@ -389,12 +405,24 @@ export default function MonitorPage() {
                                 {isDangerous && <AlertTriangle className="w-4 h-4 inline ml-1" />}
                               </td>
                               <td className="px-3 py-2 text-center">
-                                <button
-                                  onClick={() => handleViewTicketsByItem(item.itemId)}
-                                  className="text-blue-600 hover:text-blue-800"
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </button>
+                                <div className="flex items-center justify-center gap-2">
+                                  <button
+                                    onClick={() => handleViewTicketsByItem(item.itemId)}
+                                    className="text-blue-600 hover:text-blue-800"
+                                    title="Ver tickets"
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </button>
+                                  {item.tripletaCount > 0 && (
+                                    <button
+                                      onClick={() => handleViewTripletas(item.itemId)}
+                                      className="text-purple-600 hover:text-purple-800"
+                                      title="Ver tripletas"
+                                    >
+                                      <Layers className="w-4 h-4" />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -483,7 +511,7 @@ export default function MonitorPage() {
       {/* Modal de Tickets */}
       {ticketsModal.open && ticketsModal.data && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[80vh] overflow-hidden">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[80vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">
                 {ticketsModal.type === 'banca' 
@@ -499,47 +527,54 @@ export default function MonitorPage() {
               <div className="mb-4 text-sm text-gray-600">
                 Total: {ticketsModal.data.ticketCount} tickets | {formatCurrency(ticketsModal.data.totalAmount)}
               </div>
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Ticket ID</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Hora</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Comercial</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Banca</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Grupo</th>
-                    <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Taquilla</th>
-                    {ticketsModal.type === 'banca' && (
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Número</th>
-                    )}
-                    <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Monto</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {ticketsModal.data.tickets.map((ticket, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-sm">
-                        <button 
-                          onClick={() => handleViewTicketDetail(ticket)}
-                          className="font-mono text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {ticket.ticketId}
-                        </button>
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-500">
-                        {ticket.createdAt ? formatTime(ticket.createdAt) : '-'}
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-500">{ticket.comercialId}</td>
-                      <td className="px-3 py-2 text-sm text-gray-500">{ticket.bancaId}</td>
-                      <td className="px-3 py-2 text-sm text-gray-500">{ticket.grupoId}</td>
-                      <td className="px-3 py-2 text-sm text-gray-500">{ticket.taquillaId}</td>
-                      {ticketsModal.type === 'banca' && (
-                        <td className="px-3 py-2 text-sm font-medium">{ticket.number} - {ticket.name}</td>
-                      )}
-                      <td className="px-3 py-2 text-sm text-right">{formatCurrency(ticket.amount)}</td>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usuario/Taquilla</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha/Hora</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acción</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {ticketsModal.data.tickets.map((ticket, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-sm">
+                          <span className="font-mono font-semibold text-gray-900">
+                            {ticket.externalTicketId || ticket.id?.slice(0, 8)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right font-bold text-green-600">
+                          {formatCurrency(ticket.totalAmount)}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {ticket.taquillaId ? `Taquilla ${ticket.taquillaId}` : ticket.bancaId ? `Banca ${ticket.bancaId}` : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {ticket.createdAt ? new Date(ticket.createdAt).toLocaleString('es-VE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleViewTicketDetail(ticket)}
+                            className="text-blue-600 hover:text-blue-800"
+                            title="Ver detalle"
+                          >
+                            <Eye className="w-4 h-4 inline" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -558,67 +593,71 @@ export default function MonitorPage() {
               </button>
             </div>
             <div className="p-4 overflow-y-auto max-h-[60vh]">
-              <div className="mb-4 flex items-center justify-between">
-                <span className="text-sm text-gray-600">
-                  Total: {tripletasModal.data.tripletaCount} tripletas | Premio potencial: {formatCurrency(tripletasModal.data.totalPotentialPrize)}
-                </span>
-                <div className="text-sm text-gray-500">
-                  Click en ID para ver detalle completo
-                </div>
+              <div className="mb-4 text-sm text-gray-600">
+                Total: {tripletasModal.data.tripletaCount} tripletas | Premio potencial: {formatCurrency(tripletasModal.data.totalPotentialPrize)}
               </div>
-              <div className="space-y-4">
-                {tripletasModal.data.tripletas.map((tripleta, idx) => (
-                  <div key={idx} className={`border rounded-lg p-4 ${
-                    tripleta.dangerLevel === 'high' ? 'border-red-300 bg-red-50' : 
-                    tripleta.dangerLevel === 'medium' ? 'border-yellow-300 bg-yellow-50' : 
-                    'border-gray-200'
-                  }`}>
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={() => handleViewTripletaDetail(tripleta)}
-                          className="font-mono text-blue-600 hover:text-blue-800 hover:underline text-sm"
-                        >
-                          {tripleta.id.substring(0, 8)}...
-                        </button>
-                        <span className="text-sm text-gray-500">Usuario: {tripleta.username}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {getDangerBadge(tripleta.dangerLevel)}
-                        <span className={`text-sm font-medium ${tripleta.numbersRemaining === 1 ? 'text-red-600' : 'text-gray-600'}`}>
-                          {tripleta.numbersRemaining === 0 ? '🏆 Completa!' : 
-                           tripleta.numbersRemaining === 1 ? '⚠️ Falta 1!' : 
-                           `Faltan ${tripleta.numbersRemaining}`}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      {tripleta.items.map((item, i) => (
-                        <div key={i} className={`px-3 py-2 rounded-lg text-sm ${
-                          item.won ? 'bg-green-100 text-green-800 border border-green-300' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          <div className="font-medium">{item.number} - {item.name} {item.won && '✓'}</div>
-                          {item.won && item.wonInDraw && (
-                            <div className="text-xs mt-1 text-green-600">
-                              Ganó: {formatTime(item.wonInDraw.scheduledAt)}
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                    <div className="flex items-center justify-between text-sm border-t pt-2">
-                      <div className="flex items-center gap-4">
-                        <span>Apostado: {formatCurrency(tripleta.amount)} × {tripleta.multiplier}</span>
-                        {tripleta.drawsInRange && (
-                          <span className="text-gray-500">
-                            Sorteos: {tripleta.drawsInRange.executed}/{tripleta.drawsInRange.total} ejecutados
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usuario</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha/Hora</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {tripletasModal.data.tripletas.map((tripleta, idx) => (
+                      <tr key={idx} className={`hover:bg-gray-50 ${
+                        tripleta.dangerLevel === 'high' ? 'bg-red-50' : 
+                        tripleta.dangerLevel === 'medium' ? 'bg-yellow-50' : ''
+                      }`}>
+                        <td className="px-4 py-3 text-sm">
+                          <span className="font-mono font-semibold text-gray-900">
+                            {tripleta.id.substring(0, 8)}
                           </span>
-                        )}
-                      </div>
-                      <span className="font-bold text-purple-600">Premio: {formatCurrency(tripleta.potentialPrize)}</span>
-                    </div>
-                  </div>
-                ))}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-right font-bold text-purple-600">
+                          {formatCurrency(tripleta.amount)} × {tripleta.multiplier}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">
+                          {tripleta.username || '-'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {tripleta.createdAt ? new Date(tripleta.createdAt).toLocaleString('es-VE', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                          }) : '-'}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`text-xs font-medium ${
+                            tripleta.numbersRemaining === 0 ? 'text-green-600' : 
+                            tripleta.numbersRemaining === 1 ? 'text-red-600' : 
+                            'text-gray-600'
+                          }`}>
+                            {tripleta.numbersRemaining === 0 ? '🏆 Completa' : 
+                             tripleta.numbersRemaining === 1 ? '⚠️ Falta 1' : 
+                             `Faltan ${tripleta.numbersRemaining}`}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <button
+                            onClick={() => handleViewTripletaDetail(tripleta)}
+                            className="text-purple-600 hover:text-purple-800"
+                            title="Ver detalle"
+                          >
+                            <Eye className="w-4 h-4 inline" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -628,7 +667,7 @@ export default function MonitorPage() {
       {/* Modal de Detalle de Ticket */}
       {ticketDetailModal.open && ticketDetailModal.data && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">Detalle del Ticket</h3>
               <button onClick={() => setTicketDetailModal({ open: false, data: null })} className="text-gray-500 hover:text-gray-700">
@@ -639,11 +678,11 @@ export default function MonitorPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Ticket ID</label>
-                  <p className="font-mono text-lg font-bold">{ticketDetailModal.data.ticketId}</p>
+                  <p className="font-mono text-lg font-bold">{ticketDetailModal.data.externalTicketId || ticketDetailModal.data.id}</p>
                 </div>
                 <div>
-                  <label className="text-xs text-gray-500 uppercase">Monto</label>
-                  <p className="text-lg font-bold text-green-600">{formatCurrency(ticketDetailModal.data.amount)}</p>
+                  <label className="text-xs text-gray-500 uppercase">Monto Total</label>
+                  <p className="text-lg font-bold text-green-600">{formatCurrency(ticketDetailModal.data.totalAmount)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
@@ -666,16 +705,37 @@ export default function MonitorPage() {
                   <p className="font-medium">{ticketDetailModal.data.taquillaId}</p>
                 </div>
               </div>
-              {ticketDetailModal.data.number && (
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Número Apostado</label>
-                  <p className="font-bold text-xl">{ticketDetailModal.data.number} - {ticketDetailModal.data.name}</p>
-                </div>
-              )}
               {ticketDetailModal.data.createdAt && (
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Hora de Registro</label>
                   <p className="font-medium">{formatTime(ticketDetailModal.data.createdAt)}</p>
+                </div>
+              )}
+              
+              {/* Jugadas del ticket */}
+              {ticketDetailModal.data.details && ticketDetailModal.data.details.length > 0 && (
+                <div className="border-t pt-4">
+                  <label className="text-xs text-gray-500 uppercase mb-3 block">
+                    Jugadas ({ticketDetailModal.data.details.length})
+                  </label>
+                  <div className="space-y-2">
+                    {ticketDetailModal.data.details.map((detail, idx) => (
+                      <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
+                            {idx + 1}
+                          </div>
+                          <div>
+                            <p className="font-bold text-lg">{detail.number}</p>
+                            {detail.name && <p className="text-sm text-gray-600">{detail.name}</p>}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold text-green-600">{formatCurrency(detail.amount)}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -693,145 +753,10 @@ export default function MonitorPage() {
 
       {/* Modal de Detalle de Tripleta */}
       {tripletaDetailModal.open && tripletaDetailModal.data && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">Detalle de Tripleta</h3>
-              <button onClick={() => setTripletaDetailModal({ open: false, data: null })} className="text-gray-500 hover:text-gray-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-4 overflow-y-auto max-h-[60vh] space-y-4">
-              {/* Info general */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">ID Tripleta</label>
-                  <p className="font-mono text-sm">{tripletaDetailModal.data.id}</p>
-                </div>
-                {getDangerBadge(tripletaDetailModal.data.dangerLevel)}
-              </div>
-
-              {/* Números */}
-              <div>
-                <label className="text-xs text-gray-500 uppercase mb-2 block">Números Seleccionados</label>
-                <div className="flex flex-wrap gap-2">
-                  {tripletaDetailModal.data.items.map((item, i) => (
-                    <div key={i} className={`px-4 py-3 rounded-lg ${
-                      item.won ? 'bg-green-100 border-2 border-green-500' : 'bg-gray-100 border border-gray-300'
-                    }`}>
-                      <div className="font-bold text-lg">{item.number}</div>
-                      <div className="text-sm text-gray-600">{item.name}</div>
-                      {item.won ? (
-                        <div className="text-xs text-green-600 mt-1">
-                          ✓ Ganó {item.wonInDraw && formatTime(item.wonInDraw.scheduledAt)}
-                        </div>
-                      ) : (
-                        <div className="text-xs text-gray-400 mt-1">Pendiente</div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Apuesta */}
-              <div className="grid grid-cols-3 gap-4 bg-gray-50 rounded-lg p-4">
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Monto Apostado</label>
-                  <p className="font-bold text-lg">{formatCurrency(tripletaDetailModal.data.amount)}</p>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Multiplicador</label>
-                  <p className="font-bold text-lg">{tripletaDetailModal.data.multiplier}x</p>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Premio Potencial</label>
-                  <p className="font-bold text-lg text-purple-600">{formatCurrency(tripletaDetailModal.data.potentialPrize)}</p>
-                </div>
-              </div>
-
-              {/* Estado */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Números Ganados</label>
-                  <p className="font-bold text-2xl text-green-600">{tripletaDetailModal.data.numbersWon} / 3</p>
-                </div>
-                <div>
-                  <label className="text-xs text-gray-500 uppercase">Números Faltantes</label>
-                  <p className={`font-bold text-2xl ${tripletaDetailModal.data.numbersRemaining === 1 ? 'text-red-600' : 'text-gray-600'}`}>
-                    {tripletaDetailModal.data.numbersRemaining}
-                  </p>
-                </div>
-              </div>
-
-              {/* Sorteos involucrados */}
-              {tripletaDetailModal.data.drawsInRange && (
-                <div>
-                  <label className="text-xs text-gray-500 uppercase mb-2 block">
-                    Sorteos Involucrados ({tripletaDetailModal.data.drawsInRange.executed}/{tripletaDetailModal.data.drawsInRange.total} ejecutados)
-                  </label>
-                  <div className="max-h-40 overflow-y-auto border rounded-lg">
-                    <table className="min-w-full divide-y divide-gray-200 text-sm">
-                      <thead className="bg-gray-50 sticky top-0">
-                        <tr>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Hora</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Estado</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Relevante</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {tripletaDetailModal.data.drawsInRange.draws.map((draw, idx) => (
-                          <tr key={idx} className={draw.isRelevant ? 'bg-green-50' : ''}>
-                            <td className="px-3 py-2">{formatTime(draw.scheduledAt)}</td>
-                            <td className="px-3 py-2">
-                              <span className={`px-2 py-0.5 rounded-full text-xs ${
-                                draw.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :
-                                draw.status === 'DRAWN' ? 'bg-blue-100 text-blue-800' :
-                                draw.status === 'SCHEDULED' ? 'bg-gray-100 text-gray-800' :
-                                'bg-yellow-100 text-yellow-800'
-                              }`}>
-                                {draw.status}
-                              </span>
-                            </td>
-                            <td className="px-3 py-2">
-                              {draw.isRelevant && <span className="text-green-600 font-medium">✓ Número ganó aquí</span>}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Alerta de peligro */}
-              {tripletaDetailModal.data.numbersRemaining === 1 && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0" />
-                    <div>
-                      <p className="font-bold text-red-800">¡ALTO RIESGO!</p>
-                      <p className="text-sm text-red-700">
-                        Esta tripleta solo necesita 1 número más para completarse. 
-                        Si el número faltante sale como ganador, se pagará un premio de {formatCurrency(tripletaDetailModal.data.potentialPrize)}.
-                      </p>
-                      <p className="text-sm text-red-700 mt-2">
-                        <strong>Número faltante:</strong> {tripletaDetailModal.data.items.find(i => !i.won)?.number} - {tripletaDetailModal.data.items.find(i => !i.won)?.name}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
-              <button 
-                onClick={() => setTripletaDetailModal({ open: false, data: null })}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
+        <TripletaDetailModal
+          tripleta={tripletaDetailModal.data}
+          onClose={() => setTripletaDetailModal({ open: false, data: null })}
+        />
       )}
     </div>
   );

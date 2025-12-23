@@ -6,11 +6,11 @@
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
 import { 
-  nowInCaracas, 
-  getDayOfWeekInCaracas, 
-  timeStringToCaracasDate,
-  formatCaracasDateTime,
-  formatCaracasDate
+  now, 
+  getDayOfWeek, 
+  timeStringToDate,
+  formatDateTime,
+  formatDateOnly
 } from '../lib/dateUtils.js';
 
 dotenv.config();
@@ -28,8 +28,8 @@ async function main() {
   // 2. Generar sorteos para hoy (en zona horaria de Caracas)
   console.log('📅 Generando sorteos para hoy...\n');
 
-  const today = nowInCaracas();
-  const dayOfWeek = getDayOfWeekInCaracas(today);
+  const today = now();
+  const dayOfWeek = getDayOfWeek(today);
   
   console.log(`Día de la semana: ${dayOfWeek} (${getDayName(dayOfWeek)})`);
   console.log(`Fecha: ${formatCaracasDate(today)}\n`);
@@ -58,9 +58,8 @@ async function main() {
     console.log(`   Horarios: ${template.drawTimes.length}`);
 
     for (const time of template.drawTimes) {
-      // Crear fecha/hora del sorteo en zona horaria de Caracas
-      // y convertir automáticamente a UTC para almacenar en BD
-      const scheduledAt = timeStringToCaracasDate(today, time);
+      // Crear fecha/hora del sorteo
+      const scheduledAt = timeStringToDate(today, time);
 
       // Crear el sorteo
       const draw = await prisma.draw.create({

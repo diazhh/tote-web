@@ -1,0 +1,558 @@
+[
+  {
+    "id": "TC001",
+    "title": "Administrator Login Success",
+    "description": "Validate successful login of an administrator with valid credentials using JWT authentication.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the /login page."
+      },
+      {
+        "type": "action",
+        "description": "Enter a valid administrator username/email and password."
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm that a JWT token is generated and stored securely, redirecting to /admin dashboard."
+      }
+    ]
+  },
+  {
+    "id": "TC002",
+    "title": "Administrator Login Failure with Invalid Credentials",
+    "description": "Verify that login fails with invalid username or password, showing appropriate error messages.",
+    "category": "error handling",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the /login page."
+      },
+      {
+        "type": "action",
+        "description": "Enter an incorrect username/email and/or password."
+      },
+      {
+        "type": "action",
+        "description": "Submit the login form."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that login is rejected with an error message and no JWT token is issued."
+      }
+    ]
+  },
+  {
+    "id": "TC003",
+    "title": "JWT Token Expiry Enforcement",
+    "description": "Ensure JWT tokens expire as configured and access is denied after expiration.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Authenticate successfully to obtain a JWT token."
+      },
+      {
+        "type": "action",
+        "description": "Wait until the JWT token expiry time is reached."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to access an admin-only protected resource."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify access is denied and a prompt to login appears due to token expiration."
+      }
+    ]
+  },
+  {
+    "id": "TC004",
+    "title": "Role-Based Access Control Enforcement",
+    "description": "Verify that users without proper roles cannot access or perform restricted administrative actions.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Authenticate with a user role having limited privileges."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to access various admin dashboard areas like Game Management or User Management."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that access is denied for unauthorized roles and proper error is returned."
+      }
+    ]
+  },
+  {
+    "id": "TC005",
+    "title": "Create, Read, Update, Delete (CRUD) Lottery Games",
+    "description": "Test full CRUD operations for lottery games including Triple, Ruleta, and Animalitos with valid and invalid data.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the Admin Dashboard > Game Management."
+      },
+      {
+        "type": "action",
+        "description": "Create a new lottery game with valid attributes."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the new game appears in the games list."
+      },
+      {
+        "type": "action",
+        "description": "Update the game's properties and save changes."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure the changes are reflected correctly."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to create a game with invalid or missing required fields."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm validation errors are returned and creation is blocked."
+      },
+      {
+        "type": "action",
+        "description": "Delete an existing lottery game."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the game is removed from the list and database."
+      }
+    ]
+  },
+  {
+    "id": "TC006",
+    "title": "Automated Daily Draw Generation and Scheduling",
+    "description": "Validate that scheduled draws are generated daily according to active templates and respect pauses and holidays.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Ensure at least one active draw template is configured."
+      },
+      {
+        "type": "action",
+        "description": "Trigger the scheduled job responsible for daily draw generation."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that scheduled draws for the day are created with correct times matching templates."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm no draws are scheduled during pause periods or holidays."
+      }
+    ]
+  },
+  {
+    "id": "TC007",
+    "title": "Draw Closing and Winner Pre-selection Notification",
+    "description": "Verify that 5 minutes before draw time, the system closes the draw, randomly preselects a winner, and sends notifications over WebSocket and Telegram.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Set a draw scheduled 10 minutes in the future."
+      },
+      {
+        "type": "action",
+        "description": "Wait until 5 minutes before the draw scheduled time."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the draw status changes to closed."
+      },
+      {
+        "type": "assertion",
+        "description": "Check that a valid random winner is preselected and stored."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify WebSocket notifications are broadcasted about the closed draw and preselection."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm Telegram notifications are sent to the configured admin group/channel."
+      }
+    ]
+  },
+  {
+    "id": "TC008",
+    "title": "Draw Execution and Result Finalization",
+    "description": "At draw time, verify the winner confirmation, status update to executed, personalized image generation within 5 seconds, and orchestration of multi-channel publishing.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Configure a draw with preselected winner and scheduled time in the near future."
+      },
+      {
+        "type": "action",
+        "description": "At the exact draw time, trigger the draw execution process."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the winner confirmation is finalized and status updated to executed."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm a personalized lottery result image is generated within 5 seconds using Sharp."
+      },
+      {
+        "type": "assertion",
+        "description": "Check entries in publish queues for Telegram, WhatsApp, Facebook, Instagram, and TikTok."
+      }
+    ]
+  },
+  {
+    "id": "TC009",
+    "title": "Multi-channel Result Publication with Retry Mechanism",
+    "description": "Ensure lottery results are published simultaneously across all integrated social media platforms, with retries on failures using exponential backoff up to three attempts.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Trigger a lottery result publication job."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify successful publication records for Telegram, WhatsApp, Facebook, Instagram, and TikTok."
+      },
+      {
+        "type": "action",
+        "description": "Simulate a failure on one or more social channel APIs."
+      },
+      {
+        "type": "assertion",
+        "description": "Validate that the system retries publication attempts with exponential backoff up to three tries."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm a final status is logged reflecting success or failure after retries."
+      }
+    ]
+  },
+  {
+    "id": "TC010",
+    "title": "Manual Winner Change with Audit Logging and Notification",
+    "description": "Verify administrators can change winners manually within 5 minutes prior to the draw execution with full audit logs and notifications triggered properly.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Login as administrator and navigate to an open draw with a preselected winner."
+      },
+      {
+        "type": "action",
+        "description": "Change the winner manually before the 5-minute cutoff time."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure the winner change is saved, previous winner replaced, and notifications sent."
+      },
+      {
+        "type": "assertion",
+        "description": "Check audit logs contain user info, timestamp, IP address, and details of the change."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to change winner after the 5-minute window."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify that the system disallows the change and informs the administrator accordingly."
+      }
+    ]
+  },
+  {
+    "id": "TC011",
+    "title": "Real-time WebSocket Updates on Lottery State Changes",
+    "description": "Ensure the system broadcasts all pertinent lottery state changes (draw closing, winner preselection, finalization) via WebSocket with latency under 60 seconds.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Connect a client to the WebSocket server subscribing to lottery state events."
+      },
+      {
+        "type": "action",
+        "description": "Trigger draw closing and winner preselection."
+      },
+      {
+        "type": "assertion",
+        "description": "Validate the client receives the correct event and payload within 10 seconds."
+      },
+      {
+        "type": "action",
+        "description": "Trigger draw execution and finalization."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm real-time update with winner details and status broadcasted promptly."
+      }
+    ]
+  },
+  {
+    "id": "TC012",
+    "title": "Public Real-time Lottery Results Display on Landing Page",
+    "description": "Validate that the landing page shows accurate, up-to-date lottery results and statistics in a fully responsive UI reflecting backend real-time updates.",
+    "category": "ui",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Access the landing page (public homepage)."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the page loads with the latest lottery results and statistics."
+      },
+      {
+        "type": "action",
+        "description": "Simulate a backend lottery state update (e.g. winner announcement)."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm UI updates in real-time reflecting the new state without manual refresh."
+      },
+      {
+        "type": "action",
+        "description": "Test UI responsiveness across various device screen sizes (mobile, tablet, desktop)."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure layout and elements adjust correctly and are fully usable."
+      }
+    ]
+  },
+  {
+    "id": "TC013",
+    "title": "Audit Logging of Critical Operations",
+    "description": "Verify comprehensive audit logs are recorded for all critical user actions such as manual winner changes, user management, and important state transitions.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Perform a manual winner change operation as administrator."
+      },
+      {
+        "type": "assertion",
+        "description": "Check audit log entry is created with user identity, IP, timestamp, and operation details."
+      },
+      {
+        "type": "action",
+        "description": "Create, update, and delete a lottery game."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify corresponding audit log entries for each operation are present."
+      }
+    ]
+  },
+  {
+    "id": "TC014",
+    "title": "Historical Data Access and Export Functionality",
+    "description": "Validate access to historical lottery data with filtering, statistics generation, and data export capabilities as per requirements.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Navigate to the analytics/statistics section in the admin dashboard."
+      },
+      {
+        "type": "action",
+        "description": "Apply filters by date range, game type, and result status."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify filtered results and statistics are correctly displayed."
+      },
+      {
+        "type": "action",
+        "description": "Export the filtered data to CSV or Excel format."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the exported file contains accurate and complete data."
+      }
+    ]
+  },
+  {
+    "id": "TC015",
+    "title": "System Uptime and Monitoring Alerts",
+    "description": "Verify monitoring system tracks uptime above 99.5% and triggers alerts upon critical failures or scheduled job errors.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Simulate a failure in a scheduled job such as draw generation."
+      },
+      {
+        "type": "assertion",
+        "description": "Check monitoring alerts are raised with details of the failure."
+      },
+      {
+        "type": "action",
+        "description": "Verify uptime reporting mechanisms accurately track system availability over a time period."
+      }
+    ]
+  },
+  {
+    "id": "TC016",
+    "title": "Image Generation of Lottery Results Using Sharp",
+    "description": "Test automated generation of customized lottery result images for various games using Sharp within performance constraints.",
+    "category": "functional",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Trigger generation of a lottery result image for a completed draw."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify image is generated successfully conforming to template specifications."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm generation time does not exceed 5 seconds."
+      },
+      {
+        "type": "action",
+        "description": "Attempt image generation with corrupted or incomplete data."
+      },
+      {
+        "type": "assertion",
+        "description": "Ensure the system handles errors gracefully and logs the incident."
+      }
+    ]
+  },
+  {
+    "id": "TC017",
+    "title": "WebSocket Client Handling of Disconnections and Reconnection",
+    "description": "Validate robustness of the WebSocket client in handling unexpected disconnections and automatic reconnection preserving subscriptions.",
+    "category": "error handling",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Connect a client to WebSocket server and subscribe to lottery updates."
+      },
+      {
+        "type": "action",
+        "description": "Simulate network disconnection or server restart."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify the client attempts automatic reconnection without user intervention."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm subscriptions are restored and real-time updates resume correctly."
+      }
+    ]
+  },
+  {
+    "id": "TC018",
+    "title": "Administrative Telegram Bot Command Execution",
+    "description": "Test planned Telegram bot integration for remote management including command authentication, secure execution, and prompt notifications.",
+    "category": "functional",
+    "priority": "Low",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Authenticate as an administrator on the Telegram bot."
+      },
+      {
+        "type": "action",
+        "description": "Issue a remote command such as checking draw status or listing scheduled draws."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm the command executes successfully with correct response sent back."
+      },
+      {
+        "type": "action",
+        "description": "Attempt to issue commands without authentication."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify commands are rejected and an appropriate error message is sent."
+      }
+    ]
+  },
+  {
+    "id": "TC019",
+    "title": "System Scalability Stress Test with Over 100 Daily Draws",
+    "description": "Ensure system performance and stability are maintained when processing over 100 daily draws with concurrent scheduling and publishing.",
+    "category": "functional",
+    "priority": "Medium",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Configure and simulate scheduling of 100+ draws for a single day."
+      },
+      {
+        "type": "action",
+        "description": "Monitor system resource usage and responsiveness during draw closure, execution, and multi-channel publishing."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify response times meet defined latency targets and no significant performance degradation occurs."
+      }
+    ]
+  },
+  {
+    "id": "TC020",
+    "title": "Security Headers and Rate Limiting Enforcement",
+    "description": "Validate backend enforcement of security best practices including Helmet security headers, CORS policies, and API rate limiting to prevent abuse.",
+    "category": "security",
+    "priority": "High",
+    "steps": [
+      {
+        "type": "action",
+        "description": "Send requests to backend endpoints and inspect HTTP response headers."
+      },
+      {
+        "type": "assertion",
+        "description": "Verify presence of expected security headers: Content Security Policy, X-Frame-Options, XSS Protection, etc."
+      },
+      {
+        "type": "action",
+        "description": "Send a high frequency of API requests to trigger rate limiting."
+      },
+      {
+        "type": "assertion",
+        "description": "Confirm that requests beyond the limit receive HTTP 429 (Too Many Requests) responses."
+      }
+    ]
+  }
+]

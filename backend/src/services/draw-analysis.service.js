@@ -26,9 +26,9 @@ class DrawAnalysisService {
           game: true,
           winnerItem: true,
           preselectedItem: true,
-          apiMappings: {
+          tickets: {
             include: {
-              tickets: {
+              details: {
                 include: {
                   gameItem: true
                 }
@@ -49,8 +49,8 @@ class DrawAnalysisService {
       });
 
       // Calcular ventas totales
-      const tickets = draw.apiMappings.flatMap(m => m.tickets);
-      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+      const tickets = draw.tickets || [];
+      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
 
       // Obtener configuración del juego
       const gameConfig = draw.game.config || {};
@@ -60,11 +60,13 @@ class DrawAnalysisService {
       // Agrupar ventas por item
       const salesByItem = new Map();
       for (const ticket of tickets) {
-        const current = salesByItem.get(ticket.gameItemId) || { amount: 0, count: 0 };
-        salesByItem.set(ticket.gameItemId, {
-          amount: current.amount + parseFloat(ticket.amount),
-          count: current.count + 1
-        });
+        for (const detail of ticket.details) {
+          const current = salesByItem.get(detail.gameItemId) || { amount: 0, count: 0 };
+          salesByItem.set(detail.gameItemId, {
+            amount: current.amount + parseFloat(detail.amount),
+            count: current.count + 1
+          });
+        }
       }
 
       // Obtener tripletas activas del juego

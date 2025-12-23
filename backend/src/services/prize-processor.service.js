@@ -27,116 +27,140 @@ class PrizeProcessorService {
           throw new Error('El sorteo no tiene un número ganador definido');
         }
 
-        const tickets = await tx.ticket.findMany({
+        // Obtener SOLO los detalles de tickets que pertenecen a este sorteo
+        // Un ticket puede tener detalles de múltiples sorteos
+        const ticketDetails = await tx.ticketDetail.findMany({
           where: {
-            drawId,
+            ticket: {
+              drawId
+            },
             status: 'ACTIVE'
           },
           include: {
-            details: {
+            gameItem: true,
+            ticket: {
               include: {
-                gameItem: true
+                user: true
               }
-            },
-            user: true
+            }
           }
         });
 
-        logger.info('Found tickets to process', { 
+        logger.info('Found ticket details to process', { 
           drawId, 
-          ticketCount: tickets.length 
+          detailCount: ticketDetails.length 
         });
 
         let totalPrizesAwarded = 0;
-        let winnersCount = 0;
-        let losersCount = 0;
+        const processedTickets = new Set();
+        const winningTickets = new Set();
 
-        for (const ticket of tickets) {
-          let ticketTotalPrize = 0;
-          let hasWinningDetail = false;
-
-          for (const detail of ticket.details) {
-            if (detail.gameItemId === draw.winnerItemId) {
-              const prize = parseFloat(detail.amount) * parseFloat(detail.multiplier);
-              
-              await tx.ticketDetail.update({
-                where: { id: detail.id },
-                data: {
-                  status: 'WON',
-                  prize
-                }
-              });
-
-              ticketTotalPrize += prize;
-              hasWinningDetail = true;
-
-              logger.info('Winning detail found', {
-                ticketId: ticket.id,
-                detailId: detail.id,
-                gameItemNumber: detail.gameItem.number,
-                amount: detail.amount,
-                multiplier: detail.multiplier,
-                prize
-              });
-            } else {
-              await tx.ticketDetail.update({
-                where: { id: detail.id },
-                data: {
-                  status: 'LOST',
-                  prize: 0
-                }
-              });
+        // Procesar cada detalle individualmente
+        for (const detail of ticketDetails) {
+          const isWinner = detail.gameItemId === draw.winnerItemId;
+          const prize = isWinner ? parseFloat(detail.amount) * parseFloat(detail.multiplier) : 0;
+          
+          await tx.ticketDetail.update({
+            where: { id: detail.id },
+            data: {
+              status: isWinner ? 'WON' : 'LOST',
+              prize
             }
+          });
+
+          if (isWinner) {
+            totalPrizesAwarded += prize;
+            winningTickets.add(detail.ticketId);
+            
+            logger.info('Winning detail found', {
+              ticketId: detail.ticketId,
+              detailId: detail.id,
+              gameItemNumber: detail.gameItem.number,
+              amount: detail.amount,
+              multiplier: detail.multiplier,
+              prize
+            });
           }
 
-          const ticketStatus = hasWinningDetail ? 'WON' : 'LOST';
+          processedTickets.add(detail.ticketId);
+        }
+
+        // Actualizar cada ticket: recalcular su premio total y status
+        for (const ticketId of processedTickets) {
+          // Obtener todos los detalles del ticket (puede tener detalles de otros sorteos)
+          const allDetails = await tx.ticketDetail.findMany({
+            where: { ticketId }
+          });
+
+          // Calcular premio total del ticket (suma de todos sus detalles)
+          const ticketTotalPrize = allDetails.reduce((sum, d) => sum + parseFloat(d.prize || 0), 0);
           
+          // Determinar status del ticket:
+          // - Si tiene algún detalle ganador -> WON
+          // - Si todos los detalles están procesados (no ACTIVE) y ninguno ganó -> LOST
+          // - Si aún tiene detalles ACTIVE -> ACTIVE (sigue participando en otros sorteos)
+          const hasWinningDetail = allDetails.some(d => d.status === 'WON');
+          const hasActiveDetail = allDetails.some(d => d.status === 'ACTIVE');
+          
+          let ticketStatus;
+          if (hasWinningDetail) {
+            ticketStatus = 'WON';
+          } else if (hasActiveDetail) {
+            ticketStatus = 'ACTIVE'; // Sigue participando en otros sorteos
+          } else {
+            ticketStatus = 'LOST'; // Todos los detalles procesados y ninguno ganó
+          }
+
           await tx.ticket.update({
-            where: { id: ticket.id },
+            where: { id: ticketId },
             data: {
               status: ticketStatus,
               totalPrize: ticketTotalPrize
             }
           });
 
-          if (hasWinningDetail) {
-            await tx.user.update({
-              where: { id: ticket.userId },
-              data: {
-                balance: {
-                  increment: ticketTotalPrize
-                }
-              }
+          // Si el ticket ganó en ESTE sorteo, acreditar premio al usuario
+          if (winningTickets.has(ticketId)) {
+            const ticket = await tx.ticket.findUnique({
+              where: { id: ticketId },
+              include: { user: true }
             });
 
-            await tx.transaction.create({
-              data: {
+            // Calcular premio de ESTE sorteo específicamente
+            const thisDrawPrize = ticketDetails
+              .filter(d => d.ticketId === ticketId && d.gameItemId === draw.winnerItemId)
+              .reduce((sum, d) => sum + parseFloat(d.amount) * parseFloat(d.multiplier), 0);
+
+            // Solo acreditar balance si el ticket tiene usuario (TAQUILLA_ONLINE)
+            // Los tickets externos (EXTERNAL_API) no tienen usuario
+            if (ticket.userId) {
+              await tx.user.update({
+                where: { id: ticket.userId },
+                data: {
+                  balance: {
+                    increment: thisDrawPrize
+                  }
+                }
+              });
+
+              logger.info('Prize awarded to user', {
                 userId: ticket.userId,
-                type: 'PRIZE',
-                amount: ticketTotalPrize,
-                status: 'COMPLETED',
-                description: `Premio del sorteo ${draw.game.name} - Número ganador: ${draw.winnerItem.number}`,
-                metadata: {
-                  ticketId: ticket.id,
-                  drawId: draw.id,
-                  winnerNumber: draw.winnerItem.number
-                }
-              }
-            });
-
-            totalPrizesAwarded += ticketTotalPrize;
-            winnersCount++;
-
-            logger.info('Prize awarded', {
-              userId: ticket.userId,
-              username: ticket.user.username,
-              ticketId: ticket.id,
-              prize: ticketTotalPrize
-            });
-          } else {
-            losersCount++;
+                username: ticket.user.username,
+                ticketId: ticket.id,
+                prize: thisDrawPrize
+              });
+            } else {
+              logger.info('Prize calculated for external ticket', {
+                ticketId: ticket.id,
+                source: ticket.source,
+                prize: thisDrawPrize
+              });
+            }
           }
         }
+
+        const winnersCount = winningTickets.size;
+        const losersCount = processedTickets.size - winnersCount;
 
         await tx.draw.update({
           where: { id: drawId },

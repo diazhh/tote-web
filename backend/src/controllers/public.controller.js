@@ -1,45 +1,19 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
-import { formatToCaracasTime } from '../lib/dateUtils.js';
+import { formatDate } from '../lib/dateUtils.js';
 
-// Helper para obtener inicio y fin del día en Venezuela (UTC-4)
-function getVenezuelaDayBounds(date) {
-  // Crear fecha en Venezuela
+// Helper para obtener drawDate de una fecha
+function getDrawDate(date) {
   const d = new Date(date);
-  
-  // Si la fecha viene como string YYYY-MM-DD, interpretarla como fecha en Venezuela
-  if (typeof date === 'string' && date.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    // Crear fecha a medianoche en Venezuela (UTC-4 = +4 horas en UTC)
-    const [year, month, day] = date.split('-').map(Number);
-    const startOfDay = new Date(Date.UTC(year, month - 1, day, 4, 0, 0, 0)); // 00:00 VE = 04:00 UTC
-    const endOfDay = new Date(Date.UTC(year, month - 1, day + 1, 3, 59, 59, 999)); // 23:59 VE = 03:59 UTC del día siguiente
-    return { startOfDay, endOfDay };
-  }
-  
-  // Para fechas Date, usar la hora local del servidor ajustada a Venezuela
-  const year = d.getFullYear();
-  const month = d.getMonth();
-  const day = d.getDate();
-  const startOfDay = new Date(Date.UTC(year, month, day, 4, 0, 0, 0));
-  const endOfDay = new Date(Date.UTC(year, month, day + 1, 3, 59, 59, 999));
-  return { startOfDay, endOfDay };
+  const dateStr = d.toISOString().split('T')[0];
+  return new Date(dateStr + 'T00:00:00.000Z');
 }
 
-// Helper para obtener el día actual en Venezuela
-function getTodayVenezuelaBounds() {
-  // Obtener la hora actual en Venezuela
+// Helper para obtener el drawDate de hoy
+function getTodayDrawDate() {
   const now = new Date();
-  const venezuelaOffset = -4 * 60; // UTC-4 en minutos
-  const localOffset = now.getTimezoneOffset();
-  const venezuelaTime = new Date(now.getTime() + (localOffset - venezuelaOffset) * 60 * 1000);
-  
-  const year = venezuelaTime.getFullYear();
-  const month = venezuelaTime.getMonth();
-  const day = venezuelaTime.getDate();
-  
-  const startOfDay = new Date(Date.UTC(year, month, day, 4, 0, 0, 0)); // 00:00 VE = 04:00 UTC
-  const endOfDay = new Date(Date.UTC(year, month, day + 1, 3, 59, 59, 999)); // 23:59 VE = 03:59 UTC del día siguiente
-  return { startOfDay, endOfDay };
+  const dateStr = now.toISOString().split('T')[0];
+  return new Date(dateStr + 'T00:00:00.000Z');
 }
 
 class PublicController {
@@ -81,20 +55,19 @@ class PublicController {
    */
   async getDrawsToday(req, res) {
     try {
-      const { startOfDay: startDate, endOfDay: endDate } = getTodayVenezuelaBounds();
+      const todayDrawDate = getTodayDrawDate();
 
       const draws = await prisma.draw.findMany({
         where: {
-          scheduledAt: {
-            gte: startDate,
-            lte: endDate
-          },
+          drawDate: todayDrawDate,
           game: {
             isActive: true
           }
         },
         select: {
           id: true,
+          drawDate: true,
+          drawTime: true,
           scheduledAt: true,
           status: true,
           imageUrl: true,
@@ -114,7 +87,10 @@ class PublicController {
             }
           }
         },
-        orderBy: { scheduledAt: 'asc' }
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ]
       });
 
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
@@ -154,20 +130,19 @@ class PublicController {
         });
       }
 
-      const { startOfDay: startDate, endOfDay: endDate } = getVenezuelaDayBounds(date);
+      const drawDate = getDrawDate(date);
 
       const draws = await prisma.draw.findMany({
         where: {
-          scheduledAt: {
-            gte: startDate,
-            lte: endDate
-          },
+          drawDate: drawDate,
           game: {
             isActive: true
           }
         },
         select: {
           id: true,
+          drawDate: true,
+          drawTime: true,
           scheduledAt: true,
           status: true,
           imageUrl: true,
@@ -187,15 +162,16 @@ class PublicController {
             }
           }
         },
-        orderBy: { scheduledAt: 'asc' }
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ]
       });
 
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
-      // Formatear scheduledAt en hora de Caracas para el frontend
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
-        scheduledAt: draw.scheduledAt.toISOString(), // Mantener UTC ISO para compatibilidad
-        scheduledAtCaracas: formatToCaracasTime(draw.scheduledAt, 'yyyy-MM-dd HH:mm:ss'), // Hora de Caracas formateada
+        scheduledAt: draw.scheduledAt.toISOString(),
         winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
       }));
 
@@ -219,7 +195,7 @@ class PublicController {
   async getGameDrawsToday(req, res) {
     try {
       const { gameSlug } = req.params;
-      const { startOfDay: startDate, endOfDay: endDate } = getTodayVenezuelaBounds();
+      const { startOfDay: startDate, endOfDay: endDate } = getTodayBounds();
 
       const game = await prisma.game.findUnique({
         where: { slug: gameSlug }

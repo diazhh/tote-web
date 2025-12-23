@@ -9,10 +9,11 @@ import {
 import { toast } from 'sonner';
 import analysisApi from '@/lib/api/analysis';
 import axios from '@/lib/api/axios';
+import { getTodayVenezuela } from '@/lib/dateUtils';
 
 export default function AnalisisSorteoPage() {
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(getTodayVenezuela());
   const [games, setGames] = useState([]);
   const [selectedGame, setSelectedGame] = useState('');
   const [draws, setDraws] = useState([]);
@@ -50,8 +51,28 @@ export default function AnalisisSorteoPage() {
       const response = await axios.get(`/draws?gameId=${selectedGame}&date=${selectedDate}`);
       const drawsList = response.data.data || [];
       setDraws(drawsList);
+      
       if (drawsList.length > 0 && !selectedDraw) {
-        setSelectedDraw(drawsList[0].id);
+        const now = new Date();
+        
+        // Sort draws by scheduledAt to find the next one chronologically
+        const sortedDraws = [...drawsList].sort((a, b) => 
+          new Date(a.scheduledAt) - new Date(b.scheduledAt)
+        );
+        
+        // Find the next draw that hasn't happened yet (SCHEDULED or CLOSED status)
+        let nextDraw = sortedDraws.find(draw => {
+          const scheduledTime = new Date(draw.scheduledAt);
+          return (draw.status === 'SCHEDULED' || draw.status === 'CLOSED') && scheduledTime >= now;
+        });
+        
+        // If no future draw, find the most recent CLOSED draw
+        if (!nextDraw) {
+          nextDraw = sortedDraws.reverse().find(d => d.status === 'CLOSED');
+        }
+        
+        // Fallback to first draw
+        setSelectedDraw(nextDraw?.id || sortedDraws[0].id);
       }
     } catch (error) {
       toast.error('Error cargando sorteos');
@@ -81,11 +102,10 @@ export default function AnalisisSorteoPage() {
   };
 
   const formatTime = (dateStr) => {
-    return new Date(dateStr).toLocaleTimeString('es-VE', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/Caracas'
-    });
+    const date = new Date(dateStr);
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
   };
 
   const getRiskBadge = (recommendation, riskLevel) => {

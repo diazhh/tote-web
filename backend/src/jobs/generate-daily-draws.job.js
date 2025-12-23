@@ -5,7 +5,7 @@ import drawTemplateService from '../services/draw-template.service.js';
 import drawPauseService from '../services/draw-pause.service.js';
 import systemConfigService from '../services/system-config.service.js';
 import { emitToAll } from '../lib/socket.js';
-import { nowInCaracas, getDayOfWeekInCaracas, timeStringToCaracasDate } from '../lib/dateUtils.js';
+import { now, getDayOfWeek, timeStringToDate } from '../lib/dateUtils.js';
 
 /**
  * Job para generar sorteos diarios basados en plantillas
@@ -52,9 +52,9 @@ class GenerateDailyDrawsJob {
         return;
       }
 
-      // Get current date in Caracas timezone
-      const today = nowInCaracas();
-      const dayOfWeek = getDayOfWeekInCaracas(today);
+      // Get current date
+      const today = now();
+      const dayOfWeek = getDayOfWeek(today);
 
       // Obtener plantillas activas para este día
       const templates = await drawTemplateService.getActiveForDay(dayOfWeek);
@@ -82,8 +82,8 @@ class GenerateDailyDrawsJob {
 
         // Crear sorteos para cada hora de la plantilla
         for (const time of template.drawTimes) {
-          // Convert time string to Caracas date and then to UTC for storage
-          const scheduledAt = timeStringToCaracasDate(today, time);
+          // Convert time string to date
+          const scheduledAt = timeStringToDate(today, time);
 
           // Verificar si ya existe un sorteo para esta fecha/hora/juego
           const existing = await prisma.draw.findFirst({
@@ -104,6 +104,8 @@ class GenerateDailyDrawsJob {
             data: {
               gameId: template.gameId,
               templateId: template.id,
+              drawDate: today,
+              drawTime: time,
               scheduledAt,
               status: 'SCHEDULED'
             }
