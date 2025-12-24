@@ -1,10 +1,10 @@
-const { PrismaClient } = require('@prisma/client');
+import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
-const testImageGenerator = require('./test-image-generator.service');
-const whatsappService = require('./whatsapp-baileys.service');
-const telegramService = require('./telegram.service');
-const facebookService = require('./facebook.service');
-const instagramService = require('./instagram.service');
+import testImageGenerator from './test-image-generator.service.js';
+import whatsappService from './whatsapp-baileys.service.js';
+import telegramService from './telegram.service.js';
+import facebookService from './facebook.service.js';
+import instagramService from './instagram.service.js';
 
 class ChannelConfigService {
   /**
