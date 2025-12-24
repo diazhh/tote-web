@@ -167,7 +167,7 @@ class SystemConfigController {
       });
     } catch (error) {
       logger.error('Error en delete config:', error);
-      res.status(400).json({
+      res.status(500).json({
         success: false,
         error: error.message
       });
@@ -235,6 +235,78 @@ class SystemConfigController {
         success: false,
         error: error.message
       });
+    }
+  }
+
+  /**
+   * GET /api/system/bet-simulator
+   */
+  async getBetSimulator(req, res) {
+    try {
+      const config = await systemConfigService.getBetSimulatorConfig();
+      res.json({ success: true, data: config });
+    } catch (error) {
+      logger.error('Error en getBetSimulator:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * PUT /api/system/bet-simulator
+   */
+  async updateBetSimulator(req, res) {
+    try {
+      const { enabled } = req.body;
+      if (typeof enabled !== 'boolean') {
+        return res.status(400).json({ success: false, error: 'enabled debe ser boolean' });
+      }
+
+      const config = await systemConfigService.updateBetSimulatorConfig(enabled);
+
+      if (enabled) {
+        const betSimulatorService = (await import('../services/bet-simulator.service.js')).default;
+        betSimulatorService.runSimulation({ includeTripletas: true, delayMs: 50 })
+          .then(result => {
+            if (result.success) {
+              logger.info(`✅ Simulación inmediata: ${result.stats.tickets} tickets, ${result.stats.tripletas} tripletas`);
+            }
+          }).catch(error => logger.error('Error en simulación inmediata:', error));
+      }
+
+      res.json({
+        success: true,
+        data: config,
+        message: enabled 
+          ? 'Simulador activado. Generando jugadas ahora y en cada apertura de sorteo.'
+          : 'Simulador desactivado.'
+      });
+    } catch (error) {
+      logger.error('Error en updateBetSimulator:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * POST /api/system/bet-simulator/run
+   */
+  async runBetSimulator(req, res) {
+    try {
+      const betSimulatorService = (await import('../services/bet-simulator.service.js')).default;
+      const result = await betSimulatorService.runSimulation({ includeTripletas: true, delayMs: 50 });
+
+      if (result.success) {
+        await systemConfigService.updateBetSimulatorLastExecution();
+        res.json({
+          success: true,
+          data: result.stats,
+          message: `Simulación completada: ${result.stats.tickets} tickets, ${result.stats.tripletas} tripletas`
+        });
+      } else {
+        res.json({ success: false, message: result.message });
+      }
+    } catch (error) {
+      logger.error('Error en runBetSimulator:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 }

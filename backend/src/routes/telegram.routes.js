@@ -16,6 +16,7 @@ router.get('/instances/:instanceId/chat/:chatId', telegramController.getChatInfo
 router.post('/instances/:instanceId/webhook', telegramController.setupWebhook);
 router.post('/instances/:instanceId/test', telegramController.testConnection);
 router.post('/instances/:instanceId/disconnect', telegramController.disconnectInstance);
+router.patch('/instances/:instanceId/toggle', telegramController.toggleActive);
 
 // Webhook endpoint
 router.post('/webhook/:instanceId', telegramController.handleWebhook);

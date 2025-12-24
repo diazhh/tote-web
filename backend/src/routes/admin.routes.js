@@ -1,21 +1,8 @@
 import express from 'express';
 import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 import { prisma } from '../lib/prisma.js';
-import adminBotController from '../controllers/admin-bot.controller.js';
 
 const router = express.Router();
-
-// ============================================
-// RUTAS DE BOTS DE ADMINISTRACIÓN
-// ============================================
-
-router.get('/bots', authenticate, authorize('ADMIN'), adminBotController.listBots.bind(adminBotController));
-router.get('/bots/:id', authenticate, authorize('ADMIN'), adminBotController.getBot.bind(adminBotController));
-router.post('/bots', authenticate, authorize('ADMIN'), adminBotController.createBot.bind(adminBotController));
-router.put('/bots/:id', authenticate, authorize('ADMIN'), adminBotController.updateBot.bind(adminBotController));
-router.delete('/bots/:id', authenticate, authorize('ADMIN'), adminBotController.deleteBot.bind(adminBotController));
-router.post('/bots/:id/games', authenticate, authorize('ADMIN'), adminBotController.assignGames.bind(adminBotController));
-router.post('/bots/:id/test', authenticate, authorize('ADMIN'), adminBotController.testBot.bind(adminBotController));
 
 router.get('/players', authenticate, authorize('ADMIN', 'TAQUILLA_ADMIN'), async (req, res) => {
   try {

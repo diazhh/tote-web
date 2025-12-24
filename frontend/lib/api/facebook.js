@@ -119,6 +119,16 @@ const facebookAPI = {
   deleteInstance: async (instanceId) => {
     const response = await api.delete(`/facebook/instances/${instanceId}`);
     return response.data;
+  },
+
+  /**
+   * Activar/Desactivar instancia (pausar envíos)
+   * @param {string} instanceId - ID de la instancia
+   * @param {boolean} isActive - Estado activo/inactivo
+   */
+  toggleActive: async (instanceId, isActive) => {
+    const response = await api.patch(`/facebook/instances/${instanceId}/toggle`, { isActive });
+    return response.data;
   }
 };
 

@@ -183,6 +183,7 @@ app.use('/api/tiktok', tiktokRoutes);
 
 // Rutas de bots de administración y vinculación Telegram
 import adminRoutes from './routes/admin.routes.js';
+app.use('/api/admin', adminBotRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/users', adminBotRoutes);
 

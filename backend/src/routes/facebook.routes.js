@@ -16,6 +16,7 @@ router.get('/instances/:instanceId/user/:userId', facebookController.getUserInfo
 router.post('/instances/:instanceId/webhook', facebookController.setupWebhook);
 router.post('/instances/:instanceId/test', facebookController.testConnection);
 router.post('/instances/:instanceId/disconnect', facebookController.disconnectInstance);
+router.patch('/instances/:instanceId/toggle', facebookController.toggleActive);
 
 // Webhook endpoints
 router.get('/instances/:instanceId/webhook', facebookController.verifyWebhook);

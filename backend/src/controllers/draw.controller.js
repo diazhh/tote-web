@@ -7,6 +7,7 @@ import prewinnerOptimizerService from '../services/prewinner-optimizer.service.j
 import prewinnerSelectionService from '../services/prewinner-selection.service.js';
 import publicationService from '../services/publication.service.js';
 import * as imageService from '../services/imageService.js';
+import { prisma } from '../lib/prisma.js';
 
 export class DrawController {
   /**
@@ -459,7 +460,7 @@ export class DrawController {
         });
       }
 
-      // Validar que esté publicado o tenga ganador
+      // Validar que tenga ganador
       if (!draw.winnerItemId) {
         return res.status(400).json({
           success: false,
@@ -467,36 +468,41 @@ export class DrawController {
         });
       }
 
-      let result;
+      // Obtener tipos de canales a republicar
+      let channelTypes = channels;
+      
+      if (!channelTypes || !Array.isArray(channelTypes) || channelTypes.length === 0) {
+        // Si no se especifican canales, obtener todos los activos del juego
+        const activeChannels = await prisma.gameChannel.findMany({
+          where: { gameId: draw.gameId, isActive: true },
+          select: { channelType: true }
+        });
+        channelTypes = [...new Set(activeChannels.map(c => c.channelType))];
+      }
 
-      if (channels && Array.isArray(channels) && channels.length > 0) {
-        // Republicar solo en canales específicos
-        const results = [];
-        for (const channelType of channels) {
-          try {
-            const channelResult = await publicationService.republishToChannel(id, channelType);
-            results.push({
-              channelType,
-              ...channelResult,
-            });
-          } catch (error) {
-            results.push({
-              channelType,
-              success: false,
-              error: error.message,
-            });
-          }
+      // Republicar en cada canal
+      const results = [];
+      for (const channelType of channelTypes) {
+        try {
+          const channelResult = await publicationService.republishToChannel(id, channelType);
+          results.push({
+            channelType,
+            success: true,
+            ...channelResult,
+          });
+        } catch (error) {
+          results.push({
+            channelType,
+            success: false,
+            error: error.message,
+          });
         }
-        result = { results };
-      } else {
-        // Republicar en todos los canales activos
-        result = await publicationService.publishDraw(id);
       }
 
       res.json({
         success: true,
-        data: result,
-        message: 'Sorteo republicado exitosamente',
+        data: { results },
+        message: `Sorteo republicado en ${results.filter(r => r.success).length}/${results.length} canales`,
       });
     } catch (error) {
       next(error);

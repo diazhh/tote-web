@@ -112,6 +112,29 @@ class PublicationService {
       const instanceId = channel.whatsappInstanceId;
       const recipients = channel.recipients || [];
 
+      // Validar instancia
+      if (!instanceId) {
+        throw new Error('No hay instancia de WhatsApp configurada para este canal');
+      }
+
+      // Verificar que la instancia esté activa (no pausada)
+      const instance = await prisma.whatsAppInstance.findUnique({
+        where: { instanceId }
+      });
+
+      if (!instance) {
+        throw new Error(`Instancia ${instanceId} no encontrada`);
+      }
+
+      if (instance.isActive === false) {
+        logger.info(`Instancia ${instanceId} está pausada, omitiendo envío`);
+        return {
+          success: false,
+          skipped: true,
+          message: 'Instancia pausada por el administrador'
+        };
+      }
+
       // Crear o actualizar registro de publicación
       const publication = await prisma.drawPublication.upsert({
         where: {
@@ -131,11 +154,6 @@ class PublicationService {
           retries: { increment: 1 }
         }
       });
-
-      // Validar instancia
-      if (!instanceId) {
-        throw new Error('No hay instancia de WhatsApp configurada para este canal');
-      }
 
       if (!recipients || recipients.length === 0) {
         throw new Error('No hay destinatarios configurados para este canal');
@@ -272,6 +290,29 @@ class PublicationService {
       const instanceId = channel.telegramInstanceId;
       const chatId = channel.telegramChatId;
 
+      // Validar configuración
+      if (!instanceId) {
+        throw new Error('No hay instancia de Telegram configurada para este canal');
+      }
+
+      // Verificar que la instancia esté activa (no pausada)
+      const instance = await prisma.telegramInstance.findUnique({
+        where: { instanceId }
+      });
+
+      if (!instance) {
+        throw new Error(`Instancia ${instanceId} no encontrada`);
+      }
+
+      if (instance.isActive === false) {
+        logger.info(`Instancia Telegram ${instanceId} está pausada, omitiendo envío`);
+        return {
+          success: false,
+          skipped: true,
+          message: 'Instancia pausada por el administrador'
+        };
+      }
+
       // Crear o actualizar registro de publicación
       const publication = await prisma.drawPublication.upsert({
         where: {
@@ -291,11 +332,6 @@ class PublicationService {
           retries: { increment: 1 }
         }
       });
-
-      // Validar configuración
-      if (!instanceId) {
-        throw new Error('No hay instancia de Telegram configurada para este canal');
-      }
 
       if (!chatId) {
         throw new Error('No hay chat ID configurado para este canal');
@@ -376,6 +412,29 @@ class PublicationService {
     try {
       const instanceId = channel.facebookInstanceId;
 
+      // Validar configuración
+      if (!instanceId) {
+        throw new Error('No hay instancia de Facebook configurada para este canal');
+      }
+
+      // Verificar que la instancia esté activa (no pausada)
+      const instance = await prisma.facebookInstance.findUnique({
+        where: { instanceId }
+      });
+
+      if (!instance) {
+        throw new Error(`Instancia ${instanceId} no encontrada`);
+      }
+
+      if (instance.isActive === false) {
+        logger.info(`Instancia Facebook ${instanceId} está pausada, omitiendo envío`);
+        return {
+          success: false,
+          skipped: true,
+          message: 'Instancia pausada por el administrador'
+        };
+      }
+
       // Crear o actualizar registro de publicación
       const publication = await prisma.drawPublication.upsert({
         where: {
@@ -395,11 +454,6 @@ class PublicationService {
           retries: { increment: 1 }
         }
       });
-
-      // Validar configuración
-      if (!instanceId) {
-        throw new Error('No hay instancia de Facebook configurada para este canal');
-      }
 
       // Preparar mensaje usando la plantilla del canal
       const message = messageTemplateService.renderDrawMessage(
@@ -459,6 +513,29 @@ class PublicationService {
     try {
       const instanceId = channel.instagramInstanceId;
 
+      // Validar configuración
+      if (!instanceId) {
+        throw new Error('No hay instancia de Instagram configurada para este canal');
+      }
+
+      // Verificar que la instancia esté activa (no pausada)
+      const instance = await prisma.instagramInstance.findUnique({
+        where: { instanceId }
+      });
+
+      if (!instance) {
+        throw new Error(`Instancia ${instanceId} no encontrada`);
+      }
+
+      if (instance.isActive === false) {
+        logger.info(`Instancia Instagram ${instanceId} está pausada, omitiendo envío`);
+        return {
+          success: false,
+          skipped: true,
+          message: 'Instancia pausada por el administrador'
+        };
+      }
+
       // Crear o actualizar registro de publicación
       const publication = await prisma.drawPublication.upsert({
         where: {
@@ -478,11 +555,6 @@ class PublicationService {
           retries: { increment: 1 }
         }
       });
-
-      // Validar configuración
-      if (!instanceId) {
-        throw new Error('No hay instancia de Instagram configurada para este canal');
-      }
 
       if (!draw.imageUrl) {
         throw new Error('Instagram requiere una imagen para publicar');

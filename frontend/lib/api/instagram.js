@@ -115,6 +115,16 @@ const instagramAPI = {
       response_type: 'code'
     });
     return `${baseUrl}?${params.toString()}`;
+  },
+
+  /**
+   * Activar/Desactivar instancia (pausar envíos)
+   * @param {string} instanceId - ID de la instancia
+   * @param {boolean} isActive - Estado activo/inactivo
+   */
+  toggleActive: async (instanceId, isActive) => {
+    const response = await api.patch(`/instagram/instances/${instanceId}/toggle`, { isActive });
+    return response.data;
   }
 };
 

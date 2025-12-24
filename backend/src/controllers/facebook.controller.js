@@ -288,6 +288,34 @@ class FacebookController {
       });
     }
   }
+
+  /**
+   * Activar/Desactivar instancia (pausar envíos)
+   * PATCH /api/facebook/instances/:instanceId/toggle
+   */
+  async toggleActive(req, res) {
+    try {
+      const { instanceId } = req.params;
+      const { isActive } = req.body;
+
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'El campo isActive debe ser un booleano'
+        });
+      }
+
+      const result = await facebookService.toggleActive(instanceId, isActive);
+
+      res.json(result);
+    } catch (error) {
+      logger.error('Error al cambiar estado de instancia:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 }
 
 export default new FacebookController();

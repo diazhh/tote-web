@@ -320,7 +320,6 @@ class FacebookService {
   async listInstances() {
     try {
       const instances = await prisma.facebookInstance.findMany({
-        where: { isActive: true },
         orderBy: { createdAt: 'desc' }
       });
 
@@ -448,6 +447,34 @@ class FacebookService {
 
     } catch (error) {
       logger.error('Error al eliminar instancia:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Activar/Desactivar instancia (pausar envíos)
+   */
+  async toggleActive(instanceId, isActive) {
+    try {
+      const instance = await prisma.facebookInstance.update({
+        where: { instanceId },
+        data: { isActive }
+      });
+
+      logger.info(`Instancia de Facebook ${isActive ? 'activada' : 'pausada'}: ${instanceId}`);
+
+      return {
+        success: true,
+        message: `Instancia ${isActive ? 'activada' : 'pausada'} exitosamente`,
+        instance: {
+          instanceId: instance.instanceId,
+          name: instance.name,
+          isActive: instance.isActive
+        }
+      };
+
+    } catch (error) {
+      logger.error('Error al cambiar estado de instancia:', error);
       throw error;
     }
   }

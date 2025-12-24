@@ -221,12 +221,19 @@ model SystemConfig {
   id          String    @id @default(uuid())
   key         String    @unique // Clave de configuración (ej: "emergency_stop")
   value       String    // Valor (JSON string)
-  description String?   // Descripción de la configuración
-  updatedBy   String?   // Usuario que actualizó
+  description String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   
   @@index([key])
+}
+
+model BetSimulatorConfig {
+  id              String    @id @default(uuid())
+  enabled         Boolean   @default(false)
+  lastExecutedAt  DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 // ============================================

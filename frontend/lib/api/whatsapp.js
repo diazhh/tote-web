@@ -130,6 +130,16 @@ const whatsappAPI = {
   cleanupSessions: async () => {
     const response = await api.post('/whatsapp/cleanup');
     return response.data;
+  },
+
+  /**
+   * Activar/Desactivar instancia (pausar envíos)
+   * @param {string} instanceId - ID de la instancia
+   * @param {boolean} isActive - Estado activo/inactivo
+   */
+  toggleActive: async (instanceId, isActive) => {
+    const response = await api.patch(`/whatsapp/instances/${instanceId}/toggle`, { isActive });
+    return response.data;
   }
 };
 

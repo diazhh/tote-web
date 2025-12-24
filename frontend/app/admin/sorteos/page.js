@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import drawsAPI from '@/lib/api/draws';
 import publicAPI from '@/lib/api/public';
 import { toast } from 'sonner';
-import { Calendar, Filter, RefreshCw, Plus, Edit2, Trash2, Eye } from 'lucide-react';
+import { Calendar, Filter, RefreshCw, Plus, Edit2, Trash2, Eye, Play, Image, Send } from 'lucide-react';
 import ResponsiveTable from '@/components/common/ResponsiveTable';
 import ChangeWinnerModal from '@/components/admin/ChangeWinnerModal';
 import DrawDetailModal from '@/components/admin/DrawDetailModal';
@@ -108,6 +108,71 @@ export default function SorteosPage() {
     toast.success('Ganador actualizado correctamente');
   };
 
+  // Verificar si un sorteo puede ser totalizado manualmente
+  const canForceTotalize = (draw) => {
+    if (!['SCHEDULED', 'CLOSED'].includes(draw.status)) return false;
+    const scheduledTime = new Date(draw.scheduledAt);
+    return scheduledTime < new Date();
+  };
+
+  // Totalizar sorteo manualmente
+  const handleForceTotalize = async (draw) => {
+    if (!confirm(`¿Totalizar manualmente el sorteo de ${formatCaracasTime(draw.scheduledAt)}?`)) return;
+    
+    try {
+      toast.loading('Totalizando sorteo...');
+      const response = await drawsAPI.forceTotalize(draw.id);
+      toast.dismiss();
+      if (response.success) {
+        toast.success('Sorteo totalizado exitosamente');
+        loadDraws();
+      } else {
+        toast.error(response.error || 'Error al totalizar');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.response?.data?.error || 'Error al totalizar sorteo');
+    }
+  };
+
+  // Regenerar imagen del sorteo
+  const handleRegenerateImage = async (draw) => {
+    try {
+      toast.loading('Regenerando imagen...');
+      const response = await drawsAPI.regenerateImage(draw.id);
+      toast.dismiss();
+      if (response.success) {
+        toast.success('Imagen regenerada exitosamente');
+        loadDraws();
+      } else {
+        toast.error(response.error || 'Error al regenerar imagen');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.response?.data?.error || 'Error al regenerar imagen');
+    }
+  };
+
+  // Republicar sorteo en canales
+  const handleRepublish = async (draw) => {
+    if (!confirm(`¿Reenviar el sorteo de ${formatCaracasTime(draw.scheduledAt)} a los canales de distribución?`)) return;
+    
+    try {
+      toast.loading('Republicando en canales...');
+      const response = await drawsAPI.republish(draw.id);
+      toast.dismiss();
+      if (response.success) {
+        toast.success('Sorteo republicado exitosamente');
+        loadDraws();
+      } else {
+        toast.error(response.error || 'Error al republicar');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.response?.data?.error || 'Error al republicar sorteo');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const styles = {
       SCHEDULED: 'bg-blue-100 text-blue-800',
@@ -208,77 +273,130 @@ export default function SorteosPage() {
         </div>
       </div>
 
-      {/* Draws Table */}
+      {/* Draws - Responsive: Cards on mobile, Table on desktop */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        <ResponsiveTable
-          data={draws}
-          loading={loading}
-          loadingMessage="Cargando sorteos..."
-          emptyMessage="No hay sorteos para mostrar"
-          emptyIcon={<Calendar className="w-12 h-12 text-gray-400" />}
-          columns={[
-            {
-              key: 'game.name',
-              label: 'Juego',
-              primary: true,
-              render: (draw) => (
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{draw.game?.name}</div>
-                  <div className="text-sm text-gray-500">{draw.game?.type}</div>
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+          </div>
+        ) : draws.length === 0 ? (
+          <div className="text-center py-12">
+            <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500">No hay sorteos para mostrar</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile Cards - visible only on small screens */}
+            <div className="block lg:hidden divide-y divide-gray-200">
+              {draws.map((draw) => (
+                <div key={draw.id} className="p-4 hover:bg-gray-50 transition">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex-1">
+                      <h3 className="font-medium text-gray-900">{draw.game?.name}</h3>
+                      <p className="text-sm text-gray-500">{draw.game?.type}</p>
+                    </div>
+                    {getStatusBadge(draw.status)}
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <p className="text-xs text-gray-500">Fecha</p>
+                      <p className="text-sm font-medium text-gray-900">{formatCaracasDate(draw.scheduledAt)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Hora</p>
+                      <p className="text-sm font-medium text-gray-900">{formatCaracasTime(draw.scheduledAt)}</p>
+                    </div>
+                  </div>
+                  
+                  {(draw.winnerItem || draw.preselectedItem) && (
+                    <div className="mb-3">
+                      <p className="text-xs text-gray-500 mb-1">Ganador</p>
+                      {draw.winnerItem ? (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-lg font-bold text-blue-600">{draw.winnerItem.number}</span>
+                          {draw.winnerItem.name && <span className="text-sm text-gray-600">{draw.winnerItem.name}</span>}
+                        </div>
+                      ) : (
+                        <div className="flex items-center space-x-2">
+                          <span className="text-lg font-bold text-orange-600">{draw.preselectedItem.number}</span>
+                          <span className="text-xs text-orange-600">(Preseleccionado)</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <button
+                    onClick={() => handleViewDetail(draw)}
+                    className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Ver Detalles
+                  </button>
                 </div>
-              )
-            },
-            {
-              key: 'scheduledAt',
-              label: 'Fecha/Hora',
-              render: (draw) => (
-                <div>
-                  <div className="text-sm text-gray-900">{formatCaracasDate(draw.scheduledAt)}</div>
-                  <div className="text-sm text-gray-500">{formatCaracasTime(draw.scheduledAt)}</div>
-                </div>
-              )
-            },
-            {
-              key: 'status',
-              label: 'Estado',
-              render: (draw) => getStatusBadge(draw.status)
-            },
-            {
-              key: 'winnerItem',
-              label: 'Ganador',
-              render: (draw) => draw.winnerItem ? (
-                <div>
-                  <div className="text-sm font-medium text-gray-900">{draw.winnerItem.number}</div>
-                  {draw.winnerItem.name && <div className="text-sm text-gray-500">{draw.winnerItem.name}</div>}
-                </div>
-              ) : draw.preselectedItem ? (
-                <div className="text-sm font-medium text-orange-600">
-                  {draw.preselectedItem.number} (Pre)
-                </div>
-              ) : <span className="text-sm text-gray-400">-</span>
-            }
-          ]}
-          actions={(draw) => (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleViewDetail(draw)}
-                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
-                title="Ver detalles"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
-              {draw.status === 'CLOSED' && (
-                <button
-                  onClick={() => handleChangeWinner(draw)}
-                  className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg"
-                  title="Cambiar ganador"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-              )}
+              ))}
             </div>
-          )}
-        />
+
+            {/* Desktop Table - visible only on large screens */}
+            <div className="hidden lg:block overflow-x-auto">
+              <ResponsiveTable
+                data={draws}
+                loading={false}
+                columns={[
+                  {
+                    key: 'game.name',
+                    label: 'Juego',
+                    primary: true,
+                    render: (draw) => (
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{draw.game?.name}</div>
+                        <div className="text-sm text-gray-500">{draw.game?.type}</div>
+                      </div>
+                    )
+                  },
+                  {
+                    key: 'scheduledAt',
+                    label: 'Fecha/Hora',
+                    render: (draw) => (
+                      <div>
+                        <div className="text-sm text-gray-900">{formatCaracasDate(draw.scheduledAt)}</div>
+                        <div className="text-sm text-gray-500">{formatCaracasTime(draw.scheduledAt)}</div>
+                      </div>
+                    )
+                  },
+                  {
+                    key: 'status',
+                    label: 'Estado',
+                    render: (draw) => getStatusBadge(draw.status)
+                  },
+                  {
+                    key: 'winnerItem',
+                    label: 'Ganador',
+                    render: (draw) => draw.winnerItem ? (
+                      <div>
+                        <div className="text-sm font-medium text-gray-900">{draw.winnerItem.number}</div>
+                        {draw.winnerItem.name && <div className="text-sm text-gray-500">{draw.winnerItem.name}</div>}
+                      </div>
+                    ) : draw.preselectedItem ? (
+                      <div className="text-sm font-medium text-orange-600">
+                        {draw.preselectedItem.number} (Pre)
+                      </div>
+                    ) : <span className="text-sm text-gray-400">-</span>
+                  }
+                ]}
+                actions={(draw) => (
+                  <button
+                    onClick={() => handleViewDetail(draw)}
+                    className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                    title="Ver detalles"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </button>
+                )}
+              />
+            </div>
+          </>
+        )}
 
         {/* Pagination */}
         {draws.length > 0 && pagination.totalPages > 1 && (

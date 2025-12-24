@@ -254,6 +254,34 @@ class TelegramController {
   }
 
   /**
+   * Activar/Desactivar instancia (pausar envíos)
+   * PATCH /api/telegram/instances/:instanceId/toggle
+   */
+  async toggleActive(req, res) {
+    try {
+      const { instanceId } = req.params;
+      const { isActive } = req.body;
+
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'El campo isActive debe ser un booleano'
+        });
+      }
+
+      const result = await telegramService.toggleActive(instanceId, isActive);
+
+      res.json(result);
+    } catch (error) {
+      logger.error('Error al cambiar estado de instancia:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  /**
    * Webhook endpoint para recibir actualizaciones de Telegram
    * POST /api/telegram/webhook/:instanceId
    */

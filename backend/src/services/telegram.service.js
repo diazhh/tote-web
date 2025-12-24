@@ -204,7 +204,6 @@ class TelegramService {
   async listInstances() {
     try {
       const instances = await prisma.telegramInstance.findMany({
-        where: { isActive: true },
         orderBy: { createdAt: 'desc' }
       });
 
@@ -349,6 +348,34 @@ class TelegramService {
 
     } catch (error) {
       logger.error('Error al eliminar instancia:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Activar/Desactivar instancia (pausar envíos)
+   */
+  async toggleActive(instanceId, isActive) {
+    try {
+      const instance = await prisma.telegramInstance.update({
+        where: { instanceId },
+        data: { isActive }
+      });
+
+      logger.info(`Instancia de Telegram ${isActive ? 'activada' : 'pausada'}: ${instanceId}`);
+
+      return {
+        success: true,
+        message: `Instancia ${isActive ? 'activada' : 'pausada'} exitosamente`,
+        instance: {
+          instanceId: instance.instanceId,
+          name: instance.name,
+          isActive: instance.isActive
+        }
+      };
+
+    } catch (error) {
+      logger.error('Error al cambiar estado de instancia:', error);
       throw error;
     }
   }

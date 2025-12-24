@@ -326,7 +326,6 @@ class WhatsAppBaileysService {
       
       // Obtener instancias de la BD - FUENTE ÚNICA DE VERDAD
       const dbInstances = await prisma.whatsAppInstance.findMany({
-        where: { isActive: true },
         orderBy: { updatedAt: 'desc' }
       });
 
@@ -438,6 +437,34 @@ class WhatsAppBaileysService {
       };
     } catch (error) {
       logger.error(`Error al eliminar instancia ${instanceId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Activar/Desactivar instancia (pausar envíos)
+   */
+  async toggleActive(instanceId, isActive) {
+    try {
+      const instance = await prisma.whatsAppInstance.update({
+        where: { instanceId },
+        data: { isActive }
+      });
+
+      logger.info(`Instancia de WhatsApp ${isActive ? 'activada' : 'pausada'}: ${instanceId}`);
+
+      return {
+        success: true,
+        message: `Instancia ${isActive ? 'activada' : 'pausada'} exitosamente`,
+        instance: {
+          instanceId: instance.instanceId,
+          name: instance.name,
+          isActive: instance.isActive
+        }
+      };
+
+    } catch (error) {
+      logger.error('Error al cambiar estado de instancia:', error);
       throw error;
     }
   }

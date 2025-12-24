@@ -112,6 +112,33 @@ const drawsAPI = {
   getPublications: async (id) => {
     const response = await api.get(`/draws/${id}/publications`);
     return response.data;
+  },
+
+  /**
+   * Totalizar sorteo manualmente
+   * Para sorteos que no se ejecutaron automáticamente
+   */
+  forceTotalize: async (id, winnerItemId = null) => {
+    const response = await api.post(`/draws/${id}/force-totalize`, { winnerItemId });
+    return response.data;
+  },
+
+  /**
+   * Regenerar imagen del sorteo
+   */
+  regenerateImage: async (id) => {
+    const response = await api.post(`/draws/${id}/regenerate-image`);
+    return response.data;
+  },
+
+  /**
+   * Republicar sorteo en canales
+   * @param {string} id - ID del sorteo
+   * @param {string[]} channels - Array opcional de tipos de canal ['WHATSAPP', 'TELEGRAM', etc]
+   */
+  republish: async (id, channels = null) => {
+    const response = await api.post(`/draws/${id}/republish`, { channels });
+    return response.data;
   }
 };
 

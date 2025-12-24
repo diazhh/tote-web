@@ -138,8 +138,41 @@ class GenerateDailyDrawsJob {
           }
         }
       });
+
+      logger.info(`✅ Generación completada: ${createdCount} sorteos creados, ${skippedCount} saltados`);
+
+      // Emitir evento de actualización
+      emitToAll('draws:generated', {
+        created: createdCount,
+        skipped: skippedCount
+      });
+
+      // Si el simulador está habilitado, ejecutar generación de jugadas
+      if (createdCount > 0) {
+        const isSimulatorEnabled = await systemConfigService.isBetSimulatorEnabled();
+        if (isSimulatorEnabled) {
+          logger.info('🎲 Simulador habilitado - Generando jugadas para nuevos sorteos...');
+          const betSimulatorService = (await import('../services/bet-simulator.service.js')).default;
+          
+          betSimulatorService.runSimulation({
+            includeTripletas: true,
+            delayMs: 50
+          }).then(result => {
+            if (result.success) {
+              logger.info(
+                `✅ Jugadas generadas: ${result.stats.tickets} tickets, ` +
+                `${result.stats.tripletas} tripletas, $${result.stats.totalAmount.toFixed(2)}`
+              );
+              systemConfigService.updateBetSimulatorLastExecution();
+            }
+          }).catch(error => {
+            logger.error('Error generando jugadas automáticas:', error);
+          });
+        }
+      }
+
     } catch (error) {
-      logger.error('❌ Error en GenerateDailyDraws:', error);
+      logger.error('❌ Error en GenerateDailyDrawsJob:', error);
     }
   }
 }

@@ -90,6 +90,134 @@ Carga todos los tickets de una vez, filtra en frontend. No hay paginación del b
 
 ## ❌ Tareas Pendientes (Priorizadas)
 
+### **FASE 0: Servicio de Generación Automática de Jugadas** (Prioridad: CRÍTICA)
+
+#### 0.1. Backend - Servicio de Generación de Jugadas
+
+**Archivo:** `backend/src/services/play-generator.service.js` (NUEVO)
+
+**Descripción:** Servicio que genera jugadas automáticas para simular actividad de jugadores.
+
+**Tareas:**
+- [ ] Crear servicio `PlayGeneratorService` con método `generateRandomPlays()`
+- [ ] Configurar parámetros: cantidad de jugadas, rango de montos, juegos activos
+- [ ] Generar números aleatorios según las reglas de cada juego
+- [ ] Crear tickets automáticos con usuarios de prueba o sistema
+- [ ] Implementar lógica de distribución realista (evitar patrones obvios)
+- [ ] Agregar logs de auditoría para jugadas generadas automáticamente
+
+**Archivo:** `backend/src/jobs/play-generator.job.js` (NUEVO)
+
+**Tareas:**
+- [ ] Crear job cron configurable para ejecutar el generador
+- [ ] Permitir configurar frecuencia (cada X minutos)
+- [ ] Integrar con el sistema de jobs existente
+
+#### 0.2. Backend - Endpoints de Configuración
+
+**Archivo:** `backend/src/controllers/system-config.controller.js`
+
+```javascript
+// AGREGAR estos métodos:
+
+/**
+ * GET /api/system/play-generator
+ * Obtener configuración del generador de jugadas
+ */
+async getPlayGeneratorConfig(req, res) { ... }
+
+/**
+ * PUT /api/system/play-generator
+ * Actualizar configuración del generador
+ * Body: { enabled, frequency, minAmount, maxAmount, playsPerRun, gameIds }
+ */
+async updatePlayGeneratorConfig(req, res) { ... }
+
+/**
+ * POST /api/system/play-generator/run
+ * Ejecutar generador manualmente (para pruebas)
+ */
+async runPlayGenerator(req, res) { ... }
+```
+
+**Tareas:**
+- [ ] Crear tabla `PlayGeneratorConfig` en Prisma con campos: enabled, frequency, minAmount, maxAmount, playsPerRun
+- [ ] Implementar endpoints GET/PUT para configuración
+- [ ] Implementar endpoint POST para ejecución manual
+- [ ] Agregar validaciones de permisos (solo ADMIN)
+
+#### 0.3. Frontend - Panel de Control del Generador
+
+**Archivo:** `frontend/app/admin/configuracion/page.js`
+
+**Tareas:**
+- [ ] Agregar sección "Generador de Jugadas" en la página de configuración
+- [ ] Toggle para activar/desactivar el servicio
+- [ ] Campos de configuración:
+  - Frecuencia (minutos entre ejecuciones)
+  - Cantidad de jugadas por ejecución
+  - Monto mínimo y máximo por jugada
+  - Selección de juegos activos
+- [ ] Botón "Generar Ahora" para pruebas manuales
+- [ ] Indicador de estado (activo/inactivo, última ejecución)
+- [ ] Estadísticas: total de jugadas generadas hoy/semana
+
+**Componente:** `frontend/components/admin/config/PlayGeneratorConfig.js` (NUEVO)
+
+```javascript
+// Componente dedicado para la configuración del generador
+export default function PlayGeneratorConfig() {
+  // Estado, formulario, y lógica de actualización
+}
+```
+
+#### 0.4. Base de Datos - Schema de Prisma
+
+**Archivo:** `backend/prisma/schema.prisma`
+
+```prisma
+model PlayGeneratorConfig {
+  id            String   @id @default(cuid())
+  enabled       Boolean  @default(false)
+  frequency     Int      @default(30) // minutos
+  minAmount     Float    @default(1.0)
+  maxAmount     Float    @default(100.0)
+  playsPerRun   Int      @default(10)
+  lastRunAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model GeneratedPlay {
+  id          String   @id @default(cuid())
+  ticketId    String
+  ticket      Ticket   @relation(fields: [ticketId], references: [id])
+  amount      Float
+  gameId      String
+  game        Game     @relation(fields: [gameId], references: [id])
+  generatedAt DateTime @default(now())
+  
+  @@index([generatedAt])
+  @@index([gameId])
+}
+```
+
+**Tareas:**
+- [ ] Agregar modelos al schema de Prisma
+- [ ] Crear migración: `npx prisma migrate dev --name add_play_generator`
+- [ ] Actualizar relaciones en modelos existentes (Ticket, Game)
+
+#### 0.5. Seguridad y Auditoría
+
+**Tareas:**
+- [ ] Marcar jugadas generadas automáticamente (campo `isGenerated` en Ticket)
+- [ ] Registrar en AuditLog cada ejecución del generador
+- [ ] Implementar límites de seguridad (máximo de jugadas por día)
+- [ ] Crear usuarios de sistema para las jugadas generadas
+- [ ] Excluir jugadas generadas de reportes de ganancias reales
+
+---
+
 ### **FASE 1: Gestión Manual de Sorteos** (Prioridad: CRÍTICA)
 
 #### 1.1. Backend - Endpoints de Totalización Manual
@@ -347,6 +475,8 @@ curl -s -X GET "http://localhost:5000/api/draws/{DRAW_ID}/triplet-risk" \
 
 | Funcionalidad | Criterio de Éxito |
 |---------------|-------------------|
+| Generador de jugadas | Genera jugadas configurables en < 5s, distribución realista |
+| Panel de control generador | Toggle activa/desactiva servicio correctamente |
 | Totalización manual | Sorteo pasa de SCHEDULED/CLOSED a PUBLISHED en < 30s |
 | Regenerar imagen | Nueva imagen generada en < 5s |
 | Reenvío a canales | 100% de canales seleccionados reciben el mensaje |
@@ -359,13 +489,14 @@ curl -s -X GET "http://localhost:5000/api/draws/{DRAW_ID}/triplet-risk" \
 
 ## 🔄 Orden de Implementación Recomendado
 
-1. **Día 1-2:** FASE 1 - Totalización manual (crítico para operación)
-2. **Día 3:** FASE 2 - Status de tickets (integridad de datos)
-3. **Día 4:** FASE 4.1 - Ordenamiento números (quick win)
-4. **Día 5:** FASE 5 - Contador tripleta (fix de bug reportado)
-5. **Día 6-7:** FASE 3 - Paginación tickets
-6. **Día 8:** FASE 4.2 - Alertas de riesgo
-7. **Día 9-10:** FASE 6-7 - Modales y reportes
+1. **Día 1-2:** FASE 0 - Generador de jugadas automáticas (crítico para simulación)
+2. **Día 3-4:** FASE 1 - Totalización manual (crítico para operación)
+3. **Día 5:** FASE 2 - Status de tickets (integridad de datos)
+4. **Día 6:** FASE 4.1 - Ordenamiento números (quick win)
+5. **Día 7:** FASE 5 - Contador tripleta (fix de bug reportado)
+6. **Día 8-9:** FASE 3 - Paginación tickets
+7. **Día 10:** FASE 4.2 - Alertas de riesgo
+8. **Día 11-12:** FASE 6-7 - Modales y reportes
 
 ---
 

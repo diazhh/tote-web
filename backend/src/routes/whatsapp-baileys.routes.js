@@ -78,6 +78,13 @@ router.post('/instances/:instanceId/test', whatsappBaileysController.sendTestMes
 router.post('/instances/:instanceId/check-number', whatsappBaileysController.checkNumber);
 
 /**
+ * @route   PATCH /api/whatsapp/instances/:instanceId/toggle
+ * @desc    Activar/Desactivar instancia (pausar envíos)
+ * @access  Private
+ */
+router.patch('/instances/:instanceId/toggle', whatsappBaileysController.toggleActive);
+
+/**
  * @route   POST /api/whatsapp/cleanup
  * @desc    Limpiar sesiones inactivas
  * @access  Private

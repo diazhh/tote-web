@@ -242,6 +242,64 @@ class SystemConfigService {
       return { enabled: false };
     }
   }
+
+  /**
+   * Obtener configuración del simulador de jugadas
+   */
+  async getBetSimulatorConfig() {
+    let config = await prisma.betSimulatorConfig.findFirst();
+    
+    if (!config) {
+      config = await prisma.betSimulatorConfig.create({
+        data: { enabled: false }
+      });
+    }
+    
+    return config;
+  }
+
+  /**
+   * Actualizar estado del simulador
+   */
+  async updateBetSimulatorConfig(enabled) {
+    let config = await prisma.betSimulatorConfig.findFirst();
+    
+    if (!config) {
+      config = await prisma.betSimulatorConfig.create({
+        data: { enabled }
+      });
+    } else {
+      config = await prisma.betSimulatorConfig.update({
+        where: { id: config.id },
+        data: { enabled }
+      });
+    }
+    
+    logger.info(`Simulador de jugadas ${enabled ? 'activado' : 'desactivado'}`);
+    return config;
+  }
+
+  /**
+   * Actualizar última ejecución del simulador
+   */
+  async updateBetSimulatorLastExecution() {
+    const config = await prisma.betSimulatorConfig.findFirst();
+    
+    if (config) {
+      await prisma.betSimulatorConfig.update({
+        where: { id: config.id },
+        data: { lastExecutedAt: new Date() }
+      });
+    }
+  }
+
+  /**
+   * Verificar si el simulador está habilitado
+   */
+  async isBetSimulatorEnabled() {
+    const config = await this.getBetSimulatorConfig();
+    return config.enabled;
+  }
 }
 
 export default new SystemConfigService();

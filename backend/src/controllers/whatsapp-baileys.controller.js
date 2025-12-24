@@ -199,6 +199,34 @@ class WhatsAppBaileysController {
   }
 
   /**
+   * Activar/Desactivar instancia (pausar envíos)
+   * PATCH /api/whatsapp/instances/:instanceId/toggle
+   */
+  async toggleActive(req, res) {
+    try {
+      const { instanceId } = req.params;
+      const { isActive } = req.body;
+
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({
+          success: false,
+          message: 'El campo isActive debe ser un booleano'
+        });
+      }
+
+      const result = await whatsappBaileysService.toggleActive(instanceId, isActive);
+
+      res.json(result);
+    } catch (error) {
+      logger.error('Error al cambiar estado de instancia:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
+  /**
    * Reconectar instancia
    * POST /api/whatsapp/instances/:instanceId/reconnect
    */

@@ -16,7 +16,7 @@ export default function TelegramLinkCard() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState(null);
 
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api';
 
   useEffect(() => {
     fetchStatus();
@@ -33,7 +33,7 @@ export default function TelegramLinkCard() {
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/api/users/telegram/status`, {
+      const res = await fetch(`${API_URL}/users/telegram/status`, {
         headers: getAuthHeaders()
       });
       const data = await res.json();
@@ -53,7 +53,7 @@ export default function TelegramLinkCard() {
     try {
       setGenerating(true);
       setError(null);
-      const res = await fetch(`${API_URL}/api/users/telegram/link-code`, {
+      const res = await fetch(`${API_URL}/users/telegram/link-code`, {
         method: 'POST',
         headers: getAuthHeaders()
       });
@@ -86,7 +86,7 @@ export default function TelegramLinkCard() {
     if (!confirm('¿Estás seguro de desvincular tu cuenta de Telegram?')) return;
 
     try {
-      const res = await fetch(`${API_URL}/api/users/telegram/unlink`, {
+      const res = await fetch(`${API_URL}/users/telegram/unlink`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
@@ -106,7 +106,7 @@ export default function TelegramLinkCard() {
 
   const toggleNotify = async (gameId, currentNotify) => {
     try {
-      const res = await fetch(`${API_URL}/api/users/games/${gameId}/notify`, {
+      const res = await fetch(`${API_URL}/users/games/${gameId}/notify`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ notify: !currentNotify })

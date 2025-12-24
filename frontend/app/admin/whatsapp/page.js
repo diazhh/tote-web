@@ -98,6 +98,18 @@ export default function WhatsAppPage() {
     }
   };
 
+  const handleToggleActive = async (instance) => {
+    try {
+      const newStatus = !instance.isActive;
+      await whatsappAPI.toggleActive(instance.instanceId, newStatus);
+      toast.success(newStatus ? 'Canal activado - Se enviarán mensajes' : 'Canal pausado - No se enviarán mensajes');
+      loadInstances();
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error('Error al cambiar estado');
+    }
+  };
+
   const handleCleanup = async () => {
     try {
       if (!confirm('¿Estás seguro de que deseas limpiar todas las sesiones inactivas?')) {
@@ -216,22 +228,25 @@ export default function WhatsAppPage() {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Instancia
                   </th>
-                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Estado
                   </th>
-                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Número
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Envíos
                   </th>
-                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Conexión
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Teléfono
                   </th>
-                  <th scope="col" className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Conectado
+                  </th>
+                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Canal
                   </th>
-                  <th scope="col" className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
@@ -258,6 +273,19 @@ export default function WhatsAppPage() {
                     </td>
                     <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(instance.status)}
+                    </td>
+                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
+                      <button
+                        onClick={() => handleToggleActive(instance)}
+                        className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          instance.isActive !== false
+                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                            : 'bg-red-100 text-red-800 hover:bg-red-200'
+                        }`}
+                        title={instance.isActive !== false ? 'Click para pausar envíos' : 'Click para activar envíos'}
+                      >
+                        {instance.isActive !== false ? '✓ Activo' : '⏸ Pausado'}
+                      </button>
                     </td>
                     <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {instance.phoneNumber || 'No conectado'}
@@ -296,24 +324,6 @@ export default function WhatsAppPage() {
                           title="Reconectar"
                         >
                           <RefreshCw className="w-4 h-4 lg:w-5 lg:h-5" />
-                        </button>
-                        
-                        {instance.status === 'connected' && (
-                          <button
-                            onClick={() => handleDisconnect(instance.instanceId)}
-                            className="text-orange-600 hover:text-orange-900 p-1"
-                            title="Desconectar"
-                          >
-                            <Power className="w-4 h-4 lg:w-5 lg:h-5" />
-                          </button>
-                        )}
-                        
-                        <button
-                          onClick={() => handleDelete(instance.instanceId)}
-                          className="text-red-600 hover:text-red-900 p-1"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4 lg:w-5 lg:h-5" />
                         </button>
                       </div>
                     </td>

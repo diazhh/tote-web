@@ -114,6 +114,18 @@ export default function FacebookInstanceManager() {
     }
   };
 
+  const toggleActive = async (instance) => {
+    try {
+      const newStatus = !instance.isActive;
+      await facebookAPI.toggleActive(instance.instanceId, newStatus);
+      toast.success(newStatus ? 'Canal activado - Se enviarán mensajes' : 'Canal pausado - No se enviarán mensajes');
+      await loadInstances();
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error(error.response?.data?.message || error.message || 'Error al cambiar estado');
+    }
+  };
+
   const getStatusBadge = (status) => {
     const badges = {
       CONNECTED: 'bg-green-100 text-green-800',
@@ -189,6 +201,18 @@ export default function FacebookInstanceManager() {
                   <div className="flex items-center gap-3 mb-2">
                     <h3 className="text-lg font-semibold">{instance.name}</h3>
                     {getStatusBadge(instance.status)}
+                    {/* Toggle Activo/Pausado */}
+                    <button
+                      onClick={() => toggleActive(instance)}
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        instance.isActive !== false
+                          ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                          : 'bg-red-100 text-red-800 hover:bg-red-200'
+                      }`}
+                      title={instance.isActive !== false ? 'Click para pausar envíos' : 'Click para activar envíos'}
+                    >
+                      {instance.isActive !== false ? '✓ Activo' : '⏸ Pausado'}
+                    </button>
                   </div>
                   
                   <div className="space-y-1 text-sm text-gray-600">
@@ -210,27 +234,6 @@ export default function FacebookInstanceManager() {
                     className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
                   >
                     Probar
-                  </button>
-                  {instance.status === 'CONNECTED' ? (
-                    <button
-                      onClick={() => disconnectInstance(instance.instanceId)}
-                      className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
-                    >
-                      Desconectar
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => testConnection(instance.instanceId)}
-                      className="px-3 py-1 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200"
-                    >
-                      Conectar
-                    </button>
-                  )}
-                  <button
-                    onClick={() => deleteInstance(instance.instanceId)}
-                    className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
-                  >
-                    Eliminar
                   </button>
                 </div>
               </div>

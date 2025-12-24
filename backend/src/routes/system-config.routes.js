@@ -19,8 +19,13 @@ router.post('/emergency-stop/enable', authorize('ADMIN'), systemConfigController
 router.post('/emergency-stop/disable', authorize('ADMIN'), systemConfigController.disableEmergencyStop.bind(systemConfigController));
 
 // Jugadas de prueba
-router.get('/test-bets', authorize('ADMIN'), systemConfigController.getTestBets.bind(systemConfigController));
-router.post('/test-bets/enable', authorize('ADMIN'), systemConfigController.enableTestBets.bind(systemConfigController));
-router.post('/test-bets/disable', authorize('ADMIN'), systemConfigController.disableTestBets.bind(systemConfigController));
+router.get('/test-bets', authenticate, authorize('ADMIN'), systemConfigController.getTestBets.bind(systemConfigController));
+router.post('/test-bets/enable', authenticate, authorize('ADMIN'), systemConfigController.enableTestBets.bind(systemConfigController));
+router.post('/test-bets/disable', authenticate, authorize('ADMIN'), systemConfigController.disableTestBets.bind(systemConfigController));
+
+// Simulador de jugadas
+router.get('/bet-simulator', authenticate, authorize('ADMIN'), systemConfigController.getBetSimulator.bind(systemConfigController));
+router.put('/bet-simulator', authenticate, authorize('ADMIN'), systemConfigController.updateBetSimulator.bind(systemConfigController));
+router.post('/bet-simulator/run', authenticate, authorize('ADMIN'), systemConfigController.runBetSimulator.bind(systemConfigController));
 
 export default router;

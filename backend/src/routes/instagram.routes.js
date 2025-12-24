@@ -17,5 +17,6 @@ router.get('/instances/:instanceId/media', instagramController.getUserMedia);
 router.post('/instances/:instanceId/refresh-token', instagramController.refreshToken);
 router.post('/instances/:instanceId/test', instagramController.testConnection);
 router.post('/instances/:instanceId/disconnect', instagramController.disconnectInstance);
+router.patch('/instances/:instanceId/toggle', instagramController.toggleActive);
 
 export default router;

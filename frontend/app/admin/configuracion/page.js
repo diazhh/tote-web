@@ -2,6 +2,7 @@
 
 import GamesTab from '@/components/admin/config/GamesTab';
 import TelegramLinkCard from '@/components/admin/TelegramLinkCard';
+import BetSimulatorControl from '@/components/admin/config/BetSimulatorControl';
 
 export default function ConfiguracionPage() {
   return (
@@ -13,8 +14,9 @@ export default function ConfiguracionPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-6">
         {/* Vinculación de Telegram */}
-        <div className="lg:col-span-1">
+        <div className="lg:col-span-1 space-y-4">
           <TelegramLinkCard />
+          <BetSimulatorControl />
         </div>
 
         {/* Juegos */}

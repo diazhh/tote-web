@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import drawsAPI from '@/lib/api/draws';
 import { toast } from 'sonner';
-import { X, Image as ImageIcon, Send, CheckCircle, XCircle, Clock, RefreshCw, Sparkles, Target, Download, Edit } from 'lucide-react';
+import { X, Image as ImageIcon, Send, CheckCircle, XCircle, Clock, RefreshCw, Sparkles, Target, Download, Edit, Play, SendHorizontal } from 'lucide-react';
 import { formatCaracasTime, formatCaracasDateTime, formatDateTimeAMPM } from '@/lib/utils/dateUtils';
 
 export default function DrawDetailModal({ draw, onClose, onUpdate }) {
@@ -289,6 +289,52 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
     }
   };
 
+  const handleForceTotalize = async () => {
+    if (!confirm(`¿Totalizar manualmente el sorteo de ${formatCaracasTime(drawData.scheduledAt)}?`)) return;
+    
+    setLoading(true);
+    try {
+      toast.loading('Totalizando sorteo...');
+      const response = await drawsAPI.forceTotalize(drawData.id);
+      toast.dismiss();
+      if (response.success) {
+        toast.success('Sorteo totalizado exitosamente');
+        await loadDrawDetails();
+        if (onUpdate) onUpdate();
+      } else {
+        toast.error(response.error || 'Error al totalizar');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.response?.data?.error || 'Error al totalizar sorteo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRepublishAll = async () => {
+    if (!confirm(`¿Reenviar el sorteo a todos los canales activos?`)) return;
+    
+    setLoading(true);
+    try {
+      toast.loading('Republicando en canales...');
+      const response = await drawsAPI.republish(drawData.id);
+      toast.dismiss();
+      if (response.success) {
+        toast.success('Sorteo republicado exitosamente');
+        await loadDrawDetails();
+        if (onUpdate) onUpdate();
+      } else {
+        toast.error(response.error || 'Error al republicar');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.response?.data?.error || 'Error al republicar sorteo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getPublicationStatus = (status) => {
     switch (status) {
       case 'SENT':
@@ -476,6 +522,51 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
                   {preselecting ? 'Cambiando...' : 'Cambiar Preselección'}
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Administrative Actions */}
+          {drawData.winnerItemId && (
+            <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-3 sm:p-4">
+              <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
+                <Sparkles className="w-4 h-4 mr-2 flex-shrink-0 text-blue-600" />
+                Acciones Administrativas
+              </h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Reenviar a todos los canales */}
+                <button
+                  onClick={handleRepublishAll}
+                  disabled={loading}
+                  className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <SendHorizontal className={`w-4 h-4 mr-2 ${loading ? 'animate-pulse' : ''}`} />
+                  <span className="text-sm font-medium">Reenviar a Todos los Canales</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Totalizar manualmente - solo si no está totalizado */}
+          {['SCHEDULED', 'CLOSED'].includes(drawData.status) && new Date(drawData.scheduledAt) < new Date() && (
+            <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg p-3 sm:p-4">
+              <h3 className="text-sm font-medium text-orange-900 mb-3 flex items-center">
+                <Play className="w-4 h-4 mr-2 flex-shrink-0" />
+                Totalización Manual
+              </h3>
+              
+              <p className="text-sm text-orange-700 mb-3">
+                Este sorteo no se totalizó automáticamente. Puedes ejecutarlo manualmente.
+              </p>
+              
+              <button
+                onClick={handleForceTotalize}
+                disabled={loading}
+                className="w-full flex items-center justify-center px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Play className={`w-4 h-4 mr-2 ${loading ? 'animate-pulse' : ''}`} />
+                <span className="text-sm font-medium">Totalizar Sorteo Ahora</span>
+              </button>
             </div>
           )}
 
