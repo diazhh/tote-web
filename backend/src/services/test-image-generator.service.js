@@ -1,4 +1,4 @@
-const sharp = require('sharp');
+import sharp from 'sharp';
 
 class TestImageGeneratorService {
   /**
@@ -70,4 +70,4 @@ class TestImageGeneratorService {
   }
 }
 
-module.exports = new TestImageGeneratorService();
+export default new TestImageGeneratorService();
