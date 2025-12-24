@@ -191,4 +191,4 @@ class ChannelConfigService {
   }
 }
 
-module.exports = new ChannelConfigService();
+export default new ChannelConfigService();
