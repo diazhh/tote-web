@@ -132,6 +132,8 @@ model Draw {
   publications        DrawPublication[]
   apiMappings         ApiDrawMapping[]
   tickets             Ticket[]
+  stats               DrawStats?        // Estadísticas del sorteo
+  providerStats       ProviderStats[]   // Estadísticas por proveedor
   
   @@index([gameId])
   @@index([drawDate])
@@ -321,6 +323,8 @@ model User {
   pagoMovilAccounts PagoMovilAccount[]
   pageVisits      PageVisit[]
   tripleBets      TripleBet[]
+  movements       PlayerMovement[]  // Historial de movimientos (trazabilidad)
+  playerStats     PlayerStats?      // Estadísticas acumuladas
   
   @@index([username])
   @@index([email])
@@ -858,6 +862,7 @@ model TicketDetail {
   id          String              @id @default(uuid())
   ticketId    String
   gameItemId  String
+  drawId      String?             // Sorteo específico de este detalle (para tickets multi-sorteo)
   amount      Decimal             @db.Decimal(12, 2)
   multiplier  Decimal             @db.Decimal(10, 2) // Multiplicador al momento de la jugada
   prize       Decimal             @default(0) @db.Decimal(12, 2)
@@ -869,6 +874,7 @@ model TicketDetail {
   
   @@index([ticketId])
   @@index([gameItemId])
+  @@index([drawId])
 }
 
 // ============================================
@@ -909,6 +915,161 @@ model TripleBet {
   @@index([userId, status])
   @@index([expiresAt])
   @@index([startDrawId])
+}
+
+// ============================================
+// MOVIMIENTOS DE JUGADOR (Trazabilidad tipo banco)
+// ============================================
+
+enum MovementType {
+  DEPOSIT         // Recarga de saldo
+  WITHDRAWAL      // Retiro de saldo
+  BET             // Jugada (descuento de saldo)
+  PRIZE           // Premio ganado
+  REFUND          // Reembolso (cancelación de ticket)
+  ADJUSTMENT      // Ajuste manual por admin
+  BONUS           // Bonificación
+}
+
+model PlayerMovement {
+  id              String        @id @default(uuid())
+  userId          String
+  type            MovementType
+  amount          Decimal       @db.Decimal(12, 2)  // Positivo = entrada, Negativo = salida
+  balanceBefore   Decimal       @db.Decimal(12, 2)  // Saldo antes del movimiento
+  balanceAfter    Decimal       @db.Decimal(12, 2)  // Saldo después del movimiento
+  description     String?                           // Descripción del movimiento
+  referenceType   String?                           // Tipo de referencia: TICKET, DEPOSIT, WITHDRAWAL, TRIPLETA
+  referenceId     String?                           // ID de la referencia
+  metadata        Json?                             // Datos adicionales (sorteo, juego, etc)
+  createdBy       String?                           // Admin que hizo el ajuste (si aplica)
+  createdAt       DateTime      @default(now())
+  
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([referenceType, referenceId])
+}
+
+// ============================================
+// ESTADÍSTICAS DE SORTEO
+// ============================================
+
+model DrawStats {
+  id              String        @id @default(uuid())
+  drawId          String        @unique
+  
+  // Ventas
+  totalSales      Decimal       @default(0) @db.Decimal(12, 2)  // Total vendido
+  ticketCount     Int           @default(0)                      // Cantidad de tickets
+  detailCount     Int           @default(0)                      // Cantidad de jugadas
+  
+  // Premios
+  totalPrize      Decimal       @default(0) @db.Decimal(12, 2)  // Total en premios
+  winnerCount     Int           @default(0)                      // Cantidad de ganadores
+  
+  // Balance
+  grossProfit     Decimal       @default(0) @db.Decimal(12, 2)  // Ganancia bruta (ventas - premios)
+  profitMargin    Decimal       @default(0) @db.Decimal(5, 2)   // Margen de ganancia %
+  
+  // Tripletas
+  tripletaSales   Decimal       @default(0) @db.Decimal(12, 2)  // Ventas de tripletas
+  tripletaPrize   Decimal       @default(0) @db.Decimal(12, 2)  // Premios de tripletas
+  tripletaCount   Int           @default(0)                      // Cantidad de tripletas activas
+  
+  // Timestamps
+  calculatedAt    DateTime      @default(now())                  // Última vez que se calculó
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  draw            Draw          @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  
+  @@index([drawId])
+  @@index([calculatedAt])
+}
+
+// ============================================
+// ESTADÍSTICAS DE PROVEEDORES (Taquilla, Grupo, Banca, Comercial)
+// ============================================
+
+enum ProviderStatsLevel {
+  TAQUILLA
+  GRUPO
+  BANCA
+  COMERCIAL
+}
+
+model ProviderStats {
+  id              String              @id @default(uuid())
+  level           ProviderStatsLevel  // Nivel de la entidad
+  entityId        String              // ID de la entidad (taquilla, grupo, banca, comercial)
+  externalId      Int                 // ID externo de la entidad
+  drawId          String              // Sorteo al que pertenecen las estadísticas
+  
+  // Ventas
+  totalSales      Decimal             @default(0) @db.Decimal(12, 2)
+  ticketCount     Int                 @default(0)
+  detailCount     Int                 @default(0)
+  
+  // Premios
+  totalPrize      Decimal             @default(0) @db.Decimal(12, 2)
+  winnerCount     Int                 @default(0)
+  
+  // Balance
+  grossProfit     Decimal             @default(0) @db.Decimal(12, 2)
+  profitMargin    Decimal             @default(0) @db.Decimal(5, 2)
+  
+  // Timestamps
+  calculatedAt    DateTime            @default(now())
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  
+  draw            Draw                @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  
+  @@unique([level, entityId, drawId])
+  @@index([level, entityId])
+  @@index([drawId])
+  @@index([externalId])
+  @@index([calculatedAt])
+}
+
+// ============================================
+// ESTADÍSTICAS ACUMULADAS DEL JUGADOR
+// ============================================
+
+model PlayerStats {
+  id              String        @id @default(uuid())
+  userId          String        @unique
+  
+  // Tickets
+  totalTickets    Int           @default(0)
+  wonTickets      Int           @default(0)
+  lostTickets     Int           @default(0)
+  
+  // Tripletas
+  totalTripletas  Int           @default(0)
+  wonTripletas    Int           @default(0)
+  lostTripletas   Int           @default(0)
+  
+  // Montos
+  totalBet        Decimal       @default(0) @db.Decimal(12, 2)  // Total apostado
+  totalPrize      Decimal       @default(0) @db.Decimal(12, 2)  // Total ganado
+  totalDeposits   Decimal       @default(0) @db.Decimal(12, 2)  // Total depositado
+  totalWithdrawals Decimal      @default(0) @db.Decimal(12, 2)  // Total retirado
+  
+  // Timestamps
+  lastBetAt       DateTime?                                      // Última apuesta
+  lastWinAt       DateTime?                                      // Última ganancia
+  calculatedAt    DateTime      @default(now())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
 }
 
 // ============================================

@@ -5,6 +5,7 @@ import systemConfigService from '../services/system-config.service.js';
 import { emitToAll, emitToGame } from '../lib/socket.js';
 import adminNotificationService from '../services/admin-notification.service.js';
 import prizeProcessorService from '../services/prize-processor.service.js';
+import drawStatsService from '../services/draw-stats.service.js';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 
 /**
@@ -171,6 +172,15 @@ class ExecuteDrawJob {
             );
           } catch (prizeError) {
             logger.error(`❌ Error totalizando premios para sorteo ${updatedDraw.id}:`, prizeError);
+          }
+
+          // Calcular y persistir estadísticas del sorteo y proveedores
+          try {
+            logger.info(`📊 Calculando estadísticas para sorteo ${updatedDraw.id}...`);
+            await drawStatsService.calculateAllStats(updatedDraw.id);
+            logger.info(`✅ Estadísticas calculadas y guardadas para sorteo ${updatedDraw.id}`);
+          } catch (statsError) {
+            logger.error(`❌ Error calculando estadísticas para sorteo ${updatedDraw.id}:`, statsError);
           }
 
           // Calcular estadísticas y notificar a administradores

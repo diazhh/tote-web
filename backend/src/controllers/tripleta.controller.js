@@ -142,6 +142,43 @@ export class TripletaController {
       next(error);
     }
   }
+
+  /**
+   * GET /api/tripleta/:id/draws
+   * Obtener sorteos relacionados con una tripleta
+   */
+  async getDrawsForTripleta(req, res, next) {
+    try {
+      const { id } = req.params;
+      
+      // Primero verificar que la tripleta existe y el usuario tiene acceso
+      const tripleta = await tripletaService.getTripleBetById(id);
+      
+      if (!tripleta) {
+        return res.status(404).json({
+          success: false,
+          error: 'Tripleta no encontrada',
+        });
+      }
+
+      // Verificar permisos
+      if (tripleta.userId !== req.user.id && !['ADMIN', 'TAQUILLA_ADMIN'].includes(req.user.role)) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permiso para ver esta información',
+        });
+      }
+
+      const result = await tripletaService.getDrawsForTripleta(id);
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 export default new TripletaController();

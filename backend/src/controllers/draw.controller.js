@@ -3,6 +3,10 @@
  */
 
 import drawService from '../services/draw.service.js';
+import prewinnerOptimizerService from '../services/prewinner-optimizer.service.js';
+import prewinnerSelectionService from '../services/prewinner-selection.service.js';
+import publicationService from '../services/publication.service.js';
+import * as imageService from '../services/imageService.js';
 
 export class DrawController {
   /**
@@ -260,6 +264,239 @@ export class DrawController {
       res.json({
         success: true,
         data: stats,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/draws/:id/analyze-prewinner
+   * Analiza el sorteo y muestra qué item sería seleccionado como pre-ganador
+   * sin ejecutar la selección real. Útil para pruebas y debugging.
+   */
+  async analyzePrewinner(req, res, next) {
+    try {
+      const { id } = req.params;
+      
+      const result = await prewinnerOptimizerService.selectOptimalPrewinner(id);
+      
+      res.json({
+        success: true,
+        data: result,
+        message: 'Análisis de pre-ganador completado (sin guardar cambios)',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/draws/:id/select-prewinner
+   * Ejecuta la selección automática de pre-ganador usando el optimizador
+   */
+  async selectPrewinner(req, res, next) {
+    try {
+      const { id } = req.params;
+      
+      const selectedItem = await prewinnerSelectionService.selectPrewinner(id);
+      
+      if (!selectedItem) {
+        return res.status(400).json({
+          success: false,
+          error: 'No se pudo seleccionar un pre-ganador',
+        });
+      }
+      
+      res.json({
+        success: true,
+        data: {
+          selectedItem: {
+            id: selectedItem.id,
+            number: selectedItem.number,
+            name: selectedItem.name,
+            multiplier: selectedItem.multiplier
+          }
+        },
+        message: `Pre-ganador seleccionado: ${selectedItem.number} - ${selectedItem.name}`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/draws/:id/force-totalize
+   * Totaliza manualmente un sorteo que no se ejecutó automáticamente
+   */
+  async forceTotalize(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { winnerItemId } = req.body;
+
+      // Obtener el sorteo
+      const draw = await drawService.getDrawById(id);
+      if (!draw) {
+        return res.status(404).json({
+          success: false,
+          error: 'Sorteo no encontrado',
+        });
+      }
+
+      // Validar estado
+      if (!['SCHEDULED', 'CLOSED'].includes(draw.status)) {
+        return res.status(400).json({
+          success: false,
+          error: `No se puede totalizar un sorteo en estado ${draw.status}. Solo SCHEDULED o CLOSED.`,
+        });
+      }
+
+      // Si no se proporciona winnerItemId, usar el preseleccionado o seleccionar uno
+      let finalWinnerItemId = winnerItemId;
+      if (!finalWinnerItemId) {
+        if (draw.preselectedItemId) {
+          finalWinnerItemId = draw.preselectedItemId;
+        } else {
+          // Seleccionar automáticamente
+          const selectedItem = await prewinnerSelectionService.selectPrewinner(id);
+          if (selectedItem) {
+            finalWinnerItemId = selectedItem.id;
+          } else {
+            return res.status(400).json({
+              success: false,
+              error: 'No se pudo determinar un ganador. Proporcione winnerItemId.',
+            });
+          }
+        }
+      }
+
+      // Ejecutar el sorteo
+      const executedDraw = await drawService.executeDraw(id, finalWinnerItemId);
+
+      // Generar imagen
+      let imageResult = null;
+      try {
+        imageResult = await imageService.generateDrawImage(id);
+      } catch (imageError) {
+        console.error('Error generando imagen:', imageError);
+      }
+
+      // Publicar en canales
+      let publicationResult = null;
+      try {
+        publicationResult = await publicationService.publishDraw(id);
+      } catch (pubError) {
+        console.error('Error publicando sorteo:', pubError);
+      }
+
+      res.json({
+        success: true,
+        data: {
+          draw: executedDraw,
+          image: imageResult,
+          publication: publicationResult,
+        },
+        message: 'Sorteo totalizado manualmente',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/draws/:id/regenerate-image
+   * Regenera la imagen del resultado de un sorteo
+   */
+  async regenerateImage(req, res, next) {
+    try {
+      const { id } = req.params;
+
+      // Obtener el sorteo
+      const draw = await drawService.getDrawById(id);
+      if (!draw) {
+        return res.status(404).json({
+          success: false,
+          error: 'Sorteo no encontrado',
+        });
+      }
+
+      // Validar que tenga ganador
+      if (!draw.winnerItemId) {
+        return res.status(400).json({
+          success: false,
+          error: 'El sorteo debe tener un ganador para generar imagen',
+        });
+      }
+
+      // Regenerar imagen
+      const imageResult = await imageService.regenerateDrawImage(id);
+
+      res.json({
+        success: true,
+        data: imageResult,
+        message: 'Imagen regenerada exitosamente',
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/draws/:id/republish
+   * Reenvía el sorteo a canales específicos o todos
+   */
+  async republish(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { channels } = req.body; // Array opcional de tipos de canal: ['WHATSAPP', 'TELEGRAM', etc]
+
+      // Obtener el sorteo
+      const draw = await drawService.getDrawById(id);
+      if (!draw) {
+        return res.status(404).json({
+          success: false,
+          error: 'Sorteo no encontrado',
+        });
+      }
+
+      // Validar que esté publicado o tenga ganador
+      if (!draw.winnerItemId) {
+        return res.status(400).json({
+          success: false,
+          error: 'El sorteo debe tener un ganador para republicar',
+        });
+      }
+
+      let result;
+
+      if (channels && Array.isArray(channels) && channels.length > 0) {
+        // Republicar solo en canales específicos
+        const results = [];
+        for (const channelType of channels) {
+          try {
+            const channelResult = await publicationService.republishToChannel(id, channelType);
+            results.push({
+              channelType,
+              ...channelResult,
+            });
+          } catch (error) {
+            results.push({
+              channelType,
+              success: false,
+              error: error.message,
+            });
+          }
+        }
+        result = { results };
+      } else {
+        // Republicar en todos los canales activos
+        result = await publicationService.publishDraw(id);
+      }
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Sorteo republicado exitosamente',
       });
     } catch (error) {
       next(error);

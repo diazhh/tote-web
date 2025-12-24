@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react';
 import gameChannelsAPI from '@/lib/api/game-channels';
 import { toast } from 'sonner';
-import { Plus, Edit2, Trash2, MessageSquare, CheckCircle, XCircle, Send } from 'lucide-react';
+import { Plus, Edit2, Trash2, MessageSquare, CheckCircle, XCircle, Send, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react';
 import GameChannelModal from './GameChannelModal';
+import ChannelTestModal from './ChannelTestModal';
 
 export default function ChannelsTab({ gameId }) {
   const [channels, setChannels] = useState([]);
@@ -12,6 +13,8 @@ export default function ChannelsTab({ gameId }) {
   const [showModal, setShowModal] = useState(false);
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [testingChannel, setTestingChannel] = useState(null);
+  const [showTestModal, setShowTestModal] = useState(false);
+  const [togglingChannel, setTogglingChannel] = useState(null);
 
   useEffect(() => {
     loadChannels();
@@ -61,8 +64,27 @@ export default function ChannelsTab({ gameId }) {
   };
 
   const handleTest = async (channel) => {
-    // TODO: Implementar test de canal
-    toast.info('Función de prueba en desarrollo');
+    setSelectedChannel(channel);
+    setShowTestModal(true);
+  };
+
+  const handleToggleActive = async (channel) => {
+    setTogglingChannel(channel.id);
+    try {
+      const newStatus = !channel.isActive;
+      await gameChannelsAPI.toggleActive(channel.id, newStatus);
+      toast.success(`Canal ${newStatus ? 'activado' : 'desactivado'} correctamente`);
+      loadChannels();
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al cambiar estado del canal');
+    } finally {
+      setTogglingChannel(null);
+    }
+  };
+
+  const handleTestModalClose = () => {
+    setShowTestModal(false);
+    setSelectedChannel(null);
   };
 
   const handleModalClose = (reload) => {
@@ -162,21 +184,23 @@ export default function ChannelsTab({ gameId }) {
                     </span>
                   </div>
                 </div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                  channel.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                }`}>
-                  {channel.isActive ? (
-                    <>
-                      <CheckCircle className="w-3 h-3 mr-1" />
-                      Activo
-                    </>
+                <button
+                  onClick={() => handleToggleActive(channel)}
+                  disabled={togglingChannel === channel.id}
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer transition hover:opacity-80 ${
+                    channel.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  }`}
+                  title={`Click para ${channel.isActive ? 'desactivar' : 'activar'}`}
+                >
+                  {togglingChannel === channel.id ? (
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  ) : channel.isActive ? (
+                    <ToggleRight className="w-3 h-3 mr-1" />
                   ) : (
-                    <>
-                      <XCircle className="w-3 h-3 mr-1" />
-                      Inactivo
-                    </>
+                    <ToggleLeft className="w-3 h-3 mr-1" />
                   )}
-                </span>
+                  {channel.isActive ? 'Activo' : 'Inactivo'}
+                </button>
               </div>
 
               <div className="flex items-center space-x-2">
@@ -206,12 +230,20 @@ export default function ChannelsTab({ gameId }) {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Modal de edición */}
       {showModal && (
         <GameChannelModal
           channel={selectedChannel}
           gameId={gameId}
           onClose={handleModalClose}
+        />
+      )}
+
+      {/* Modal de prueba */}
+      {showTestModal && selectedChannel && (
+        <ChannelTestModal
+          channel={selectedChannel}
+          onClose={handleTestModalClose}
         />
       )}
     </div>

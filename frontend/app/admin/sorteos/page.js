@@ -5,8 +5,10 @@ import drawsAPI from '@/lib/api/draws';
 import publicAPI from '@/lib/api/public';
 import { toast } from 'sonner';
 import { Calendar, Filter, RefreshCw, Plus, Edit2, Trash2, Eye } from 'lucide-react';
+import ResponsiveTable from '@/components/common/ResponsiveTable';
 import ChangeWinnerModal from '@/components/admin/ChangeWinnerModal';
 import DrawDetailModal from '@/components/admin/DrawDetailModal';
+import RefreshControl from '@/components/common/RefreshControl';
 import { formatCaracasDate, formatCaracasTime, todayInCaracas } from '@/lib/utils/dateUtils';
 
 export default function SorteosPage() {
@@ -135,18 +137,21 @@ export default function SorteosPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Gestión de Sorteos</h1>
-          <p className="text-gray-600 mt-1">Administra los sorteos del sistema</p>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Gestión de Sorteos</h1>
+            <p className="text-gray-600 mt-1">Administra los sorteos del sistema</p>
+          </div>
+          <button
+            onClick={handleGenerateDaily}
+            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Generar Sorteos del Día
+          </button>
         </div>
-        <button
-          onClick={handleGenerateDaily}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Generar Sorteos del Día
-        </button>
+        <RefreshControl onRefresh={loadDraws} autoRefreshIntervals={[5, 10, 30, 60]} />
       </div>
 
       {/* Filters */}
@@ -205,110 +210,75 @@ export default function SorteosPage() {
 
       {/* Draws Table */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Cargando sorteos...</p>
+        <ResponsiveTable
+          data={draws}
+          loading={loading}
+          loadingMessage="Cargando sorteos..."
+          emptyMessage="No hay sorteos para mostrar"
+          emptyIcon={<Calendar className="w-12 h-12 text-gray-400" />}
+          columns={[
+            {
+              key: 'game.name',
+              label: 'Juego',
+              primary: true,
+              render: (draw) => (
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{draw.game?.name}</div>
+                  <div className="text-sm text-gray-500">{draw.game?.type}</div>
+                </div>
+              )
+            },
+            {
+              key: 'scheduledAt',
+              label: 'Fecha/Hora',
+              render: (draw) => (
+                <div>
+                  <div className="text-sm text-gray-900">{formatCaracasDate(draw.scheduledAt)}</div>
+                  <div className="text-sm text-gray-500">{formatCaracasTime(draw.scheduledAt)}</div>
+                </div>
+              )
+            },
+            {
+              key: 'status',
+              label: 'Estado',
+              render: (draw) => getStatusBadge(draw.status)
+            },
+            {
+              key: 'winnerItem',
+              label: 'Ganador',
+              render: (draw) => draw.winnerItem ? (
+                <div>
+                  <div className="text-sm font-medium text-gray-900">{draw.winnerItem.number}</div>
+                  {draw.winnerItem.name && <div className="text-sm text-gray-500">{draw.winnerItem.name}</div>}
+                </div>
+              ) : draw.preselectedItem ? (
+                <div className="text-sm font-medium text-orange-600">
+                  {draw.preselectedItem.number} (Pre)
+                </div>
+              ) : <span className="text-sm text-gray-400">-</span>
+            }
+          ]}
+          actions={(draw) => (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleViewDetail(draw)}
+                className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                title="Ver detalles"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
+              {draw.status === 'CLOSED' && (
+                <button
+                  onClick={() => handleChangeWinner(draw)}
+                  className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg"
+                  title="Cambiar ganador"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
-          </div>
-        ) : draws.length === 0 ? (
-          <div className="text-center py-12">
-            <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">No hay sorteos para mostrar</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Juego
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha/Hora
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ganador
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {draws.map((draw) => (
-                  <tr key={draw.id} className="hover:bg-gray-50">
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {draw.game?.name}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {draw.game?.type}
-                      </div>
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {formatCaracasDate(draw.scheduledAt)}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {formatCaracasTime(draw.scheduledAt)}
-                      </div>
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(draw.status)}
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                      {draw.winnerItem ? (
-                        <div>
-                          <div className="text-sm font-medium text-gray-900">
-                            {draw.winnerItem.number}
-                          </div>
-                          {draw.winnerItem.name && (
-                            <div className="text-sm text-gray-500">
-                              {draw.winnerItem.name}
-                            </div>
-                          )}
-                        </div>
-                      ) : draw.preselectedItem ? (
-                        <div>
-                          <div className="text-sm font-medium text-orange-600">
-                            {draw.preselectedItem.number} (Preseleccionado)
-                          </div>
-                        </div>
-                      ) : (
-                        <span className="text-sm text-gray-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-2">
-                        <button
-                          onClick={() => handleViewDetail(draw)}
-                          className="text-gray-600 hover:text-gray-900 p-1"
-                          title="Ver detalles"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                        {draw.status === 'CLOSED' && (
-                          <button
-                            onClick={() => handleChangeWinner(draw)}
-                            className="text-blue-600 hover:text-blue-900 p-1"
-                            title="Cambiar ganador"
-                          >
-                            <Edit2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+          )}
+        />
 
         {/* Pagination */}
         {draws.length > 0 && pagination.totalPages > 1 && (

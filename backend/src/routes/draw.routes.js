@@ -43,4 +43,19 @@ router.post('/:id/change-winner', drawController.changeWinner.bind(drawControlle
 // POST /api/draws/:id/cancel
 router.post('/:id/cancel', drawController.cancelDraw.bind(drawController));
 
+// GET /api/draws/:id/analyze-prewinner - Analizar sin ejecutar
+router.get('/:id/analyze-prewinner', drawController.analyzePrewinner.bind(drawController));
+
+// POST /api/draws/:id/select-prewinner - Ejecutar selección automática
+router.post('/:id/select-prewinner', drawController.selectPrewinner.bind(drawController));
+
+// POST /api/draws/:id/force-totalize - Totalizar manualmente
+router.post('/:id/force-totalize', drawController.forceTotalize.bind(drawController));
+
+// POST /api/draws/:id/regenerate-image - Regenerar imagen
+router.post('/:id/regenerate-image', drawController.regenerateImage.bind(drawController));
+
+// POST /api/draws/:id/republish - Republicar en canales
+router.post('/:id/republish', drawController.republish.bind(drawController));
+
 export default router;

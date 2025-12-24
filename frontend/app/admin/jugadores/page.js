@@ -1,11 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, User, DollarSign, Ticket, TrendingUp, TrendingDown } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Search, User, DollarSign, Ticket, TrendingUp, TrendingDown, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from '@/lib/api/axios';
 
 export default function JugadoresPage() {
+  const router = useRouter();
   const [players, setPlayers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,8 +25,8 @@ export default function JugadoresPage() {
   const fetchPlayers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/admin/players');
-      const playersData = response.data.data || [];
+      const response = await axios.get('/players');
+      const playersData = response.data.data.players || [];
       setPlayers(playersData);
       
       const totalBalance = playersData.reduce((sum, p) => sum + parseFloat(p.balance || 0), 0);
@@ -146,6 +148,7 @@ export default function JugadoresPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Bloqueado</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Registro</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Acciones</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -187,6 +190,15 @@ export default function JugadoresPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {new Date(player.createdAt).toLocaleDateString('es-VE')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    <button
+                      onClick={() => router.push(`/admin/jugadores/${player.id}`)}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                      <Eye className="w-4 h-4" />
+                      Ver Detalle
+                    </button>
                   </td>
                 </tr>
               ))}

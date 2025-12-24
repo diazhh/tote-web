@@ -162,6 +162,86 @@ class SystemConfigService {
       throw error;
     }
   }
+
+  /**
+   * Verificar si las jugadas de prueba están activadas
+   */
+  async isTestBetsEnabled() {
+    try {
+      const config = await this.get('test_bets');
+      return config?.value?.enabled === true;
+    } catch (error) {
+      logger.error('Error al verificar jugadas de prueba:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Activar jugadas de prueba
+   */
+  async enableTestBets(config = {}, updatedBy = null) {
+    try {
+      const defaultConfig = {
+        enabled: true,
+        interval: 30000, // 30 segundos
+        minAmount: 1,
+        maxAmount: 100,
+        minBets: 1,
+        maxBets: 5,
+        activatedAt: new Date().toISOString(),
+        ...config
+      };
+
+      await this.set(
+        'test_bets',
+        defaultConfig,
+        'Configuración de jugadas de prueba automáticas',
+        updatedBy
+      );
+
+      logger.info('✅ Jugadas de prueba activadas', { config: defaultConfig, updatedBy });
+      return defaultConfig;
+    } catch (error) {
+      logger.error('Error al activar jugadas de prueba:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Desactivar jugadas de prueba
+   */
+  async disableTestBets(updatedBy = null) {
+    try {
+      await this.set(
+        'test_bets',
+        {
+          enabled: false,
+          deactivatedAt: new Date().toISOString()
+        },
+        'Configuración de jugadas de prueba automáticas',
+        updatedBy
+      );
+
+      logger.info('✅ Jugadas de prueba desactivadas', { updatedBy });
+      return true;
+    } catch (error) {
+      logger.error('Error al desactivar jugadas de prueba:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener configuración de jugadas de prueba
+   */
+  async getTestBetsConfig() {
+    try {
+      const config = await this.get('test_bets');
+      return config?.value || { enabled: false };
+    } catch (error) {
+      logger.error('Error al obtener configuración de jugadas de prueba:', error);
+      return { enabled: false };
+    }
+  }
 }
 
 export default new SystemConfigService();

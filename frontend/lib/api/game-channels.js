@@ -56,6 +56,23 @@ const gameChannelsAPI = {
   getWhatsAppInstances: async () => {
     const response = await api.get('/game-channels/whatsapp/instances');
     return response.data;
+  },
+
+  // Enviar mensaje de prueba a un canal
+  sendTest: async (channelId, recipient, message = null) => {
+    const response = await api.post(`/game-channels/channels/${channelId}/test`, {
+      recipient,
+      message
+    });
+    return response.data;
+  },
+
+  // Activar o desactivar un canal
+  toggleActive: async (channelId, isActive) => {
+    const response = await api.patch(`/game-channels/channels/${channelId}/toggle`, {
+      isActive
+    });
+    return response.data;
   }
 };
 

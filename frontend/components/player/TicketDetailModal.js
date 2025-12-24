@@ -1,7 +1,40 @@
-import { X, Calendar, Clock, Hash, DollarSign, Trophy, CheckCircle, XCircle, Ticket as TicketIcon } from 'lucide-react';
+import { X, Calendar, Clock, Hash, DollarSign, Trophy, CheckCircle, XCircle, Ticket as TicketIcon, Gamepad2 } from 'lucide-react';
 
 export default function TicketDetailModal({ ticket, onClose }) {
   if (!ticket) return null;
+
+  // Agrupar detalles por sorteo/juego si tienen drawId diferente
+  const groupDetailsByDraw = () => {
+    if (!ticket.details || ticket.details.length === 0) return [];
+    
+    // Si los detalles tienen drawId propio, agrupar por sorteo
+    const hasMultipleDraws = ticket.details.some(d => d.drawId && d.drawId !== ticket.drawId);
+    
+    if (!hasMultipleDraws) {
+      // Todos los detalles son del mismo sorteo
+      return [{
+        draw: ticket.draw,
+        details: ticket.details
+      }];
+    }
+    
+    // Agrupar por drawId
+    const grouped = {};
+    ticket.details.forEach(detail => {
+      const drawId = detail.drawId || ticket.drawId;
+      if (!grouped[drawId]) {
+        grouped[drawId] = {
+          draw: detail.draw || ticket.draw,
+          details: []
+        };
+      }
+      grouped[drawId].details.push(detail);
+    });
+    
+    return Object.values(grouped);
+  };
+
+  const groupedDetails = groupDetailsByDraw();
 
   const formatDateTime = (dateString) => {
     const date = new Date(dateString);
@@ -132,66 +165,101 @@ export default function TicketDetailModal({ ticket, onClose }) {
             )}
           </div>
 
-          {/* Ticket Details */}
+          {/* Ticket Details - Agrupados por Sorteo/Juego */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <Hash className="w-5 h-5 text-gray-600" />
               <h3 className="font-bold text-gray-900">Números Jugados</h3>
             </div>
-            <div className="space-y-2">
-              {ticket.details?.map((detail, idx) => (
-                <div
-                  key={idx}
-                  className={`border rounded-lg p-4 transition-all ${
-                    detail.status === 'WON'
-                      ? 'bg-green-50 border-green-300'
-                      : detail.status === 'LOST'
-                      ? 'bg-gray-50 border-gray-200'
-                      : 'bg-white border-gray-200'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className={`text-center ${
-                        detail.status === 'WON' ? 'text-green-700' : 'text-gray-700'
-                      }`}>
-                        <p className="text-3xl font-bold">
-                          {detail.gameItem?.number || detail.number || 'N/A'}
-                        </p>
-                        <p className="text-xs font-semibold mt-1">
-                          {detail.gameItem?.name || ''}
-                        </p>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-600">
-                            Jugado: <span className="font-semibold text-gray-900">Bs. {parseFloat(detail.amount || 0).toFixed(2)}</span>
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Trophy className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-600">
-                            Multiplicador: <span className="font-semibold text-gray-900">x{parseFloat(detail.multiplier || 0).toFixed(0)}</span>
-                          </span>
-                        </div>
-                        {detail.status === 'WON' && (
-                          <div className="flex items-center gap-2">
-                            <CheckCircle className="w-4 h-4 text-green-600" />
-                            <span className="text-sm text-green-700 font-semibold">
-                              Premio: Bs. {parseFloat(detail.prize || 0).toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+            
+            {groupedDetails.map((group, groupIdx) => (
+              <div key={groupIdx} className="mb-4">
+                {/* Header del grupo con info del sorteo/juego */}
+                {groupedDetails.length > 1 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-t-lg p-3 flex items-center gap-3">
+                    <Gamepad2 className="w-5 h-5 text-blue-600" />
                     <div>
-                      {getDetailStatusBadge(detail.status)}
+                      <p className="font-semibold text-blue-900">
+                        {group.draw?.game?.name || 'Juego'}
+                      </p>
+                      <p className="text-xs text-blue-700">
+                        {group.draw?.scheduledAt ? formatDateTime(group.draw.scheduledAt) : 
+                         group.draw?.drawTime || 'Hora no disponible'}
+                      </p>
                     </div>
+                    {group.draw?.winnerItem && (
+                      <div className="ml-auto bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-semibold">
+                        Ganador: {group.draw.winnerItem.number} - {group.draw.winnerItem.name}
+                      </div>
+                    )}
                   </div>
+                )}
+                
+                <div className={`space-y-2 ${groupedDetails.length > 1 ? 'border border-t-0 border-blue-200 rounded-b-lg p-3' : ''}`}>
+                  {group.details.map((detail, idx) => (
+                    <div
+                      key={idx}
+                      className={`border rounded-lg p-4 transition-all ${
+                        detail.status === 'WON'
+                          ? 'bg-green-50 border-green-300'
+                          : detail.status === 'LOST'
+                          ? 'bg-gray-50 border-gray-200'
+                          : 'bg-white border-gray-200'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`text-center ${
+                            detail.status === 'WON' ? 'text-green-700' : 'text-gray-700'
+                          }`}>
+                            <p className="text-3xl font-bold">
+                              {detail.gameItem?.number || detail.number || 'N/A'}
+                            </p>
+                            <p className="text-xs font-semibold mt-1">
+                              {detail.gameItem?.name || ''}
+                            </p>
+                          </div>
+                          <div className="space-y-1">
+                            {/* Mostrar juego/sorteo en cada detalle si es único */}
+                            {groupedDetails.length === 1 && ticket.draw?.game && (
+                              <div className="flex items-center gap-2 mb-1">
+                                <Gamepad2 className="w-3 h-3 text-blue-500" />
+                                <span className="text-xs text-blue-600 font-medium">
+                                  {ticket.draw.game.name}
+                                </span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="w-4 h-4 text-gray-500" />
+                              <span className="text-sm text-gray-600">
+                                Jugado: <span className="font-semibold text-gray-900">Bs. {parseFloat(detail.amount || 0).toFixed(2)}</span>
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Trophy className="w-4 h-4 text-gray-500" />
+                              <span className="text-sm text-gray-600">
+                                Multiplicador: <span className="font-semibold text-gray-900">x{parseFloat(detail.multiplier || 0).toFixed(0)}</span>
+                              </span>
+                            </div>
+                            {detail.status === 'WON' && (
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="w-4 h-4 text-green-600" />
+                                <span className="text-sm text-green-700 font-semibold">
+                                  Premio: Bs. {parseFloat(detail.prize || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          {getDetailStatusBadge(detail.status)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
 
           {/* Footer Info */}

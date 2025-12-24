@@ -42,18 +42,40 @@ class TicketController {
 
   async getAll(req, res) {
     try {
-      const { userId, drawId, status } = req.query;
+      const { 
+        userId, 
+        drawId, 
+        status,
+        gameId,
+        dateFrom,
+        dateTo,
+        page = 1,
+        limit = 20,
+        sortBy = 'createdAt',
+        sortOrder = 'desc'
+      } = req.query;
       
       const filters = {};
       if (userId) filters.userId = userId;
       if (drawId) filters.drawId = drawId;
       if (status) filters.status = status;
+      if (gameId) filters.gameId = gameId;
+      if (dateFrom) filters.dateFrom = dateFrom;
+      if (dateTo) filters.dateTo = dateTo;
 
-      const tickets = await ticketService.findAll(filters);
+      const pagination = {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        sortBy,
+        sortOrder
+      };
+
+      const result = await ticketService.findAllPaginated(filters, pagination);
 
       res.json({
         success: true,
-        data: tickets
+        data: result.tickets,
+        pagination: result.pagination
       });
     } catch (error) {
       logger.error('Error in getAll tickets:', error);

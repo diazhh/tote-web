@@ -6,6 +6,7 @@ import {
   CheckCircle, XCircle, TrendingUp, TrendingDown, Target, Info, 
   Layers, Eye, ChevronDown, ChevronUp
 } from 'lucide-react';
+import ResponsiveTable from '@/components/common/ResponsiveTable';
 import { toast } from 'sonner';
 import analysisApi from '@/lib/api/analysis';
 import axios from '@/lib/api/axios';
@@ -558,73 +559,59 @@ export default function AnalisisSorteoPage() {
             <div className="p-4 border-b">
               <h3 className="text-lg font-semibold">Análisis Completo por Número</h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Vendido</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Premio Directo</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tripletas</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Premio Trip.</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Premio</th>
-                    <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
-                    <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {analysis.analysis.filter(item => item.sales.amount > 0 || item.tripleta.count > 0).map((item, idx) => (
-                    <tr 
-                      key={idx} 
-                      className={`hover:bg-gray-50 cursor-pointer ${
-                        item.riskLevel === 'high' ? 'bg-red-50' : 
-                        item.riskLevel === 'medium' ? 'bg-yellow-50' : ''
-                      }`}
-                      onClick={() => setExpandedItem(expandedItem === item.itemId ? null : item.itemId)}
-                    >
-                      <td className="px-3 py-3 text-sm">
-                        <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                          item.rank <= 3 ? 'bg-green-600 text-white' :
-                          item.rank <= 10 ? 'bg-blue-600 text-white' :
-                          'bg-gray-300 text-gray-700'
-                        }`}>
-                          {item.rank}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-sm font-bold">{item.number}</td>
-                      <td className="px-3 py-3 text-sm text-gray-500">{item.name}</td>
-                      <td className="px-3 py-3 text-sm text-right">{formatCurrency(item.sales.amount)}</td>
-                      <td className="px-3 py-3 text-sm text-right text-blue-600">{formatCurrency(item.directPrize)}</td>
-                      <td className="px-3 py-3 text-sm text-right">
-                        {item.tripleta.completedCount > 0 ? (
-                          <span className="text-purple-600 font-medium">
-                            {item.tripleta.completedCount}/{item.tripleta.count}
-                          </span>
-                        ) : item.tripleta.count > 0 ? (
-                          <span className="text-gray-400">{item.tripleta.count}</span>
-                        ) : '-'}
-                      </td>
-                      <td className="px-3 py-3 text-sm text-right text-purple-600">
-                        {item.tripleta.totalPrize > 0 ? formatCurrency(item.tripleta.totalPrize) : '-'}
-                      </td>
-                      <td className="px-3 py-3 text-sm text-right font-bold">
-                        {formatCurrency(item.totalPrize)}
-                      </td>
-                      <td className={`px-3 py-3 text-sm text-right font-bold ${
-                        item.balance >= 0 ? 'text-green-600' : 'text-red-600'
+            <ResponsiveTable
+              data={analysis.analysis.filter(item => item.sales.amount > 0 || item.tripleta.count > 0)}
+              onRowClick={(item) => setExpandedItem(expandedItem === item.itemId ? null : item.itemId)}
+              rowClassName={(item) => item.riskLevel === 'high' ? 'bg-red-50' : item.riskLevel === 'medium' ? 'bg-yellow-50' : ''}
+              cardClassName={(item) => item.riskLevel === 'high' ? 'border-red-300 bg-red-50' : item.riskLevel === 'medium' ? 'border-yellow-300 bg-yellow-50' : ''}
+              columns={[
+                {
+                  key: 'number',
+                  label: '#',
+                  primary: true,
+                  render: (item) => (
+                    <div className="flex items-center gap-2">
+                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                        item.rank <= 3 ? 'bg-green-600 text-white' :
+                        item.rank <= 10 ? 'bg-blue-600 text-white' :
+                        'bg-gray-300 text-gray-700'
                       }`}>
-                        {formatCurrency(item.balance)}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {getRiskBadge(item.recommendation, item.riskLevel)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        {item.rank}
+                      </span>
+                      <span className="font-bold">{item.number}</span>
+                      <span className="text-gray-500 text-sm">{item.name}</span>
+                    </div>
+                  )
+                },
+                { key: 'sales.amount', label: 'Vendido', align: 'right', render: (i) => formatCurrency(i.sales.amount) },
+                { key: 'directPrize', label: 'Premio Dir.', align: 'right', render: (i) => <span className="text-blue-600">{formatCurrency(i.directPrize)}</span> },
+                {
+                  key: 'tripleta',
+                  label: 'Tripletas',
+                  align: 'right',
+                  render: (i) => i.tripleta.completedCount > 0 ? (
+                    <span className="text-purple-600 font-medium">{i.tripleta.completedCount}/{i.tripleta.count}</span>
+                  ) : i.tripleta.count > 0 ? (
+                    <span className="text-gray-400">{i.tripleta.count}</span>
+                  ) : '-'
+                },
+                { key: 'tripleta.totalPrize', label: 'Premio Trip.', align: 'right', render: (i) => i.tripleta.totalPrize > 0 ? <span className="text-purple-600">{formatCurrency(i.tripleta.totalPrize)}</span> : '-' },
+                { key: 'totalPrize', label: 'Total Premio', align: 'right', render: (i) => <span className="font-bold">{formatCurrency(i.totalPrize)}</span> },
+                {
+                  key: 'balance',
+                  label: 'Balance',
+                  align: 'right',
+                  render: (i) => <span className={`font-bold ${i.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(i.balance)}</span>
+                },
+                {
+                  key: 'recommendation',
+                  label: 'Estado',
+                  align: 'center',
+                  render: (i) => getRiskBadge(i.recommendation, i.riskLevel)
+                }
+              ]}
+              emptyMessage="No hay datos de análisis"
+            />
           </div>
 
           {/* Detalle expandido de tripletas */}

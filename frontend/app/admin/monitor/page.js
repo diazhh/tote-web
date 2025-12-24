@@ -6,6 +6,8 @@ import {
   DollarSign, Trophy, Ticket, AlertTriangle, ChevronRight,
   X, Eye, Layers
 } from 'lucide-react';
+import ResponsiveTable from '@/components/common/ResponsiveTable';
+import ResponsiveTabs from '@/components/common/ResponsiveTabs';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
 import axios from '@/lib/api/axios';
@@ -248,43 +250,15 @@ export default function MonitorPage() {
 
       {/* Tabs */}
       <div className="bg-white rounded-lg shadow">
-        <div className="border-b border-gray-200">
-          <nav className="flex -mb-px">
-            <button
-              onClick={() => setActiveTab('bancas')}
-              className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                activeTab === 'bancas'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Building2 className="w-4 h-4 inline mr-2" />
-              Bancas
-            </button>
-            <button
-              onClick={() => setActiveTab('numeros')}
-              className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                activeTab === 'numeros'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <Hash className="w-4 h-4 inline mr-2" />
-              Números
-            </button>
-            <button
-              onClick={() => setActiveTab('reporte')}
-              className={`px-6 py-3 text-sm font-medium border-b-2 ${
-                activeTab === 'reporte'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              <FileText className="w-4 h-4 inline mr-2" />
-              Reporte
-            </button>
-          </nav>
-        </div>
+        <ResponsiveTabs
+          tabs={[
+            { key: 'bancas', label: 'Bancas', icon: <Building2 className="w-4 h-4" /> },
+            { key: 'numeros', label: 'Números', icon: <Hash className="w-4 h-4" /> },
+            { key: 'reporte', label: 'Reporte', icon: <FileText className="w-4 h-4" /> }
+          ]}
+          activeTab={activeTab}
+          onChange={setActiveTab}
+        />
 
         <div className="p-4">
           {loading ? (
@@ -301,7 +275,7 @@ export default function MonitorPage() {
               {/* Tab Bancas */}
               {activeTab === 'bancas' && bancaStats && (
                 <div>
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="text-lg font-semibold">{bancaStats.game}</span>
                       <span className="ml-2 text-gray-500">{formatTime(bancaStats.scheduledAt)}</span>
@@ -312,51 +286,38 @@ export default function MonitorPage() {
                       </div>
                     )}
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID Banca</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto Jugado</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Premio</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tickets</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {bancaStats.bancas.map((banca, idx) => (
-                          <tr key={idx} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{banca.externalId}</td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{banca.name || '-'}</td>
-                            <td className="px-4 py-3 text-sm text-right text-gray-900">{formatCurrency(banca.totalAmount)}</td>
-                            <td className="px-4 py-3 text-sm text-right text-green-600">{formatCurrency(banca.totalPrize)}</td>
-                            <td className="px-4 py-3 text-sm text-right text-gray-500">{banca.ticketCount}</td>
-                            <td className="px-4 py-3 text-center">
-                              <button
-                                onClick={() => handleViewTicketsByBanca(banca.externalId)}
-                                className="text-blue-600 hover:text-blue-800"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ResponsiveTable
+                    data={bancaStats.bancas}
+                    columns={[
+                      { key: 'externalId', label: 'ID Banca', primary: true, render: (b) => <span className="font-medium">{b.externalId}</span> },
+                      { key: 'name', label: 'Nombre', render: (b) => b.name || '-' },
+                      { key: 'totalAmount', label: 'Monto Jugado', align: 'right', render: (b) => formatCurrency(b.totalAmount) },
+                      { key: 'totalPrize', label: 'Premio', align: 'right', render: (b) => <span className="text-green-600">{formatCurrency(b.totalPrize)}</span> },
+                      { key: 'ticketCount', label: 'Tickets', align: 'right' }
+                    ]}
+                    actions={(banca) => (
+                      <button
+                        onClick={() => handleViewTicketsByBanca(banca.externalId)}
+                        className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg"
+                        title="Ver tickets"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    )}
+                    emptyMessage="No hay datos de bancas"
+                  />
                 </div>
               )}
 
               {/* Tab Números */}
               {activeTab === 'numeros' && itemStats && (
                 <div>
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="text-lg font-semibold">{itemStats.game}</span>
                       <span className="ml-2 text-gray-500">{formatTime(itemStats.scheduledAt)}</span>
                       <span className="ml-4 text-sm text-gray-600">
-                        Total vendido: {formatCurrency(itemStats.totalSales)}
+                        Total: {formatCurrency(itemStats.totalSales)}
                       </span>
                     </div>
                     {itemStats.winnerItem && (
@@ -365,71 +326,110 @@ export default function MonitorPage() {
                       </div>
                     )}
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
-                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nombre</th>
-                          <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Apostado</th>
-                          <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tickets</th>
-                          <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Premio Pot.</th>
-                          <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">% Venta</th>
-                          <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tripletas</th>
-                          <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Premio Trip.</th>
-                          <th className="px-3 py-3 text-right text-xs font-medium text-gray-500 uppercase">Total Premio</th>
-                          <th className="px-3 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {itemStats.items.map((item, idx) => {
-                          const isDangerous = item.totalPotentialPrize > itemStats.totalSales * 0.7;
+
+                  {/* Alerta de tripletas que se completarían */}
+                  {itemStats.items.some(i => i.tripletaCount > 0 && i.wouldCompleteTripletaCount > 0) && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-red-800">¡Atención! Hay tripletas que se completarían</p>
+                          <p className="text-sm text-red-700 mt-1">
+                            Los siguientes números completarían tripletas si salen como ganadores:
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {itemStats.items
+                              .filter(i => i.wouldCompleteTripletaCount > 0)
+                              .sort((a, b) => b.tripletaPrize - a.tripletaPrize)
+                              .map((item, idx) => (
+                                <span key={idx} className="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">
+                                  {item.number} - {item.name} ({item.wouldCompleteTripletaCount} tripletas = {formatCurrency(item.tripletaPrize)})
+                                </span>
+                              ))
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Alerta alternativa si hay tripletas con alto riesgo (premio > 70% de ventas) */}
+                  {!itemStats.items.some(i => i.wouldCompleteTripletaCount > 0) && 
+                   itemStats.items.some(i => i.tripletaCount > 0 && i.tripletaPrize > itemStats.totalSales * 0.5) && (
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="w-6 h-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold text-yellow-800">⚠️ Números con alto riesgo de tripletas</p>
+                          <p className="text-sm text-yellow-700 mt-1">
+                            Los siguientes números tienen tripletas con premios significativos:
+                          </p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {itemStats.items
+                              .filter(i => i.tripletaCount > 0 && i.tripletaPrize > itemStats.totalSales * 0.5)
+                              .sort((a, b) => b.tripletaPrize - a.tripletaPrize)
+                              .map((item, idx) => (
+                                <span key={idx} className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-full text-sm font-medium">
+                                  {item.number} - {item.name} ({item.tripletaCount} tripletas = {formatCurrency(item.tripletaPrize)})
+                                </span>
+                              ))
+                            }
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  <ResponsiveTable
+                    data={[...itemStats.items].sort((a, b) => parseInt(a.number) - parseInt(b.number))}
+                    rowClassName={(item) => item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'bg-red-50' : ''}
+                    cardClassName={(item) => item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'border-red-300 bg-red-50' : ''}
+                    columns={[
+                      { key: 'number', label: '#', primary: true, render: (i) => <span className="font-bold">{i.number}</span> },
+                      { key: 'name', label: 'Nombre' },
+                      { key: 'totalAmount', label: 'Apostado', align: 'right', render: (i) => formatCurrency(i.totalAmount) },
+                      { key: 'ticketCount', label: 'Tickets', align: 'right' },
+                      { key: 'potentialPrize', label: 'Premio Pot.', align: 'right', render: (i) => <span className="text-blue-600">{formatCurrency(i.potentialPrize)}</span> },
+                      { key: 'percentageOfSales', label: '% Venta', align: 'right', render: (i) => `${i.percentageOfSales}%` },
+                      { key: 'tripletaCount', label: 'Tripletas', align: 'right', render: (i) => i.tripletaCount > 0 ? <span className="text-purple-600 font-medium">{i.tripletaCount}</span> : <span className="text-gray-400">0</span> },
+                      { key: 'tripletaPrize', label: 'Premio Trip.', align: 'right', render: (i) => <span className="text-purple-600">{formatCurrency(i.tripletaPrize)}</span> },
+                      { 
+                        key: 'totalPotentialPrize', 
+                        label: 'Total Premio', 
+                        align: 'right', 
+                        render: (i) => {
+                          const isDangerous = i.totalPotentialPrize > itemStats.totalSales * 0.7;
                           return (
-                            <tr key={idx} className={`hover:bg-gray-50 ${isDangerous ? 'bg-red-50' : ''}`}>
-                              <td className="px-3 py-2 text-sm font-bold text-gray-900">{item.number}</td>
-                              <td className="px-3 py-2 text-sm text-gray-500">{item.name}</td>
-                              <td className="px-3 py-2 text-sm text-right text-gray-900">{formatCurrency(item.totalAmount)}</td>
-                              <td className="px-3 py-2 text-sm text-right text-gray-500">{item.ticketCount}</td>
-                              <td className="px-3 py-2 text-sm text-right text-blue-600">{formatCurrency(item.potentialPrize)}</td>
-                              <td className="px-3 py-2 text-sm text-right text-gray-500">{item.percentageOfSales}%</td>
-                              <td className="px-3 py-2 text-sm text-right">
-                                {item.tripletaCount > 0 ? (
-                                  <span className="text-purple-600 font-medium">{item.tripletaCount}</span>
-                                ) : (
-                                  <span className="text-gray-400">0</span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-right text-purple-600">{formatCurrency(item.tripletaPrize)}</td>
-                              <td className={`px-3 py-2 text-sm text-right font-bold ${isDangerous ? 'text-red-600' : 'text-gray-900'}`}>
-                                {formatCurrency(item.totalPotentialPrize)}
-                                {isDangerous && <AlertTriangle className="w-4 h-4 inline ml-1" />}
-                              </td>
-                              <td className="px-3 py-2 text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    onClick={() => handleViewTicketsByItem(item.itemId)}
-                                    className="text-blue-600 hover:text-blue-800"
-                                    title="Ver tickets"
-                                  >
-                                    <Eye className="w-4 h-4" />
-                                  </button>
-                                  {item.tripletaCount > 0 && (
-                                    <button
-                                      onClick={() => handleViewTripletas(item.itemId)}
-                                      className="text-purple-600 hover:text-purple-800"
-                                      title="Ver tripletas"
-                                    >
-                                      <Layers className="w-4 h-4" />
-                                    </button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
+                            <span className={`font-bold ${isDangerous ? 'text-red-600' : 'text-gray-900'}`}>
+                              {formatCurrency(i.totalPotentialPrize)}
+                              {isDangerous && <AlertTriangle className="w-4 h-4 inline ml-1" />}
+                            </span>
                           );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                        }
+                      }
+                    ]}
+                    actions={(item) => (
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleViewTicketsByItem(item.itemId)}
+                          className="p-2 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded-lg"
+                          title="Ver tickets"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        {item.tripletaCount > 0 && (
+                          <button
+                            onClick={() => handleViewTripletas(item.itemId)}
+                            className="p-2 text-purple-600 hover:text-purple-800 hover:bg-purple-50 rounded-lg"
+                            title="Ver tripletas"
+                          >
+                            <Layers className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    emptyMessage="No hay datos de números"
+                  />
                 </div>
               )}
 
@@ -460,47 +460,41 @@ export default function MonitorPage() {
                       <p className="text-xl font-bold text-gray-800">{dailyReport.totals.totalTickets}</p>
                     </div>
                   </div>
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Juego</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ganador</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Jugado</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Premio</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {dailyReport.draws.map((draw, idx) => (
-                          <tr key={idx} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-sm font-medium text-gray-900">{formatTime(draw.scheduledAt)}</td>
-                            <td className="px-4 py-3 text-sm text-gray-500">{draw.game}</td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className={`px-2 py-1 rounded-full text-xs ${
-                                draw.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :
-                                draw.status === 'DRAWN' ? 'bg-blue-100 text-blue-800' :
-                                draw.status === 'CLOSED' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-gray-100 text-gray-800'
-                              }`}>
-                                {draw.status}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              {draw.winnerItem ? `${draw.winnerItem.number} - ${draw.winnerItem.name}` : '-'}
-                            </td>
-                            <td className="px-4 py-3 text-sm text-right text-gray-900">{formatCurrency(draw.totalSales)}</td>
-                            <td className="px-4 py-3 text-sm text-right text-green-600">{formatCurrency(draw.totalPrize)}</td>
-                            <td className={`px-4 py-3 text-sm text-right font-medium ${draw.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                              {formatCurrency(draw.balance)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <ResponsiveTable
+                    data={dailyReport.draws}
+                    columns={[
+                      { key: 'scheduledAt', label: 'Hora', primary: true, render: (d) => <span className="font-medium">{formatTime(d.scheduledAt)}</span> },
+                      { key: 'game', label: 'Juego' },
+                      { 
+                        key: 'status', 
+                        label: 'Estado', 
+                        render: (d) => (
+                          <span className={`px-2 py-1 rounded-full text-xs ${
+                            d.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :
+                            d.status === 'DRAWN' ? 'bg-blue-100 text-blue-800' :
+                            d.status === 'CLOSED' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {d.status}
+                          </span>
+                        )
+                      },
+                      { key: 'winnerItem', label: 'Ganador', render: (d) => d.winnerItem ? `${d.winnerItem.number} - ${d.winnerItem.name}` : '-' },
+                      { key: 'totalSales', label: 'Jugado', align: 'right', render: (d) => formatCurrency(d.totalSales) },
+                      { key: 'totalPrize', label: 'Premio', align: 'right', render: (d) => <span className="text-green-600">{formatCurrency(d.totalPrize)}</span> },
+                      { 
+                        key: 'balance', 
+                        label: 'Balance', 
+                        align: 'right', 
+                        render: (d) => (
+                          <span className={`font-medium ${d.balance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {formatCurrency(d.balance)}
+                          </span>
+                        )
+                      }
+                    ]}
+                    emptyMessage="No hay datos del reporte"
+                  />
                 </div>
               )}
             </>
@@ -720,18 +714,42 @@ export default function MonitorPage() {
                   </label>
                   <div className="space-y-2">
                     {ticketDetailModal.data.details.map((detail, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <div key={idx} className={`flex items-center justify-between p-3 rounded-lg border ${
+                        detail.status === 'WON' ? 'bg-green-50 border-green-300' : 
+                        detail.status === 'LOST' ? 'bg-gray-50 border-gray-200' : 
+                        'bg-white border-gray-200'
+                      }`}>
                         <div className="flex items-center gap-3">
-                          <div className="bg-blue-600 text-white w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm">
-                            {idx + 1}
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-lg ${
+                            detail.status === 'WON' ? 'bg-green-600 text-white' : 'bg-blue-600 text-white'
+                          }`}>
+                            {detail.number || detail.gameItem?.number}
                           </div>
                           <div>
-                            <p className="font-bold text-lg">{detail.number}</p>
-                            {detail.name && <p className="text-sm text-gray-600">{detail.name}</p>}
+                            <p className="font-bold text-lg">{detail.name || detail.gameItem?.name || ''}</p>
+                            {/* Mostrar juego si está disponible */}
+                            {detail.game?.name && (
+                              <p className="text-xs text-blue-600 font-medium flex items-center gap-1">
+                                <Gamepad2 className="w-3 h-3" />
+                                {detail.game.name}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="text-right">
                           <p className="font-bold text-green-600">{formatCurrency(detail.amount)}</p>
+                          {detail.status && (
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              detail.status === 'WON' ? 'bg-green-100 text-green-800' :
+                              detail.status === 'LOST' ? 'bg-red-100 text-red-800' :
+                              'bg-blue-100 text-blue-800'
+                            }`}>
+                              {detail.status === 'WON' ? 'Ganador' : detail.status === 'LOST' ? 'Perdedor' : 'Activo'}
+                            </span>
+                          )}
+                          {detail.status === 'WON' && detail.prize && (
+                            <p className="text-sm text-green-600 font-semibold mt-1">Premio: {formatCurrency(detail.prize)}</p>
+                          )}
                         </div>
                       </div>
                     ))}

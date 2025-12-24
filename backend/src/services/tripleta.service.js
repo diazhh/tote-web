@@ -312,6 +312,101 @@ export class TripletaService {
   }
 
   /**
+   * Obtener sorteos relacionados con una tripleta
+   * @param {string} tripletaId - ID de la tripleta
+   * @returns {Promise<Object>}
+   */
+  async getDrawsForTripleta(tripletaId) {
+    try {
+      const tripleta = await prisma.tripleBet.findUnique({
+        where: { id: tripletaId },
+        include: {
+          game: true,
+          item1: true,
+          item2: true,
+          item3: true,
+        },
+      });
+
+      if (!tripleta) {
+        throw new Error('Tripleta no encontrada');
+      }
+
+      // Obtener el sorteo de inicio para saber desde cuándo contar
+      const startDraw = await prisma.draw.findUnique({
+        where: { id: tripleta.startDrawId },
+      });
+
+      if (!startDraw) {
+        throw new Error('Sorteo de inicio no encontrado');
+      }
+
+      // Obtener sorteos desde la creación hasta expiración (limitado a drawsCount)
+      const draws = await prisma.draw.findMany({
+        where: {
+          gameId: tripleta.gameId,
+          scheduledAt: {
+            gte: startDraw.scheduledAt,
+            lte: tripleta.expiresAt,
+          },
+        },
+        orderBy: { scheduledAt: 'asc' },
+        take: tripleta.drawsCount,
+        include: {
+          winnerItem: {
+            select: {
+              id: true,
+              number: true,
+              name: true,
+            },
+          },
+        },
+      });
+
+      // Contar sorteos ejecutados
+      const executed = draws.filter(d => 
+        d.status === 'DRAWN' || d.status === 'PUBLISHED'
+      ).length;
+
+      // IDs de los items de la tripleta
+      const tripletaItemIds = [tripleta.item1Id, tripleta.item2Id, tripleta.item3Id];
+
+      // Marcar qué números de la tripleta han salido
+      const matchedItems = new Set();
+      const drawsWithRelevance = draws.map(draw => {
+        const isRelevant = draw.winnerItemId && tripletaItemIds.includes(draw.winnerItemId);
+        if (isRelevant) {
+          matchedItems.add(draw.winnerItemId);
+        }
+        return {
+          id: draw.id,
+          scheduledAt: draw.scheduledAt,
+          status: draw.status,
+          winnerItemId: draw.winnerItemId,
+          winnerItem: draw.winnerItem,
+          isRelevant,
+        };
+      });
+
+      return {
+        total: tripleta.drawsCount,
+        executed,
+        remaining: tripleta.drawsCount - executed,
+        matchedCount: matchedItems.size,
+        draws: drawsWithRelevance,
+        tripletaItems: [
+          { id: tripleta.item1Id, number: tripleta.item1?.number, name: tripleta.item1?.name, matched: matchedItems.has(tripleta.item1Id) },
+          { id: tripleta.item2Id, number: tripleta.item2?.number, name: tripleta.item2?.name, matched: matchedItems.has(tripleta.item2Id) },
+          { id: tripleta.item3Id, number: tripleta.item3?.number, name: tripleta.item3?.name, matched: matchedItems.has(tripleta.item3Id) },
+        ],
+      };
+    } catch (error) {
+      logger.error(`Error obteniendo sorteos para tripleta ${tripletaId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Obtener estadísticas de tripletas para un juego
    * @param {string} gameId - ID del juego
    * @returns {Promise<Object>}

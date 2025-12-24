@@ -37,7 +37,7 @@ export default function BotsAdminPage() {
   const fetchBots = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/api/admin/bots`, {
+      const res = await fetch('/api/admin/bots', {
         headers: getAuthHeaders()
       });
       const data = await res.json();
@@ -55,7 +55,7 @@ export default function BotsAdminPage() {
 
   const fetchGames = async () => {
     try {
-      const res = await fetch(`${API_URL}/api/games`, {
+      const res = await fetch('/api/games', {
         headers: getAuthHeaders()
       });
       const data = await res.json();
@@ -73,7 +73,7 @@ export default function BotsAdminPage() {
     setError(null);
 
     try {
-      const res = await fetch(`${API_URL}/api/admin/bots`, {
+      const res = await fetch('/api/admin/bots', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(newBot)
@@ -98,7 +98,7 @@ export default function BotsAdminPage() {
     if (!confirm('¿Estás seguro de eliminar este bot?')) return;
 
     try {
-      const res = await fetch(`${API_URL}/api/admin/bots/${botId}`, {
+      const res = await fetch(`/api/admin/bots/${botId}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
@@ -116,7 +116,7 @@ export default function BotsAdminPage() {
 
   const handleToggleActive = async (bot) => {
     try {
-      const res = await fetch(`${API_URL}/api/admin/bots/${bot.id}`, {
+      const res = await fetch(`/api/admin/bots/${bot.id}`, {
         method: 'PUT',
         headers: getAuthHeaders(),
         body: JSON.stringify({ isActive: !bot.isActive })
@@ -135,7 +135,7 @@ export default function BotsAdminPage() {
 
   const handleAssignGames = async (gameIds) => {
     try {
-      const res = await fetch(`${API_URL}/api/admin/bots/${selectedBot.id}/games`, {
+      const res = await fetch(`/api/admin/bots/${selectedBot.id}/games`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ gameIds })

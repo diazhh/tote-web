@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Check, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, X, CreditCard } from 'lucide-react';
+import ResponsiveTable from '@/components/common/ResponsiveTable';
 import { toast } from 'sonner';
 import axios from '@/lib/api/axios';
 
@@ -155,64 +156,57 @@ export default function CuentasSistemaPage() {
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">Cargando cuentas...</p>
         </div>
-      ) : accounts.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-12 text-center">
-          <p className="text-gray-500">No hay cuentas registradas</p>
-        </div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Banco</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Teléfono</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Cédula</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Titular</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Prioridad</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {accounts.map((account) => (
-                <tr key={account.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{account.bankName}</div>
-                    <div className="text-sm text-gray-500">{account.bankCode}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{account.phone}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{account.cedula}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{account.holderName}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{account.priority}</td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {account.isActive ? (
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
-                        Activa
-                      </span>
-                    ) : (
-                      <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
-                        Inactiva
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => handleEdit(account)}
-                      className="text-blue-600 hover:text-blue-900 mr-4"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(account.id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ResponsiveTable
+            data={accounts}
+            emptyMessage="No hay cuentas registradas"
+            emptyIcon={<CreditCard className="w-12 h-12 text-gray-400" />}
+            columns={[
+              {
+                key: 'bankName',
+                label: 'Banco',
+                primary: true,
+                render: (acc) => (
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{acc.bankName}</div>
+                    <div className="text-sm text-gray-500">{acc.bankCode}</div>
+                  </div>
+                )
+              },
+              { key: 'phone', label: 'Teléfono' },
+              { key: 'cedula', label: 'Cédula' },
+              { key: 'holderName', label: 'Titular' },
+              { key: 'priority', label: 'Prioridad' },
+              {
+                key: 'isActive',
+                label: 'Estado',
+                render: (acc) => acc.isActive ? (
+                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Activa</span>
+                ) : (
+                  <span className="px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">Inactiva</span>
+                )
+              }
+            ]}
+            actions={(account) => (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleEdit(account)}
+                  className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-lg"
+                  title="Editar"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(account.id)}
+                  className="p-2 text-red-600 hover:text-red-900 hover:bg-red-50 rounded-lg"
+                  title="Eliminar"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+          />
         </div>
       )}
 

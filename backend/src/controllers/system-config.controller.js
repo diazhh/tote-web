@@ -173,6 +173,70 @@ class SystemConfigController {
       });
     }
   }
+
+  /**
+   * GET /api/system/test-bets
+   */
+  async getTestBets(req, res) {
+    try {
+      const config = await systemConfigService.getTestBetsConfig();
+
+      res.json({
+        success: true,
+        data: config
+      });
+    } catch (error) {
+      logger.error('Error en getTestBets:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * POST /api/system/test-bets/enable
+   */
+  async enableTestBets(req, res) {
+    try {
+      const config = await systemConfigService.enableTestBets(
+        req.body,
+        req.user?.username
+      );
+
+      res.json({
+        success: true,
+        message: 'Jugadas de prueba activadas',
+        data: config
+      });
+    } catch (error) {
+      logger.error('Error en enableTestBets:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * POST /api/system/test-bets/disable
+   */
+  async disableTestBets(req, res) {
+    try {
+      await systemConfigService.disableTestBets(req.user?.username);
+
+      res.json({
+        success: true,
+        message: 'Jugadas de prueba desactivadas'
+      });
+    } catch (error) {
+      logger.error('Error en disableTestBets:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
 }
 
 export default new SystemConfigController();

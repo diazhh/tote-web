@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import messageTemplateService from '../services/message-template.service.js';
 import whatsappService from '../services/whatsapp-baileys.service.js';
+import channelConfigService from '../services/channel-config.service.js';
 
 /**
  * Controlador para gestionar canales de publicación por juego
@@ -433,6 +434,69 @@ export const getWhatsAppInstances = async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Error al obtener instancias de WhatsApp'
+    });
+  }
+};
+
+/**
+ * Enviar mensaje de prueba a un canal
+ */
+export const sendTestMessage = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { recipient, message } = req.body;
+
+    if (!recipient) {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere un destinatario para la prueba'
+      });
+    }
+
+    const result = await channelConfigService.sendTestMessage(id, {
+      recipient,
+      message: message || 'Mensaje de prueba del sistema - Tote Web'
+    });
+
+    if (result.success) {
+      logger.info(`Prueba de canal ${id} enviada exitosamente a ${recipient}`);
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    logger.error('Error al enviar mensaje de prueba:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error al enviar mensaje de prueba'
+    });
+  }
+};
+
+/**
+ * Activar o desactivar un canal
+ */
+export const toggleChannelActive = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { isActive } = req.body;
+
+    if (typeof isActive !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        error: 'Se requiere el campo isActive (boolean)'
+      });
+    }
+
+    const result = await channelConfigService.toggleChannelStatus(id, isActive);
+
+    logger.info(`Canal ${id} ${isActive ? 'activado' : 'desactivado'}`);
+    res.json(result);
+  } catch (error) {
+    logger.error('Error al cambiar estado del canal:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Error al cambiar estado del canal'
     });
   }
 };

@@ -7,6 +7,7 @@ import apiIntegrationService from '../services/api-integration.service.js';
 import adminNotificationService from '../services/admin-notification.service.js';
 import prewinnerSelectionService from '../services/prewinner-selection.service.js';
 import pdfReportService from '../services/pdf-report.service.js';
+import betSimulatorService from '../services/bet-simulator.service.js';
 import { startOfDay } from 'date-fns';
 
 /**

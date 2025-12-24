@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import depositsApi from '@/lib/api/deposits';
 import { toast } from 'sonner';
 import { Search, Filter, CheckCircle, XCircle, Clock, DollarSign, User, Phone, Hash } from 'lucide-react';
+import ResponsiveTable from '@/components/common/ResponsiveTable';
 
 export default function AdminDepositosPage() {
   const [deposits, setDeposits] = useState([]);
@@ -203,116 +204,87 @@ export default function AdminDepositosPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Usuario
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Monto
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Referencia
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Teléfono
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Banco
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Fecha
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredDeposits.length === 0 ? (
-                <tr>
-                  <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
-                    No hay depósitos para mostrar
-                  </td>
-                </tr>
-              ) : (
-                filteredDeposits.map((deposit) => (
-                  <tr key={deposit.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <User className="w-4 h-4 text-gray-400 mr-2" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {deposit.user?.username || 'N/A'}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {deposit.user?.email}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-semibold text-gray-900">
-                        Bs. {parseFloat(deposit.amount || 0).toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <Hash className="w-4 h-4 text-gray-400 mr-1" />
-                        <span className="text-sm text-gray-900">{deposit.reference}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <Phone className="w-4 h-4 text-gray-400 mr-1" />
-                        <span className="text-sm text-gray-900">{deposit.phone}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-900">{deposit.bankCode}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-500">
-                        {new Date(deposit.createdAt).toLocaleDateString('es-VE')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(deposit.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {deposit.status === 'PENDING' && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleApprove(deposit.id)}
-                            disabled={processing === deposit.id}
-                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300 transition-colors"
-                          >
-                            Aprobar
-                          </button>
-                          <button
-                            onClick={() => handleReject(deposit.id)}
-                            disabled={processing === deposit.id}
-                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-300 transition-colors"
-                          >
-                            Rechazar
-                          </button>
-                        </div>
-                      )}
-                      {deposit.status !== 'PENDING' && deposit.notes && (
-                        <p className="text-xs text-gray-500">{deposit.notes}</p>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <ResponsiveTable
+          data={filteredDeposits}
+          emptyMessage="No hay depósitos para mostrar"
+          emptyIcon={<DollarSign className="w-12 h-12 text-gray-400" />}
+          columns={[
+            {
+              key: 'user',
+              label: 'Usuario',
+              primary: true,
+              render: (d) => (
+                <div className="flex items-center">
+                  <User className="w-4 h-4 text-gray-400 mr-2 hidden md:block" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{d.user?.username || 'N/A'}</p>
+                    <p className="text-xs text-gray-500">{d.user?.email}</p>
+                  </div>
+                </div>
+              )
+            },
+            {
+              key: 'amount',
+              label: 'Monto',
+              render: (d) => <span className="font-semibold text-gray-900">Bs. {parseFloat(d.amount || 0).toFixed(2)}</span>
+            },
+            {
+              key: 'reference',
+              label: 'Referencia',
+              render: (d) => (
+                <div className="flex items-center">
+                  <Hash className="w-4 h-4 text-gray-400 mr-1 hidden md:block" />
+                  <span className="text-sm">{d.reference}</span>
+                </div>
+              )
+            },
+            {
+              key: 'phone',
+              label: 'Teléfono',
+              render: (d) => (
+                <div className="flex items-center">
+                  <Phone className="w-4 h-4 text-gray-400 mr-1 hidden md:block" />
+                  <span className="text-sm">{d.phone}</span>
+                </div>
+              )
+            },
+            { key: 'bankCode', label: 'Banco' },
+            {
+              key: 'createdAt',
+              label: 'Fecha',
+              render: (d) => <span className="text-sm text-gray-500">{new Date(d.createdAt).toLocaleDateString('es-VE')}</span>
+            },
+            {
+              key: 'status',
+              label: 'Estado',
+              render: (d) => getStatusBadge(d.status)
+            }
+          ]}
+          actions={(deposit) => (
+            <>
+              {deposit.status === 'PENDING' ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleApprove(deposit.id)}
+                    disabled={processing === deposit.id}
+                    className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:bg-gray-300 transition-colors"
+                  >
+                    Aprobar
+                  </button>
+                  <button
+                    onClick={() => handleReject(deposit.id)}
+                    disabled={processing === deposit.id}
+                    className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:bg-gray-300 transition-colors"
+                  >
+                    Rechazar
+                  </button>
+                </div>
+              ) : deposit.notes ? (
+                <p className="text-xs text-gray-500">{deposit.notes}</p>
+              ) : null}
+            </>
+          )}
+        />
       </div>
     </div>
   );

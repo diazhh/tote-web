@@ -153,6 +153,7 @@ import providerRoutes from './routes/provider.routes.js';
 import tripletaRoutes from './routes/tripleta.routes.js';
 import monitorRoutes from './routes/monitor.routes.js';
 import drawAnalysisRoutes from './routes/draw-analysis.routes.js';
+import playerRoutes from './routes/player.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -198,6 +199,7 @@ app.use('/api/providers', providerRoutes);
 app.use('/api/tripleta', tripletaRoutes);
 app.use('/api/monitor', monitorRoutes);
 app.use('/api/analysis', drawAnalysisRoutes);
+app.use('/api/players', playerRoutes);
 
 // Rutas anidadas para items de juegos
 import gameItemController from './controllers/game-item.controller.js';

@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import taquillaWebService from './taquilla-web.service.js';
+import playerMovementService from './player-movement.service.js';
 
 class TicketService {
   async create(userId, data) {
@@ -116,6 +117,13 @@ class TicketService {
           }
         });
 
+        // Registrar movimiento de apuesta
+        await playerMovementService.recordBet(tx, userId, totalAmount, createdTicket.id, {
+          drawId: data.drawId,
+          gameName: draw.game.name,
+          drawTime: draw.drawTime
+        });
+
         logger.info('Ticket created', { 
           id: createdTicket.id, 
           userId, 
@@ -178,6 +186,90 @@ class TicketService {
       return tickets;
     } catch (error) {
       logger.error('Error fetching tickets:', error);
+      throw error;
+    }
+  }
+
+  async findAllPaginated(filters = {}, pagination = {}) {
+    try {
+      const { page = 1, limit = 20, sortBy = 'createdAt', sortOrder = 'desc' } = pagination;
+      const skip = (page - 1) * limit;
+
+      const where = {};
+      
+      if (filters.userId) {
+        where.userId = filters.userId;
+      }
+      
+      if (filters.drawId) {
+        where.drawId = filters.drawId;
+      }
+
+      if (filters.status) {
+        where.status = filters.status;
+      }
+
+      if (filters.gameId) {
+        where.draw = {
+          gameId: filters.gameId
+        };
+      }
+
+      if (filters.dateFrom || filters.dateTo) {
+        where.createdAt = {};
+        if (filters.dateFrom) {
+          where.createdAt.gte = new Date(filters.dateFrom);
+        }
+        if (filters.dateTo) {
+          const endDate = new Date(filters.dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          where.createdAt.lte = endDate;
+        }
+      }
+
+      const [tickets, total] = await Promise.all([
+        prisma.ticket.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { [sortBy]: sortOrder },
+          include: {
+            details: {
+              include: {
+                gameItem: true
+              }
+            },
+            draw: {
+              include: {
+                game: true,
+                winnerItem: true
+              }
+            },
+            user: {
+              select: {
+                id: true,
+                username: true,
+                email: true
+              }
+            }
+          }
+        }),
+        prisma.ticket.count({ where })
+      ]);
+
+      return {
+        tickets,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+          hasNext: skip + tickets.length < total,
+          hasPrev: page > 1
+        }
+      };
+    } catch (error) {
+      logger.error('Error fetching paginated tickets:', error);
       throw error;
     }
   }
@@ -319,6 +411,12 @@ class TicketService {
               increment: ticket.totalAmount
             }
           }
+        });
+
+        // Registrar movimiento de reembolso
+        await playerMovementService.recordRefund(tx, userId, ticket.totalAmount, id, {
+          drawId: ticket.drawId,
+          reason: 'Cancelación de ticket'
         });
 
         await tx.ticketDetail.updateMany({

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import withdrawalsApi from '@/lib/api/withdrawals';
 import { toast } from 'sonner';
 import { Search, Clock, CheckCircle, XCircle, DollarSign, User, Phone, CreditCard, AlertCircle } from 'lucide-react';
+import ResponsiveTable from '@/components/common/ResponsiveTable';
 
 export default function AdminRetirosPage() {
   const [withdrawals, setWithdrawals] = useState([]);
@@ -239,123 +240,93 @@ export default function AdminRetirosPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Usuario
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Monto
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Cuenta Destino
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Fecha
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Estado
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {filteredWithdrawals.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                    No hay retiros para mostrar
-                  </td>
-                </tr>
-              ) : (
-                filteredWithdrawals.map((withdrawal) => (
-                  <tr key={withdrawal.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <User className="w-4 h-4 text-gray-400 mr-2" />
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">
-                            {withdrawal.user?.username || 'N/A'}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {withdrawal.user?.email}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm font-semibold text-gray-900">
-                        Bs. {parseFloat(withdrawal.amount || 0).toFixed(2)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="space-y-1">
-                        <div className="flex items-center">
-                          <CreditCard className="w-4 h-4 text-gray-400 mr-1" />
-                          <span className="text-sm text-gray-900">
-                            {withdrawal.pagoMovilAccount?.bank || 'N/A'}
-                          </span>
-                        </div>
-                        <div className="flex items-center">
-                          <Phone className="w-4 h-4 text-gray-400 mr-1" />
-                          <span className="text-sm text-gray-600">
-                            {withdrawal.pagoMovilAccount?.phone || 'N/A'}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">
-                          {withdrawal.pagoMovilAccount?.holderName || 'N/A'}
-                        </p>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="text-sm text-gray-500">
-                        {new Date(withdrawal.createdAt).toLocaleDateString('es-VE')}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(withdrawal.status)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      {withdrawal.status === 'PENDING' && (
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => handleProcess(withdrawal.id)}
-                            disabled={processing === withdrawal.id}
-                            className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
-                          >
-                            Procesar
-                          </button>
-                          <button
-                            onClick={() => handleReject(withdrawal.id)}
-                            disabled={processing === withdrawal.id}
-                            className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-300 transition-colors"
-                          >
-                            Rechazar
-                          </button>
-                        </div>
-                      )}
-                      {withdrawal.status === 'PROCESSING' && (
-                        <button
-                          onClick={() => handleComplete(withdrawal.id)}
-                          disabled={processing === withdrawal.id}
-                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300 transition-colors"
-                        >
-                          Completar
-                        </button>
-                      )}
-                      {(withdrawal.status === 'COMPLETED' || withdrawal.status === 'REJECTED') && withdrawal.notes && (
-                        <p className="text-xs text-gray-500">{withdrawal.notes}</p>
-                      )}
-                    </td>
-                  </tr>
-                ))
+        <ResponsiveTable
+          data={filteredWithdrawals}
+          emptyMessage="No hay retiros para mostrar"
+          emptyIcon={<DollarSign className="w-12 h-12 text-gray-400" />}
+          columns={[
+            {
+              key: 'user',
+              label: 'Usuario',
+              primary: true,
+              render: (w) => (
+                <div className="flex items-center">
+                  <User className="w-4 h-4 text-gray-400 mr-2 hidden md:block" />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{w.user?.username || 'N/A'}</p>
+                    <p className="text-xs text-gray-500">{w.user?.email}</p>
+                  </div>
+                </div>
+              )
+            },
+            {
+              key: 'amount',
+              label: 'Monto',
+              render: (w) => <span className="font-semibold text-gray-900">Bs. {parseFloat(w.amount || 0).toFixed(2)}</span>
+            },
+            {
+              key: 'pagoMovilAccount',
+              label: 'Cuenta Destino',
+              render: (w) => (
+                <div className="space-y-1">
+                  <div className="flex items-center">
+                    <CreditCard className="w-4 h-4 text-gray-400 mr-1 hidden md:block" />
+                    <span className="text-sm text-gray-900">{w.pagoMovilAccount?.bank || 'N/A'}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Phone className="w-4 h-4 text-gray-400 mr-1 hidden md:block" />
+                    <span className="text-sm text-gray-600">{w.pagoMovilAccount?.phone || 'N/A'}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">{w.pagoMovilAccount?.holderName || 'N/A'}</p>
+                </div>
+              )
+            },
+            {
+              key: 'createdAt',
+              label: 'Fecha',
+              render: (w) => <span className="text-sm text-gray-500">{new Date(w.createdAt).toLocaleDateString('es-VE')}</span>
+            },
+            {
+              key: 'status',
+              label: 'Estado',
+              render: (w) => getStatusBadge(w.status)
+            }
+          ]}
+          actions={(withdrawal) => (
+            <>
+              {withdrawal.status === 'PENDING' && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleProcess(withdrawal.id)}
+                    disabled={processing === withdrawal.id}
+                    className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:bg-gray-300 transition-colors"
+                  >
+                    Procesar
+                  </button>
+                  <button
+                    onClick={() => handleReject(withdrawal.id)}
+                    disabled={processing === withdrawal.id}
+                    className="px-3 py-1.5 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:bg-gray-300 transition-colors"
+                  >
+                    Rechazar
+                  </button>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
+              {withdrawal.status === 'PROCESSING' && (
+                <button
+                  onClick={() => handleComplete(withdrawal.id)}
+                  disabled={processing === withdrawal.id}
+                  className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 disabled:bg-gray-300 transition-colors"
+                >
+                  Completar
+                </button>
+              )}
+              {(withdrawal.status === 'COMPLETED' || withdrawal.status === 'REJECTED') && withdrawal.notes && (
+                <p className="text-xs text-gray-500">{withdrawal.notes}</p>
+              )}
+            </>
+          )}
+        />
       </div>
     </div>
   );

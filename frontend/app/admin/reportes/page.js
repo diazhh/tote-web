@@ -5,6 +5,7 @@ import {
   Calendar, Gamepad2, DollarSign, Trophy, TrendingUp, TrendingDown,
   FileText, Download, RefreshCw
 } from 'lucide-react';
+import ResponsiveTable from '@/components/common/ResponsiveTable';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
 import axios from '@/lib/api/axios';
@@ -194,58 +195,62 @@ export default function ReportesPage() {
             <div className="px-4 py-3 border-b border-gray-200">
               <h3 className="text-lg font-medium text-gray-900">Detalle por Sorteo</h3>
             </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Hora</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Juego</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ganador</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Ventas</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Premios</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Balance</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Tickets</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {report.draws.map((draw) => (
-                    <tr key={draw.drawId} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {formatTime(draw.scheduledAt)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {draw.game}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {getStatusBadge(draw.status)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {draw.winnerItem ? (
-                          <span className="font-medium">
-                            {draw.winnerItem.number} - {draw.winnerItem.name}
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">-</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
-                        {formatCurrency(draw.totalSales)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-red-600">
-                        {formatCurrency(draw.totalPrize)}
-                      </td>
-                      <td className={`px-4 py-3 whitespace-nowrap text-sm text-right font-medium ${draw.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(draw.balance)}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-right text-gray-900">
-                        {draw.ticketCount}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ResponsiveTable
+              data={report.draws}
+              columns={[
+                {
+                  key: 'scheduledAt',
+                  label: 'Hora',
+                  primary: true,
+                  render: (draw) => <span className="font-medium">{formatTime(draw.scheduledAt)}</span>
+                },
+                {
+                  key: 'game',
+                  label: 'Juego',
+                  render: (draw) => draw.game
+                },
+                {
+                  key: 'status',
+                  label: 'Estado',
+                  render: (draw) => getStatusBadge(draw.status)
+                },
+                {
+                  key: 'winnerItem',
+                  label: 'Ganador',
+                  render: (draw) => draw.winnerItem ? (
+                    <span className="font-medium">{draw.winnerItem.number} - {draw.winnerItem.name}</span>
+                  ) : <span className="text-gray-400">-</span>
+                },
+                {
+                  key: 'totalSales',
+                  label: 'Ventas',
+                  align: 'right',
+                  render: (draw) => <span className="text-gray-900">{formatCurrency(draw.totalSales)}</span>
+                },
+                {
+                  key: 'totalPrize',
+                  label: 'Premios',
+                  align: 'right',
+                  render: (draw) => <span className="text-red-600">{formatCurrency(draw.totalPrize)}</span>
+                },
+                {
+                  key: 'balance',
+                  label: 'Balance',
+                  align: 'right',
+                  render: (draw) => (
+                    <span className={`font-medium ${draw.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(draw.balance)}
+                    </span>
+                  )
+                },
+                {
+                  key: 'ticketCount',
+                  label: 'Tickets',
+                  align: 'right'
+                }
+              ]}
+              emptyMessage="No hay sorteos para mostrar"
+            />
           </div>
         </>
       )}

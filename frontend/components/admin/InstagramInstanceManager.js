@@ -161,7 +161,7 @@ export default function InstagramInstanceManager() {
     const badges = {
       CONNECTED: 'bg-green-100 text-green-800',
       CONNECTING: 'bg-yellow-100 text-yellow-800',
-      DISCONNECTED: 'bg-red-100 text-red-800',
+      DISCONNECTED: 'bg-gray-100 text-gray-800',
       ERROR: 'bg-red-100 text-red-800',
       EXPIRED: 'bg-orange-100 text-orange-800'
     };
@@ -169,14 +169,14 @@ export default function InstagramInstanceManager() {
     const labels = {
       CONNECTED: 'Conectado',
       CONNECTING: 'Conectando',
-      DISCONNECTED: 'Desconectado',
+      DISCONNECTED: 'Configurado',
       ERROR: 'Error',
       EXPIRED: 'Token Expirado'
     };
 
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${badges[status] || badges.DISCONNECTED}`}>
-        {labels[status] || status}
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${badges[status] || badges.CONNECTED}`}>
+        {labels[status] || 'Activo'}
       </span>
     );
   };

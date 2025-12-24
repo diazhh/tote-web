@@ -22,4 +22,8 @@ router.get('/channels/:id', gameChannelsController.getGameChannel);
 router.put('/channels/:id', authorize(['ADMIN', 'OPERATOR']), gameChannelsController.updateGameChannel);
 router.delete('/channels/:id', authorize(['ADMIN']), gameChannelsController.deleteGameChannel);
 
+// Rutas de acciones de canal
+router.post('/channels/:id/test', authorize(['ADMIN', 'OPERATOR']), gameChannelsController.sendTestMessage);
+router.patch('/channels/:id/toggle', authorize(['ADMIN', 'OPERATOR']), gameChannelsController.toggleChannelActive);
+
 export default router;

@@ -18,4 +18,9 @@ router.get('/emergency-stop', systemConfigController.getEmergencyStop.bind(syste
 router.post('/emergency-stop/enable', authorize('ADMIN'), systemConfigController.enableEmergencyStop.bind(systemConfigController));
 router.post('/emergency-stop/disable', authorize('ADMIN'), systemConfigController.disableEmergencyStop.bind(systemConfigController));
 
+// Jugadas de prueba
+router.get('/test-bets', authorize('ADMIN'), systemConfigController.getTestBets.bind(systemConfigController));
+router.post('/test-bets/enable', authorize('ADMIN'), systemConfigController.enableTestBets.bind(systemConfigController));
+router.post('/test-bets/disable', authorize('ADMIN'), systemConfigController.disableTestBets.bind(systemConfigController));
+
 export default router;

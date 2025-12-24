@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import playerMovementService from './player-movement.service.js';
 
 class DepositService {
   async create(userId, data) {
@@ -140,6 +141,13 @@ class DepositService {
               increment: deposit.amount
             }
           }
+        });
+
+        // Registrar movimiento de depósito
+        await playerMovementService.recordDeposit(tx, deposit.userId, deposit.amount, id, {
+          reference: deposit.reference,
+          bankCode: deposit.bankCode,
+          approvedBy: adminId
         });
 
         logger.info('Deposit approved', { 

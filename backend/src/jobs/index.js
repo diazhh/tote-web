@@ -4,6 +4,8 @@ import executeDrawJob from './execute-draw.job.js';
 import publishDrawJob from './publish-draw.job.js';
 import syncApiPlanningJob from './sync-api-planning.job.js';
 import syncApiTicketsJob from './sync-api-tickets.job.js';
+import testBetsJob from './test-bets.job.js';
+import simulateBetsJob from './simulate-bets.job.js';
 import logger from '../lib/logger.js';
 
 /**
@@ -20,8 +22,12 @@ export function startAllJobs() {
     publishDrawJob.start();          // Cada minuto - Publicar en canales
 
     // Jobs de integración con APIs externas
-    syncApiPlanningJob.start();      // 06:00 AM - Sincronizar con API SRQ
-    syncApiTicketsJob.start();       // Cada minuto - Importar tickets 5 min antes del sorteo
+    syncApiPlanningJob.start();      // Cada 5 minutos - Sincronizar planificación
+    syncApiTicketsJob.start();       // Cada 2 minutos - Sincronizar tickets
+
+    // Jobs de simulación
+    simulateBetsJob.start();         // Cada 30 segundos - Simular jugadas
+    testBetsJob.start();             // Cada minuto - Verificar jugadas de prueba
 
     logger.info('✅ Todos los Jobs iniciados correctamente');
   } catch (error) {
@@ -43,6 +49,8 @@ export function stopAllJobs() {
     publishDrawJob.stop();
     syncApiPlanningJob.stop();
     syncApiTicketsJob.stop();
+    simulateBetsJob.stop();
+    testBetsJob.stop();
 
     logger.info('✅ Todos los Jobs detenidos');
   } catch (error) {
@@ -58,5 +66,7 @@ export default {
   executeDrawJob,
   publishDrawJob,
   syncApiPlanningJob,
-  syncApiTicketsJob
+  syncApiTicketsJob,
+  simulateBetsJob,
+  testBetsJob
 };

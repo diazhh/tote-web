@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import playerMovementService from './player-movement.service.js';
 
 class WithdrawalService {
   async create(userId, data) {
@@ -209,13 +210,23 @@ class WithdrawalService {
           throw new Error('El retiro debe estar en estado PENDING o PROCESSING');
         }
 
+        // Descontar del saldo bloqueado y del balance real
         await tx.user.update({
           where: { id: withdrawal.userId },
           data: {
             blockedBalance: {
               decrement: withdrawal.amount
+            },
+            balance: {
+              decrement: withdrawal.amount
             }
           }
+        });
+
+        // Registrar movimiento de retiro
+        await playerMovementService.recordWithdrawal(tx, withdrawal.userId, withdrawal.amount, id, {
+          reference,
+          completedBy: adminId
         });
 
         const updatedWithdrawal = await tx.withdrawal.update({
