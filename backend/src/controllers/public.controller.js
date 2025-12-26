@@ -68,7 +68,6 @@ class PublicController {
           id: true,
           drawDate: true,
           drawTime: true,
-          scheduledAt: true,
           status: true,
           imageUrl: true,
           imageGenerated: true,
@@ -94,11 +93,8 @@ class PublicController {
       });
 
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
-      // Formatear scheduledAt en hora de Caracas para el frontend
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
-        scheduledAt: draw.scheduledAt.toISOString(),
-        scheduledAtCaracas: formatToCaracasTime(draw.scheduledAt, 'yyyy-MM-dd HH:mm:ss'),
         winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
       }));
 
@@ -143,7 +139,6 @@ class PublicController {
           id: true,
           drawDate: true,
           drawTime: true,
-          scheduledAt: true,
           status: true,
           imageUrl: true,
           imageGenerated: true,
@@ -171,7 +166,6 @@ class PublicController {
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
-        scheduledAt: draw.scheduledAt.toISOString(),
         winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
       }));
 
@@ -195,7 +189,7 @@ class PublicController {
   async getGameDrawsToday(req, res) {
     try {
       const { gameSlug } = req.params;
-      const { startOfDay: startDate, endOfDay: endDate } = getTodayBounds();
+      const todayDrawDate = getTodayDrawDate();
 
       const game = await prisma.game.findUnique({
         where: { slug: gameSlug }
@@ -211,14 +205,12 @@ class PublicController {
       const draws = await prisma.draw.findMany({
         where: {
           gameId: game.id,
-          scheduledAt: {
-            gte: startDate,
-            lte: endDate
-          }
+          drawDate: todayDrawDate
         },
         select: {
           id: true,
-          scheduledAt: true,
+          drawDate: true,
+          drawTime: true,
           status: true,
           imageUrl: true,
           imageGenerated: true,
@@ -237,15 +229,15 @@ class PublicController {
             }
           }
         },
-        orderBy: { scheduledAt: 'asc' }
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ]
       });
 
       // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
-      // Formatear scheduledAt en hora de Caracas para el frontend
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
-        scheduledAt: draw.scheduledAt.toISOString(),
-        scheduledAtCaracas: formatToCaracasTime(draw.scheduledAt, 'yyyy-MM-dd HH:mm:ss'),
         winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
       }));
 
@@ -289,9 +281,9 @@ class PublicController {
 
       // Filtros opcionales
       if (startDate || endDate) {
-        where.scheduledAt = {};
-        if (startDate) where.scheduledAt.gte = new Date(startDate);
-        if (endDate) where.scheduledAt.lte = new Date(endDate);
+        where.drawDate = {};
+        if (startDate) where.drawDate.gte = getDrawDate(startDate);
+        if (endDate) where.drawDate.lte = getDrawDate(endDate);
       }
 
       if (number) {
@@ -308,7 +300,8 @@ class PublicController {
           where,
           select: {
             id: true,
-            scheduledAt: true,
+            drawDate: true,
+            drawTime: true,
             status: true,
             imageUrl: true,
             imageGenerated: true,
@@ -327,7 +320,10 @@ class PublicController {
               }
             }
           },
-          orderBy: { scheduledAt: 'desc' },
+          orderBy: [
+            { drawDate: 'desc' },
+            { drawTime: 'desc' }
+          ],
           skip,
           take
         }),
@@ -365,12 +361,16 @@ class PublicController {
   async getNextDraws(req, res) {
     try {
       const { limit = 10 } = req.query;
+      const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+      const todayVenezuela = getVenezuelaDateAsUTC();
+      const currentTime = getVenezuelaTimeString();
 
       const draws = await prisma.draw.findMany({
         where: {
-          scheduledAt: {
-            gte: new Date()
-          },
+          OR: [
+            { drawDate: todayVenezuela, drawTime: { gt: currentTime } },
+            { drawDate: { gt: todayVenezuela } }
+          ],
           status: {
             in: ['SCHEDULED', 'CLOSED']
           },
@@ -380,7 +380,8 @@ class PublicController {
         },
         select: {
           id: true,
-          scheduledAt: true,
+          drawDate: true,
+          drawTime: true,
           status: true,
           imageUrl: true,
           imageGenerated: true,
@@ -393,7 +394,10 @@ class PublicController {
             }
           },
         },
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ],
         take: parseInt(limit)
       });
 
@@ -423,7 +427,8 @@ class PublicController {
         where: { id },
         select: {
           id: true,
-          scheduledAt: true,
+          drawDate: true,
+          drawTime: true,
           status: true,
           imageUrl: true,
           imageGenerated: true,
@@ -492,12 +497,13 @@ class PublicController {
       startDate.setDate(startDate.getDate() - parseInt(days));
 
       // Total de sorteos
+      const startDrawDate = getDrawDate(startDate);
       const totalDraws = await prisma.draw.count({
         where: {
           gameId: game.id,
           status: 'PUBLISHED',
-          scheduledAt: {
-            gte: startDate
+          drawDate: {
+            gte: startDrawDate
           }
         }
       });
@@ -508,8 +514,8 @@ class PublicController {
         where: {
           gameId: game.id,
           status: 'PUBLISHED',
-          scheduledAt: {
-            gte: startDate
+          drawDate: {
+            gte: startDrawDate
           },
           winnerItemId: {
             not: null

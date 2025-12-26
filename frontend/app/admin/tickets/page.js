@@ -371,10 +371,7 @@ export default function TicketsPage() {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">{ticket.draw?.game?.name}</div>
                     <div className="text-sm text-gray-500">
-                      {new Date(ticket.draw?.scheduledAt).toLocaleString('es-VE', {
-                        dateStyle: 'short',
-                        timeStyle: 'short'
-                      })}
+                      {formatDrawDateTime(ticket.draw)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600">

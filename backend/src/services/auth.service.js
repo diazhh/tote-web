@@ -348,6 +348,73 @@ class AuthService {
       throw error;
     }
   }
+
+  /**
+   * Obtener juegos asignados a un usuario
+   */
+  async getUserGames(userId) {
+    try {
+      const userGames = await prisma.userGame.findMany({
+        where: { userId },
+        include: {
+          game: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              type: true
+            }
+          }
+        }
+      });
+
+      return userGames.map(ug => ({
+        ...ug.game,
+        notify: ug.notify
+      }));
+    } catch (error) {
+      logger.error('Error al obtener juegos del usuario:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Asignar juegos a un usuario
+   */
+  async assignGamesToUser(userId, gameIds) {
+    try {
+      // Verificar que el usuario existe
+      const user = await prisma.user.findUnique({
+        where: { id: userId }
+      });
+
+      if (!user) {
+        throw new Error('Usuario no encontrado');
+      }
+
+      // Eliminar asignaciones actuales
+      await prisma.userGame.deleteMany({
+        where: { userId }
+      });
+
+      // Crear nuevas asignaciones
+      if (gameIds.length > 0) {
+        await prisma.userGame.createMany({
+          data: gameIds.map(gameId => ({
+            userId,
+            gameId,
+            notify: true
+          }))
+        });
+      }
+
+      logger.info(`Juegos asignados al usuario ${user.username}: ${gameIds.length} juego(s)`);
+      return true;
+    } catch (error) {
+      logger.error('Error al asignar juegos al usuario:', error);
+      throw error;
+    }
+  }
 }
 
 export default new AuthService();

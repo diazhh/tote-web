@@ -1,5 +1,6 @@
 import { Trophy, Clock, Calendar } from 'lucide-react';
-import { formatTime, formatDate } from '@/lib/utils/format';
+import { formatDate } from '@/lib/utils/format';
+import { formatDrawTime } from '@/lib/utils/dateUtils';
 import EmptyState from '@/components/common/EmptyState';
 
 /**
@@ -53,7 +54,7 @@ function DrawResultCard({ draw }) {
     `}>
       <div className="flex items-center gap-2 text-sm font-medium text-gray-600 mb-4">
         <Clock className="h-4 w-4" />
-        <span>{formatTime(draw.scheduledAt)}</span>
+        <span>{formatDrawTime(draw)}</span>
       </div>
 
       {isDrawn && draw.winnerItem ? (

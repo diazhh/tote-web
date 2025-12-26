@@ -70,11 +70,16 @@ class DrawAnalysisService {
       }
 
       // Obtener tripletas activas del juego
+      // Construir fecha/hora completa del sorteo
+      const drawDateTime = new Date(draw.drawDate);
+      const [hours, minutes] = draw.drawTime.split(':');
+      drawDateTime.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
+      
       const activeTripletas = await prisma.tripleBet.findMany({
         where: {
           gameId: draw.gameId,
           status: 'ACTIVE',
-          expiresAt: { gte: draw.scheduledAt }
+          expiresAt: { gte: drawDateTime }
         }
       });
 
@@ -151,7 +156,8 @@ class DrawAnalysisService {
           name: draw.game.name,
           type: draw.game.type
         },
-        scheduledAt: draw.scheduledAt,
+        drawDate: draw.drawDate,
+        drawTime: draw.drawTime,
         status: draw.status,
         currentWinner: draw.winnerItem ? {
           number: draw.winnerItem.number,
@@ -210,13 +216,20 @@ class DrawAnalysisService {
         if (!startDraw) continue;
 
         // Obtener sorteos ejecutados en el rango de la tripleta
+        // Construir fecha/hora del sorteo inicial
+        const startDateTime = new Date(startDraw.drawDate);
+        const [startHours, startMinutes] = startDraw.drawTime.split(':');
+        startDateTime.setUTCHours(parseInt(startHours), parseInt(startMinutes), 0, 0);
+        
+        const expiresDate = new Date(tripleta.expiresAt).toISOString().split('T')[0] + 'T00:00:00.000Z';
+        
         const executedDraws = await prisma.draw.findMany({
           where: {
             gameId,
-            scheduledAt: {
-              gte: startDraw.scheduledAt,
-              lte: tripleta.expiresAt
-            },
+            OR: [
+              { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+              { drawDate: { gt: startDraw.drawDate, lte: expiresDate } }
+            ],
             status: { in: ['DRAWN', 'PUBLISHED'] },
             winnerItemId: { not: null }
           },
@@ -291,7 +304,8 @@ class DrawAnalysisService {
       return {
         drawId,
         game: fullAnalysis.game.name,
-        scheduledAt: fullAnalysis.scheduledAt,
+        drawDate: fullAnalysis.drawDate,
+        drawTime: fullAnalysis.drawTime,
         summary: fullAnalysis.summary,
         topRecommendations: fullAnalysis.recommendations.best.slice(0, 3).map(item => ({
           number: item.number,

@@ -334,7 +334,7 @@ export default function PlayerDetailPage() {
                     {tickets.map((ticket) => (
                       <tr key={ticket.id}>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{ticket.draw.game.name}</td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDate(ticket.draw.scheduledAt)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">{formatDrawDate(ticket.draw)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{formatCurrency(ticket.totalAmount)}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                           {parseFloat(ticket.totalPrize || 0) > 0 ? formatCurrency(ticket.totalPrize) : '-'}
@@ -497,7 +497,7 @@ export default function PlayerDetailPage() {
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Sorteo</label>
-                  <p className="font-medium">{formatDate(ticketDetailModal.data.draw?.scheduledAt)}</p>
+                  <p className="font-medium">{formatDrawDate(ticketDetailModal.data.draw)}</p>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

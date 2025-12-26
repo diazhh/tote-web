@@ -117,20 +117,22 @@ export default function TemplatesTab({ selectedGameId: initialGameId }) {
         </button>
       </div>
 
-      {/* Filter */}
-      <div className="flex items-center space-x-4">
-        <Filter className="w-5 h-5 text-gray-400" />
-        <select
-          value={filterGameId}
-          onChange={(e) => setFilterGameId(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-        >
-          <option value="">Todos los juegos</option>
-          {games.map(game => (
-            <option key={game.id} value={game.id}>{game.name}</option>
-          ))}
-        </select>
-      </div>
+      {/* Filter - Only show if not viewing a specific game */}
+      {!initialGameId && (
+        <div className="flex items-center space-x-4">
+          <Filter className="w-5 h-5 text-gray-400" />
+          <select
+            value={filterGameId}
+            onChange={(e) => setFilterGameId(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+          >
+            <option value="">Todos los juegos</option>
+            {games.map(game => (
+              <option key={game.id} value={game.id}>{game.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Templates List */}
       {templates.length === 0 ? (

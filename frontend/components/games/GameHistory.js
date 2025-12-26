@@ -1,5 +1,5 @@
 import { History, Trophy, ChevronLeft, ChevronRight } from 'lucide-react';
-import { formatDateTime } from '@/lib/utils/format';
+import { formatDrawDateTime } from '@/lib/utils/dateUtils';
 import EmptyState from '@/components/common/EmptyState';
 
 /**
@@ -48,7 +48,7 @@ export default function GameHistory({ history, currentPage, onPageChange }) {
             {draws.map((draw) => (
               <tr key={draw.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                 <td className="py-4 px-4 text-sm text-gray-600">
-                  {formatDateTime(draw.scheduledAt)}
+                  {formatDrawDateTime(draw)}
                 </td>
                 <td className="py-4 px-4 text-center">
                   {draw.winnerItem ? (

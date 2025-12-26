@@ -213,6 +213,67 @@ class ChannelService {
   }
 
   /**
+   * Probar publicación con imagen negra de prueba
+   */
+  async testPublish(id) {
+    try {
+      const channel = await this.getById(id);
+      const testImageGenerator = (await import('../lib/test-image-generator.js')).default;
+      
+      // Generar imagen negra de prueba
+      const imageResult = await testImageGenerator.generateBlackTestImage();
+      
+      // Construir URL pública de la imagen usando el backend público
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+      const imageUrl = `${baseUrl}${imageResult.publicUrl}`;
+      
+      logger.info(`Imagen de prueba generada: ${imageUrl}`);
+      
+      let result;
+      
+      switch (channel.type) {
+        case 'FACEBOOK':
+          const facebookService = (await import('./facebook.service.js')).default;
+          if (!channel.config.instanceId) {
+            throw new Error('instanceId no configurado para Facebook');
+          }
+          result = await facebookService.publishPhoto(
+            channel.config.instanceId,
+            imageUrl,
+            '🧪 Prueba de publicación - Imagen generada automáticamente'
+          );
+          break;
+          
+        case 'INSTAGRAM':
+          const instagramService = (await import('./instagram.service.js')).default;
+          if (!channel.config.instanceId) {
+            throw new Error('instanceId no configurado para Instagram');
+          }
+          result = await instagramService.publishPhoto(
+            channel.config.instanceId,
+            imageUrl,
+            '🧪 Prueba de publicación - Imagen generada automáticamente'
+          );
+          break;
+          
+        default:
+          throw new Error(`Prueba de publicación no implementada para ${channel.type}`);
+      }
+
+      logger.info(`Prueba de publicación exitosa para canal: ${channel.name}`);
+      return { 
+        status: 'ok', 
+        message: 'Publicación de prueba exitosa',
+        imageUrl,
+        result
+      };
+    } catch (error) {
+      logger.error('Error al probar publicación:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Validar configuración según tipo de canal
    */
   validateConfig(type, config) {

@@ -564,10 +564,13 @@ class WhatsAppBaileysService {
     const gameName = draw.game?.name || 'Sorteo';
     const winnerNumber = draw.winnerItem?.number || 'N/A';
     const winnerName = draw.winnerItem?.name || 'N/A';
-    const time = new Date(draw.scheduledAt).toLocaleTimeString('es-VE', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    
+    // drawTime ya está en formato "HH:MM:SS" hora Venezuela
+    const [hours, mins] = (draw.drawTime || '00:00:00').split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+    const displayHour = hour % 12 || 12;
+    const time = `${displayHour}:${mins} ${ampm}`;
 
     return `🎰 *${gameName}*\n\n` +
            `⏰ Hora: ${time}\n` +
@@ -932,6 +935,28 @@ class WhatsAppBaileysService {
       logger.debug(`📝 Estado actualizado en BD para ${instanceId}:`, updates);
     } catch (error) {
       logger.error(`Error al actualizar estado en BD para ${instanceId}:`, error);
+    }
+  }
+
+  /**
+   * Obtener grupos de una instancia de WhatsApp
+   */
+  async getGroups(instanceId) {
+    try {
+      if (!sessionManager.isConnected(instanceId)) {
+        throw new Error('La instancia no está conectada');
+      }
+
+      const groups = await sessionManager.getGroups(instanceId);
+
+      return {
+        success: true,
+        instanceId,
+        groups
+      };
+    } catch (error) {
+      logger.error(`Error al obtener grupos de ${instanceId}:`, error);
+      throw error;
     }
   }
 

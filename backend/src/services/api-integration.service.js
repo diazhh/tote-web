@@ -62,15 +62,18 @@ class ApiIntegrationService {
           }
 
           // Obtener sorteos locales del día para este juego, ordenados por hora
+          const { getVenezuelaDateAsUTC } = await import('../lib/dateUtils.js');
+          const drawDate = getVenezuelaDateAsUTC(date);
+          
           const localDraws = await prisma.draw.findMany({
             where: {
               gameId: config.gameId,
-              scheduledAt: {
-                gte: startOfDayInCaracas(date),
-                lte: endOfDayInCaracas(date)
-              }
+              drawDate: drawDate
             },
-            orderBy: { scheduledAt: 'asc' }
+            orderBy: [
+              { drawDate: 'asc' },
+              { drawTime: 'asc' }
+            ]
           });
 
           if (localDraws.length === 0) {
@@ -120,11 +123,9 @@ class ApiIntegrationService {
               }
             });
 
-            const hora = localDraw.scheduledAt.toLocaleTimeString('es-VE', { 
-              timeZone: 'America/Caracas', 
-              hour: '2-digit', 
-              minute: '2-digit' 
-            });
+            // drawTime ya está en formato "HH:MM:SS" hora Venezuela
+            const [hours, mins] = localDraw.drawTime.split(':');
+            const hora = `${hours}:${mins}`;
             logger.info(`✅ Mapeado: ${config.game.name} ${hora} → SRQ ${externalId} (${externalDraw.descripcion || ''})`);
             totalMapped++;
             

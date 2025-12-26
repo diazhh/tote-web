@@ -90,7 +90,8 @@ class MonitorService {
       return {
         drawId,
         game: draw.game.name,
-        scheduledAt: draw.scheduledAt,
+        drawDate: draw.drawDate,
+        drawTime: draw.drawTime,
         winnerItem: draw.winnerItem ? {
           number: draw.winnerItem.number,
           name: draw.winnerItem.name
@@ -179,11 +180,16 @@ class MonitorService {
       }
 
       // Obtener tripletas activas que incluyen items de este sorteo
+      // Construir fecha/hora completa del sorteo para comparar con expiresAt
+      const drawDateTime = new Date(draw.drawDate);
+      const [hours, minutes] = draw.drawTime.split(':');
+      drawDateTime.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
+      
       const activeTripletas = await prisma.tripleBet.findMany({
         where: {
           gameId: draw.gameId,
           status: 'ACTIVE',
-          expiresAt: { gte: draw.scheduledAt }
+          expiresAt: { gte: drawDateTime }
         }
       });
 
@@ -209,7 +215,8 @@ class MonitorService {
       return {
         drawId,
         game: draw.game.name,
-        scheduledAt: draw.scheduledAt,
+        drawDate: draw.drawDate,
+        drawTime: draw.drawTime,
         totalSales,
         winnerItem: draw.winnerItem ? {
           number: draw.winnerItem.number,
@@ -267,7 +274,10 @@ class MonitorService {
             }
           }
         },
-        orderBy: { scheduledAt: 'asc' }
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ]
       });
 
       const report = [];
@@ -292,7 +302,8 @@ class MonitorService {
         report.push({
           drawId: draw.id,
           game: draw.game.name,
-          scheduledAt: draw.scheduledAt,
+          drawDate: draw.drawDate,
+          drawTime: draw.drawTime,
           status: draw.status,
           winnerItem: draw.winnerItem ? {
             number: draw.winnerItem.number,
@@ -476,11 +487,16 @@ class MonitorService {
       }
 
       // Buscar tripletas activas que incluyan este item
+      // Construir fecha/hora completa del sorteo
+      const drawDateTime = new Date(draw.drawDate);
+      const [hours, minutes] = draw.drawTime.split(':');
+      drawDateTime.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
+      
       const tripletas = await prisma.tripleBet.findMany({
         where: {
           gameId: draw.gameId,
           status: 'ACTIVE',
-          expiresAt: { gte: draw.scheduledAt },
+          expiresAt: { gte: drawDateTime },
           OR: [
             { item1Id: itemId },
             { item2Id: itemId },
@@ -518,40 +534,53 @@ class MonitorService {
           where: { id: t.startDrawId }
         });
 
+        // Construir fecha/hora del sorteo inicial
+        const startDateTime = new Date(startDraw.drawDate);
+        const [startHours, startMinutes] = startDraw.drawTime.split(':');
+        startDateTime.setUTCHours(parseInt(startHours), parseInt(startMinutes), 0, 0);
+        
         const executedDraws = await prisma.draw.findMany({
           where: {
             gameId: draw.gameId,
-            scheduledAt: {
-              gte: startDraw?.scheduledAt || new Date(),
-              lte: t.expiresAt
-            },
+            OR: [
+              { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+              { drawDate: { gt: startDraw.drawDate, lte: new Date(t.expiresAt).toISOString().split('T')[0] + 'T00:00:00.000Z' } }
+            ],
             status: { in: ['DRAWN', 'PUBLISHED'] },
             winnerItemId: { not: null }
           },
           select: { 
             id: true,
-            scheduledAt: true,
+            drawDate: true,
+            drawTime: true,
             winnerItemId: true 
           },
-          orderBy: { scheduledAt: 'asc' }
+          orderBy: [
+            { drawDate: 'asc' },
+            { drawTime: 'asc' }
+          ]
         });
 
         // Obtener todos los sorteos del rango (incluyendo pendientes)
         const allDrawsInRange = await prisma.draw.findMany({
           where: {
             gameId: draw.gameId,
-            scheduledAt: {
-              gte: startDraw?.scheduledAt || new Date(),
-              lte: t.expiresAt
-            }
+            OR: [
+              { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+              { drawDate: { gt: startDraw.drawDate, lte: new Date(t.expiresAt).toISOString().split('T')[0] + 'T00:00:00.000Z' } }
+            ]
           },
           select: {
             id: true,
-            scheduledAt: true,
+            drawDate: true,
+            drawTime: true,
             status: true,
             winnerItemId: true
           },
-          orderBy: { scheduledAt: 'asc' }
+          orderBy: [
+            { drawDate: 'asc' },
+            { drawTime: 'asc' }
+          ]
         });
 
         const winnerItemIds = executedDraws.map(d => d.winnerItemId);
@@ -588,17 +617,17 @@ class MonitorService {
             { 
               ...itemMap.get(t.item1Id), 
               won: item1Won,
-              wonInDraw: item1WonIn ? { id: item1WonIn.id, scheduledAt: item1WonIn.scheduledAt } : null
+              wonInDraw: item1WonIn ? { id: item1WonIn.id, drawDate: item1WonIn.drawDate, drawTime: item1WonIn.drawTime } : null
             },
             { 
               ...itemMap.get(t.item2Id), 
               won: item2Won,
-              wonInDraw: item2WonIn ? { id: item2WonIn.id, scheduledAt: item2WonIn.scheduledAt } : null
+              wonInDraw: item2WonIn ? { id: item2WonIn.id, drawDate: item2WonIn.drawDate, drawTime: item2WonIn.drawTime } : null
             },
             { 
               ...itemMap.get(t.item3Id), 
               won: item3Won,
-              wonInDraw: item3WonIn ? { id: item3WonIn.id, scheduledAt: item3WonIn.scheduledAt } : null
+              wonInDraw: item3WonIn ? { id: item3WonIn.id, drawDate: item3WonIn.drawDate, drawTime: item3WonIn.drawTime } : null
             }
           ],
           numbersWon,
@@ -610,7 +639,8 @@ class MonitorService {
             pending: allDrawsInRange.filter(d => d.status === 'SCHEDULED').length,
             draws: allDrawsInRange.map(d => ({
               id: d.id,
-              scheduledAt: d.scheduledAt,
+              drawDate: d.drawDate,
+              drawTime: d.drawTime,
               status: d.status,
               winnerItemId: d.winnerItemId,
               isRelevant: d.winnerItemId === t.item1Id || d.winnerItemId === t.item2Id || d.winnerItemId === t.item3Id

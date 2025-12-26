@@ -134,24 +134,35 @@ export default function ItemsTab({ selectedGameId: initialGameId }) {
         )}
       </div>
 
-      {/* Game Filter */}
-      <div className="flex items-center space-x-4">
-        <Filter className="w-5 h-5 text-gray-400" />
-        <select
-          value={selectedGameId}
-          onChange={(e) => setSelectedGameId(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-        >
-          {games.map(game => (
-            <option key={game.id} value={game.id}>{game.name}</option>
-          ))}
-        </select>
-        {selectedGame && (
-          <span className="text-sm text-gray-600">
-            Total: {items.length} / {selectedGame.totalNumbers}
-          </span>
-        )}
-      </div>
+      {/* Game Filter - Only show if not viewing a specific game */}
+      {!initialGameId && (
+        <div className="flex items-center space-x-4">
+          <Filter className="w-5 h-5 text-gray-400" />
+          <select
+            value={selectedGameId}
+            onChange={(e) => setSelectedGameId(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+          >
+            {games.map(game => (
+              <option key={game.id} value={game.id}>{game.name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* Game Info */}
+      {selectedGame && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-900">{selectedGame.name}</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                Total de items: {items.length} / {selectedGame.totalNumbers}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Items Table */}
       {loading ? (

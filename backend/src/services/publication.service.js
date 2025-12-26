@@ -1,7 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
-import whatsappBaileysService from './whatsapp-baileys.service.js';
-import sessionManager from '../lib/whatsapp/session-manager.js';
+import whatsappClient from '../lib/whatsapp-client.js';
 import messageTemplateService from './message-template.service.js';
 import telegramService from './telegram.service.js';
 import facebookService from './facebook.service.js';
@@ -11,6 +10,29 @@ import instagramService from './instagram.service.js';
  * Servicio para publicar sorteos en diferentes canales
  */
 class PublicationService {
+  constructor() {
+    // Lock para evitar publicaciones simultáneas en Instagram
+    this.instagramLock = false;
+    this.instagramQueue = [];
+  }
+
+  /**
+   * Adquirir lock de Instagram con cola
+   */
+  async acquireInstagramLock() {
+    while (this.instagramLock) {
+      await this.sleep(1000); // Esperar 1 segundo
+    }
+    this.instagramLock = true;
+  }
+
+  /**
+   * Liberar lock de Instagram
+   */
+  releaseInstagramLock() {
+    this.instagramLock = false;
+  }
+
   /**
    * Publicar sorteo en todos los canales activos
    */
@@ -33,6 +55,19 @@ class PublicationService {
         throw new Error('El sorteo debe estar en estado DRAWN para publicar');
       }
 
+      // CRÍTICO: Marcar como publicado INMEDIATAMENTE antes de intentar publicar
+      // Esto previene que el job o reintentos publiquen múltiples veces el mismo sorteo
+      // Si hay errores en canales individuales, se registran en DrawPublication
+      await prisma.draw.update({
+        where: { id: drawId },
+        data: { 
+          status: 'PUBLISHED',
+          publishedAt: new Date()
+        }
+      });
+
+      logger.info(`📢 Sorteo ${drawId} marcado como PUBLISHED - iniciando publicación en canales`);
+
       // Obtener canales activos para este juego
       const channels = await prisma.gameChannel.findMany({
         where: { 
@@ -41,10 +76,21 @@ class PublicationService {
         }
       });
 
-      const results = [];
+      if (channels.length === 0) {
+        logger.warn(`⚠️ No hay canales activos configurados para el juego ${draw.game.name}`);
+        return {
+          success: true,
+          drawId,
+          results: []
+        };
+      }
 
-      // Publicar en cada canal
-      for (const channel of channels) {
+      // Separar canales de Instagram del resto para evitar rate limits
+      const instagramChannels = channels.filter(c => c.channelType === 'INSTAGRAM');
+      const otherChannels = channels.filter(c => c.channelType !== 'INSTAGRAM');
+
+      // Publicar en canales no-Instagram en paralelo
+      const otherPromises = otherChannels.map(async (channel) => {
         try {
           let result;
 
@@ -58,23 +104,57 @@ class PublicationService {
             case 'FACEBOOK':
               result = await this.publishToFacebook(draw, channel);
               break;
-            case 'INSTAGRAM':
-              result = await this.publishToInstagram(draw, channel);
-              break;
             default:
               logger.warn(`Canal no soportado: ${channel.channelType}`);
-              continue;
+              return {
+                channelId: channel.id,
+                channelName: channel.name,
+                channelType: channel.channelType,
+                success: false,
+                error: 'Canal no soportado'
+              };
           }
 
-          results.push({
+          return {
+            channelId: channel.id,
+            channelName: channel.name,
+            channelType: channel.channelType,
+            ...result
+          };
+        } catch (error) {
+          logger.error(`Error publicando en canal ${channel.name}:`, error);
+          return {
+            channelId: channel.id,
+            channelName: channel.name,
+            channelType: channel.channelType,
+            success: false,
+            error: error.message
+          };
+        }
+      });
+
+      // Publicar en Instagram secuencialmente con delay para evitar rate limits
+      const instagramResults = [];
+      for (const channel of instagramChannels) {
+        try {
+          logger.info(`📸 Publicando en Instagram para ${draw.game.name} - esperando para evitar rate limits`);
+          
+          const result = await this.publishToInstagram(draw, channel);
+          
+          instagramResults.push({
             channelId: channel.id,
             channelName: channel.name,
             channelType: channel.channelType,
             ...result
           });
+
+          // Esperar 5 segundos entre publicaciones de Instagram para evitar rate limits
+          if (instagramChannels.indexOf(channel) < instagramChannels.length - 1) {
+            await this.sleep(5000);
+          }
         } catch (error) {
-          logger.error(`Error publicando en canal ${channel.name}:`, error);
-          results.push({
+          logger.error(`Error publicando en Instagram canal ${channel.name}:`, error);
+          instagramResults.push({
             channelId: channel.id,
             channelName: channel.name,
             channelType: channel.channelType,
@@ -84,14 +164,14 @@ class PublicationService {
         }
       }
 
-      // Actualizar estado del sorteo
-      await prisma.draw.update({
-        where: { id: drawId },
-        data: { 
-          status: 'PUBLISHED',
-          publishedAt: new Date()
-        }
-      });
+      // Esperar a que todas las publicaciones no-Instagram terminen
+      const otherResults = await Promise.all(otherPromises);
+      
+      // Combinar resultados
+      const results = [...otherResults, ...instagramResults];
+
+      // El sorteo ya fue marcado como PUBLISHED al inicio
+      // Los resultados individuales se registran en DrawPublication
 
       return {
         success: true,
@@ -105,33 +185,21 @@ class PublicationService {
   }
 
   /**
-   * Publicar en WhatsApp (soporta Baileys y API oficial)
+   * Publicar en WhatsApp usando el nuevo servicio standalone
    */
   async publishToWhatsApp(draw, channel) {
     try {
-      const instanceId = channel.whatsappInstanceId;
       const recipients = channel.recipients || [];
 
-      // Validar instancia
-      if (!instanceId) {
-        throw new Error('No hay instancia de WhatsApp configurada para este canal');
-      }
-
-      // Verificar que la instancia esté activa (no pausada)
-      const instance = await prisma.whatsAppInstance.findUnique({
-        where: { instanceId }
-      });
-
-      if (!instance) {
-        throw new Error(`Instancia ${instanceId} no encontrada`);
-      }
-
-      if (instance.isActive === false) {
-        logger.info(`Instancia ${instanceId} está pausada, omitiendo envío`);
+      // Verificar estado del servicio WhatsApp
+      const status = await whatsappClient.getStatus();
+      
+      if (!status.isReady) {
+        logger.warn('WhatsApp service not ready, skipping publication');
         return {
           success: false,
           skipped: true,
-          message: 'Instancia pausada por el administrador'
+          message: 'Servicio WhatsApp no está listo'
         };
       }
 
@@ -159,12 +227,8 @@ class PublicationService {
         throw new Error('No hay destinatarios configurados para este canal');
       }
 
-      if (!sessionManager.isConnected(instanceId)) {
-        throw new Error(`Instancia ${instanceId} no está conectada`);
-      }
-
-      // Publicar usando Baileys
-      const result = await this.publishViaBaileys(draw, channel);
+      // Publicar usando el nuevo servicio
+      const result = await this.publishViaNewWhatsAppService(draw, channel);
 
       // Actualizar publicación con resultado
       await prisma.drawPublication.update({
@@ -198,15 +262,11 @@ class PublicationService {
   }
 
   /**
-   * Publicar usando Baileys
+   * Publicar usando el nuevo servicio WhatsApp standalone
    */
-  async publishViaBaileys(draw, channel) {
+  async publishViaNewWhatsAppService(draw, channel) {
     try {
-      const instanceId = channel.whatsappInstanceId;
       const recipients = channel.recipients || [];
-
-      const messageIds = [];
-      const errors = [];
 
       // Preparar mensaje usando la plantilla del canal
       const caption = messageTemplateService.renderDrawMessage(
@@ -214,47 +274,42 @@ class PublicationService {
         draw
       );
 
-      // Enviar a cada destinatario
-      for (const recipient of recipients) {
-        try {
-          let result;
+      // Convertir URL relativa a URL completa
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+      const fullImageUrl = draw.imageUrl 
+        ? (draw.imageUrl.startsWith('http') ? draw.imageUrl : `${baseUrl}${draw.imageUrl}`)
+        : null;
 
-          if (draw.imageUrl) {
-            // Enviar imagen con caption
-            result = await sessionManager.sendImageFromUrl(
-              instanceId,
-              recipient,
-              draw.imageUrl,
-              caption
-            );
-          } else {
-            // Enviar solo texto
-            result = await sessionManager.sendTextMessage(
-              instanceId,
-              recipient,
-              caption
-            );
-          }
+      // Preparar datos de imagen si existe
+      const imageData = fullImageUrl ? {
+        type: 'url',
+        url: fullImageUrl
+      } : null;
 
-          messageIds.push(result.key.id);
+      // Enviar a múltiples destinatarios usando el servicio
+      const result = await whatsappClient.sendToMultipleGroups(
+        recipients,
+        caption,
+        fullImageUrl
+      );
 
-          // Pequeña pausa entre mensajes
-          await this.sleep(1000);
-        } catch (error) {
-          logger.error(`Error enviando a ${recipient}:`, error);
-          errors.push({ recipient, error: error.message });
-        }
-      }
+      const messageIds = result.results
+        .filter(r => r.success)
+        .map(r => r.messageId);
+
+      const errors = result.results
+        .filter(r => !r.success)
+        .map(r => ({ recipient: r.chatId, error: r.error }));
 
       return {
-        success: messageIds.length > 0,
+        success: result.summary.successful > 0,
         messageIds,
-        totalSent: messageIds.length,
-        totalFailed: errors.length,
+        totalSent: result.summary.successful,
+        totalFailed: result.summary.failed,
         errors: errors.length > 0 ? errors : undefined
       };
     } catch (error) {
-      logger.error('Error en publishViaBaileys:', error);
+      logger.error('Error en publishViaNewWhatsAppService:', error);
       return {
         success: false,
         error: error.message
@@ -346,6 +401,12 @@ class PublicationService {
       let result;
 
       if (draw.imageUrl) {
+        // Convertir URL relativa a URL completa para Telegram
+        const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+        const fullImageUrl = draw.imageUrl.startsWith('http') 
+          ? draw.imageUrl 
+          : `${baseUrl}${draw.imageUrl}`;
+        
         // Enviar foto con caption
         // Convertir mensaje Markdown/Mustache a HTML para Telegram
         const htmlMessage = this.formatMessageForTelegram(message);
@@ -353,7 +414,7 @@ class PublicationService {
         result = await telegramService.sendPhoto(
           instanceId,
           chatId,
-          draw.imageUrl,
+          fullImageUrl,
           htmlMessage
         );
       } else {
@@ -461,11 +522,17 @@ class PublicationService {
         draw
       );
 
+      // Construir URL pública de la imagen usando el endpoint público
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+      const imageUrl = `${baseUrl}/api/public/images/draw/${draw.id}`;
+
+      logger.info(`📸 Publicando en Facebook con imagen: ${imageUrl}`);
+
       // Publicar post con imagen
       const result = await facebookService.publishPost(
         instanceId,
         message,
-        draw.imageUrl
+        imageUrl
       );
 
       // Actualizar publicación con resultado
@@ -510,6 +577,9 @@ class PublicationService {
    * Publicar en Instagram
    */
   async publishToInstagram(draw, channel) {
+    // Adquirir lock global de Instagram para evitar rate limits
+    await this.acquireInstagramLock();
+    
     try {
       const instanceId = channel.instagramInstanceId;
 
@@ -566,10 +636,16 @@ class PublicationService {
         draw
       );
 
+      // Construir URL pública de la imagen usando el endpoint público
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+      const imageUrl = `${baseUrl}/api/public/images/draw/${draw.id}`;
+
+      logger.info(`📸 Publicando en Instagram con imagen: ${imageUrl}`);
+
       // Publicar foto
       const result = await instagramService.publishPhoto(
         instanceId,
-        draw.imageUrl,
+        imageUrl,
         caption
       );
 
@@ -583,6 +659,9 @@ class PublicationService {
           error: result.error || null
         }
       });
+
+      // Esperar 3 segundos adicionales después de publicar para respetar rate limits
+      await this.sleep(3000);
 
       return {
         success: result.success,
@@ -608,6 +687,9 @@ class PublicationService {
         success: false,
         error: error.message
       };
+    } finally {
+      // Siempre liberar el lock
+      this.releaseInstagramLock();
     }
   }
 
@@ -673,10 +755,13 @@ class PublicationService {
     const gameName = draw.game?.name || 'Sorteo';
     const winnerNumber = draw.winnerItem?.number || 'N/A';
     const winnerName = draw.winnerItem?.name || 'N/A';
-    const time = new Date(draw.scheduledAt).toLocaleTimeString('es-VE', {
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    
+    // drawTime ya está en formato "HH:MM:SS" hora Venezuela
+    const [hours, mins] = (draw.drawTime || '00:00:00').split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+    const displayHour = hour % 12 || 12;
+    const time = `${displayHour}:${mins} ${ampm}`;
 
     return `🎰 *${gameName}*\n\n` +
            `⏰ Hora: ${time}\n` +

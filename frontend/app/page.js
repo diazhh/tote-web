@@ -11,7 +11,7 @@ import ErrorMessage from '@/components/common/ErrorMessage';
 import ImageModal from '@/components/common/ImageModal';
 import { Calendar, Clock, Trophy, Menu, X, ChevronRight, Play, Users, Shield, Zap, ArrowRight, Star, CheckCircle, TrendingUp } from 'lucide-react';
 import { formatTime, formatDate } from '@/lib/utils/format';
-import { extractTimeFromCaracasString, extractDateFromCaracasString } from '@/lib/utils/dateUtils';
+import { extractTimeFromCaracasString, extractDateFromCaracasString, getDrawDateTimeForCountdown, formatDrawDate, formatDrawTime } from '@/lib/utils/dateUtils';
 import Link from 'next/link';
 
 function NavigationHeader({ onOpenMobileMenu }) {
@@ -102,7 +102,8 @@ function MobileMenu({ isOpen, onClose }) {
 
 function HeroSection({ nextDraws, games }) {
   const nextDraw = nextDraws?.[0];
-  const { timeLeft } = useCountdown(nextDraw?.scheduledAt);
+  const drawDateTime = nextDraw ? getDrawDateTimeForCountdown(nextDraw) : null;
+  const { timeLeft } = useCountdown(drawDateTime);
 
   return (
     <section id="inicio" className="relative pt-24 pb-20 bg-gradient-to-br from-blue-600 via-purple-600 to-blue-800 text-white overflow-hidden">
@@ -515,9 +516,9 @@ export default function HomePage() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-600">
                       <Calendar className="h-3 w-3" />
-                      <span>{draw.scheduledAtCaracas ? extractDateFromCaracasString(draw.scheduledAtCaracas) : formatDate(draw.scheduledAt)}</span>
+                      <span>{draw.scheduledAtCaracas ? extractDateFromCaracasString(draw.scheduledAtCaracas) : formatDrawDate(draw)}</span>
                       <Clock className="h-3 w-3 ml-2" />
-                      <span className="font-semibold">{draw.scheduledAtCaracas ? extractTimeFromCaracasString(draw.scheduledAtCaracas) : formatTime(draw.scheduledAt)}</span>
+                      <span className="font-semibold">{draw.scheduledAtCaracas ? extractTimeFromCaracasString(draw.scheduledAtCaracas) : formatDrawTime(draw)}</span>
                     </div>
                   </div>
 

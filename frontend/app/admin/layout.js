@@ -108,7 +108,7 @@ export default function AdminLayout({ children }) {
         />
       )}
 
-      <div className="flex h-screen">
+      <div className="flex min-h-screen">
         {/* Sidebar */}
         <div className={`
           fixed inset-y-0 left-0 z-50 w-64 bg-white border-r border-gray-200 transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0 lg:flex-shrink-0 flex flex-col
@@ -212,7 +212,7 @@ export default function AdminLayout({ children }) {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
         <div className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-8 flex-shrink-0">
           <div className="flex items-center">
@@ -237,7 +237,7 @@ export default function AdminLayout({ children }) {
         </div>
 
         {/* Page Content */}
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+        <main className="flex-1 p-4 lg:p-6">
           {children}
         </main>
       </div>

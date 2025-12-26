@@ -26,7 +26,8 @@ class MessageTemplateService {
    * - gameName: Nombre del juego
    * - gameSlug: Slug del juego
    * - drawId: ID del sorteo
-   * - scheduledAt: Fecha/hora programada (ISO)
+   * - drawDate: Fecha del sorteo (Date)
+   * - drawTime: Hora del sorteo (HH:MM:SS)
    * - date: Fecha en formato legible
    * - dateShort: Fecha corta (DD/MM/YYYY)
    * - dateLong: Fecha larga (Lunes, 4 de octubre de 2025)
@@ -46,7 +47,10 @@ class MessageTemplateService {
    * @returns {object} Datos para la plantilla
    */
   prepareDrawData(draw) {
-    const scheduledDate = parseISO(draw.scheduledAt);
+    // Usar drawDate para la fecha
+    const drawDateObj = draw.drawDate instanceof Date 
+      ? draw.drawDate 
+      : parseISO(draw.drawDate);
     
     // Datos básicos del juego
     const gameName = draw.game?.name || 'Sorteo';
@@ -65,20 +69,24 @@ class MessageTemplateService {
     }
     
     // Formatos de fecha
-    const date = format(scheduledDate, "PPP", { locale: es }); // 4 de octubre de 2025
-    const dateShort = format(scheduledDate, "dd/MM/yyyy"); // 04/10/2025
-    const dateLong = format(scheduledDate, "PPPP", { locale: es }); // Lunes, 4 de octubre de 2025
+    const date = format(drawDateObj, "PPP", { locale: es }); // 4 de octubre de 2025
+    const dateShort = format(drawDateObj, "dd/MM/yyyy"); // 04/10/2025
+    const dateLong = format(drawDateObj, "PPPP", { locale: es }); // Lunes, 4 de octubre de 2025
     
-    // Formatos de hora
-    const time = format(scheduledDate, "HH:mm"); // 08:00
-    const time12 = format(scheduledDate, "hh:mm a"); // 08:00 AM
-    const timeShort = format(scheduledDate, "HH'h'"); // 08h
-    const hour = format(scheduledDate, "HH"); // 08
-    const minute = format(scheduledDate, "mm"); // 00
+    // Formatos de hora - usar drawTime directamente (ya está en hora Venezuela)
+    const [hours, mins] = (draw.drawTime || '00:00:00').split(':');
+    const hourNum = parseInt(hours, 10);
+    const time = `${hours}:${mins}`; // 08:00
+    const ampm = hourNum >= 12 ? 'PM' : 'AM';
+    const displayHour = hourNum % 12 || 12;
+    const time12 = `${displayHour.toString().padStart(2, '0')}:${mins} ${ampm}`; // 08:00 AM
+    const timeShort = `${hours}h`; // 08h
+    const hour = hours; // 08
+    const minute = mins; // 00
     
     // Día de la semana
-    const dayOfWeek = format(scheduledDate, "EEEE", { locale: es }); // Lunes
-    const dayOfWeekShort = format(scheduledDate, "EEE", { locale: es }); // Lun
+    const dayOfWeek = format(drawDateObj, "EEEE", { locale: es }); // Lunes
+    const dayOfWeekShort = format(drawDateObj, "EEE", { locale: es }); // Lun
     
     return {
       // Juego
@@ -88,7 +96,8 @@ class MessageTemplateService {
       
       // Sorteo
       drawId: draw.id,
-      scheduledAt: draw.scheduledAt,
+      drawDate: draw.drawDate,
+      drawTime: draw.drawTime,
       status: draw.status,
       
       // Fechas
@@ -144,7 +153,8 @@ class MessageTemplateService {
       // Intentar renderizar con datos de prueba
       const testData = this.prepareDrawData({
         id: 'test-id',
-        scheduledAt: new Date().toISOString(),
+        drawDate: new Date().toISOString(),
+        drawTime: '08:00:00',
         status: 'DRAWN',
         game: {
           name: 'TEST GAME',

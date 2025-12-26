@@ -150,7 +150,8 @@ class PrewinnerSelectionService {
         pdfPath = await pdfReportService.generateDrawClosingReport({
           drawId,
           game: draw.game,
-          scheduledAt: draw.scheduledAt,
+          drawDate: draw.drawDate,
+          drawTime: draw.drawTime,
           prewinnerItem: selectedItem,
           totalSales,
           maxPayout,
@@ -171,7 +172,8 @@ class PrewinnerSelectionService {
         await adminNotificationService.notifyPrewinnerSelected({
           drawId,
           game: draw.game,
-          scheduledAt: draw.scheduledAt,
+          drawDate: draw.drawDate,
+          drawTime: draw.drawTime,
           prewinnerItem: selectedItem,
           totalSales,
           maxPayout,
@@ -229,16 +231,11 @@ class PrewinnerSelectionService {
    * Obtener IDs de items ya usados hoy
    */
   async getUsedItemsToday(gameId, referenceDate) {
-    const today = startOfDayInCaracas(referenceDate);
-    const tomorrow = endOfDayInCaracas(referenceDate);
-
+    // referenceDate es un drawDate (Date UTC)
     const drawsToday = await prisma.draw.findMany({
       where: {
         gameId,
-        scheduledAt: {
-          gte: today,
-          lte: tomorrow
-        },
+        drawDate: referenceDate,
         OR: [
           { preselectedItemId: { not: null } },
           { winnerItemId: { not: null } }
@@ -263,16 +260,11 @@ class PrewinnerSelectionService {
    * Obtener centenas usadas hoy (para TRIPLE)
    */
   async getUsedCentenasToday(gameId, referenceDate) {
-    const today = startOfDayInCaracas(referenceDate);
-    const tomorrow = endOfDayInCaracas(referenceDate);
-
+    // referenceDate es un drawDate (Date UTC)
     const drawsToday = await prisma.draw.findMany({
       where: {
         gameId,
-        scheduledAt: {
-          gte: today,
-          lte: tomorrow
-        },
+        drawDate: referenceDate,
         OR: [
           { preselectedItemId: { not: null } },
           { winnerItemId: { not: null } }
@@ -338,14 +330,16 @@ class PrewinnerSelectionService {
    */
   async selectPrewinnersForClosingDraws(minutesBefore = 5) {
     try {
-      const now = new Date();
-      const targetTime = new Date(now.getTime() + minutesBefore * 60 * 1000);
-      const windowStart = new Date(targetTime.getTime() - 60 * 1000);
+      const { getVenezuelaDateAsUTC, getVenezuelaTimeString, addMinutesToTime } = await import('../lib/dateUtils.js');
+      const todayVenezuela = getVenezuelaDateAsUTC();
+      const currentTime = getVenezuelaTimeString();
+      const targetTime = addMinutesToTime(currentTime, minutesBefore);
 
       const draws = await prisma.draw.findMany({
         where: {
-          scheduledAt: {
-            gte: windowStart,
+          drawDate: todayVenezuela,
+          drawTime: {
+            gte: currentTime,
             lte: targetTime
           },
           status: 'SCHEDULED',
@@ -372,7 +366,8 @@ class PrewinnerSelectionService {
           results.push({
             drawId: draw.id,
             game: draw.game.name,
-            scheduledAt: draw.scheduledAt,
+            drawDate: draw.drawDate,
+            drawTime: draw.drawTime,
             selectedItem: selected ? { number: selected.number, name: selected.name } : null
           });
         } catch (error) {
@@ -380,7 +375,8 @@ class PrewinnerSelectionService {
           results.push({
             drawId: draw.id,
             game: draw.game.name,
-            scheduledAt: draw.scheduledAt,
+            drawDate: draw.drawDate,
+            drawTime: draw.drawTime,
             error: error.message
           });
         }

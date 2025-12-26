@@ -128,8 +128,12 @@ function createTextSVG(text, x, y, fontSize, fontFamily, fontPath, color = '#000
  * Generate Ruleta result image
  */
 export async function generateRouletteImage(drawData) {
-  const { result, scheduledAt, gameId } = drawData;
-  const date = new Date(scheduledAt);
+  const { result, drawDate, drawTime, gameId } = drawData;
+  // drawDate es un Date object, drawTime es string "HH:MM:SS" en hora Venezuela
+  const date = new Date(drawDate);
+  const [drawHours, drawMinutes] = drawTime.split(':');
+  const hours = parseInt(drawHours);
+  const minutes = parseInt(drawMinutes);
   
   const basePath = path.join(BASES_PATH, '1');
   const layers = [];
@@ -172,9 +176,8 @@ export async function generateRouletteImage(drawData) {
     left: 0
   });
   
-  // 5. Text overlays
+  // 5. Text overlays - usar drawTime directamente (ya está en hora Venezuela)
   const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getFullYear()).slice(-2)}`;
-  const hours = date.getHours();
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   const timeStr = `${displayHours} ${ampm}`;
@@ -187,8 +190,8 @@ export async function generateRouletteImage(drawData) {
   layers.push({ input: dateText, top: 0, left: 0 });
   layers.push({ input: timeText, top: 0, left: 0 });
   
-  // Composite and save
-  const outputFilename = `ruleta_${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(hours).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}.png`;
+  // Composite and save - usar drawTime para el nombre del archivo
+  const outputFilename = `ruleta_${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}.png`;
   const outputPath = path.join(OUTPUT_PATH, outputFilename);
   
   await sharp(layers[0].input)
@@ -205,8 +208,12 @@ export async function generateRouletteImage(drawData) {
  * Generate Animalitos result image
  */
 export async function generateAnimalitosImage(drawData) {
-  const { result, scheduledAt, gameId } = drawData;
-  const date = new Date(scheduledAt);
+  const { result, drawDate, drawTime, gameId } = drawData;
+  // drawDate es un Date object, drawTime es string "HH:MM:SS" en hora Venezuela
+  const date = new Date(drawDate);
+  const [drawHours, drawMinutes] = drawTime.split(':');
+  const hours = parseInt(drawHours);
+  const minutes = parseInt(drawMinutes);
   
   const basePath = path.join(BASES_PATH, '2');
   const layers = [];
@@ -218,17 +225,18 @@ export async function generateAnimalitosImage(drawData) {
     left: 0
   });
   
-  // 2. Animal image (with leading zero)
-  const animalNumber = String(result).padStart(2, '0');
+  // 2. Animal image
+  // Special case: 0 = DELFIN (0.png), not BALLENA (00.png)
+  // Only pad numbers 1-9 with leading zero
+  const animalNumber = result === 0 ? '0' : String(result).padStart(2, '0');
   layers.push({
     input: path.join(basePath, `${animalNumber}.png`),
     top: 0,
     left: 0
   });
   
-  // 3. Text overlays
+  // 3. Text overlays - usar drawTime directamente (ya está en hora Venezuela)
   const dateStr = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${String(date.getFullYear()).slice(-2)}`;
-  const hours = date.getHours();
   const ampm = hours >= 12 ? 'PM' : 'AM';
   const displayHours = hours % 12 || 12;
   const timeStr = `${displayHours} ${ampm}`;
@@ -241,8 +249,8 @@ export async function generateAnimalitosImage(drawData) {
   layers.push({ input: dateText, top: 0, left: 0 });
   layers.push({ input: timeText, top: 0, left: 0 });
   
-  // Composite and save
-  const outputFilename = `animalitos_${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(hours).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}.png`;
+  // Composite and save - usar drawTime para el nombre del archivo
+  const outputFilename = `animalitos_${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}.png`;
   const outputPath = path.join(OUTPUT_PATH, outputFilename);
   
   await sharp(layers[0].input)
@@ -259,8 +267,12 @@ export async function generateAnimalitosImage(drawData) {
  * Generate Triple result image
  */
 export async function generateTripleImage(drawData) {
-  const { result, scheduledAt, gameId } = drawData;
-  const date = new Date(scheduledAt);
+  const { result, drawDate, drawTime, gameId } = drawData;
+  // drawDate es un Date object, drawTime es string "HH:MM:SS" en hora Venezuela
+  const date = new Date(drawDate);
+  const [drawHours, drawMinutes] = drawTime.split(':');
+  const hours = parseInt(drawHours);
+  const minutes = parseInt(drawMinutes);
   
   const basePath = path.join(BASES_PATH, '3');
   const numerosPath = path.join(basePath, 'numeros');
@@ -327,8 +339,7 @@ export async function generateTripleImage(drawData) {
     left: 0
   });
   
-  // Add time images
-  const hours = date.getHours();
+  // Add time images - usar drawTime directamente (ya está en hora Venezuela)
   const ampm = hours >= 12 ? 'pm' : 'am';
   const displayHours = hours % 12 || 12;
   
@@ -355,8 +366,8 @@ export async function generateTripleImage(drawData) {
     left: 0
   });
   
-  // Composite and save
-  const outputFilename = `triple_${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(hours).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}.png`;
+  // Composite and save - usar drawTime para el nombre del archivo
+  const outputFilename = `triple_${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, '0')}${String(date.getDate()).padStart(2, '0')}_${String(hours).padStart(2, '0')}${String(minutes).padStart(2, '0')}.png`;
   const outputPath = path.join(OUTPUT_PATH, outputFilename);
   
   await sharp(layers[0].input)

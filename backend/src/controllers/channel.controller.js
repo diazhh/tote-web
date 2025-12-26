@@ -146,6 +146,28 @@ class ChannelController {
       });
     }
   }
+
+  /**
+   * POST /api/channels/:id/test-publish
+   */
+  async testPublish(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await channelService.testPublish(id);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Publicación de prueba exitosa'
+      });
+    } catch (error) {
+      logger.error('Error en test publish:', error);
+      res.status(400).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
 }
 
 export default new ChannelController();

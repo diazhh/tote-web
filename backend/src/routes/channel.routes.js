@@ -25,4 +25,7 @@ router.delete('/:id', authorize('ADMIN'), channelController.delete.bind(channelC
 // POST /api/channels/:id/test
 router.post('/:id/test', authorize('ADMIN', 'OPERATOR'), channelController.testConnection.bind(channelController));
 
+// POST /api/channels/:id/test-publish
+router.post('/:id/test-publish', authorize('ADMIN', 'OPERATOR'), channelController.testPublish.bind(channelController));
+
 export default router;

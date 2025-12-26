@@ -235,6 +235,59 @@ class AuthController {
       });
     }
   }
+
+  /**
+   * GET /api/auth/users/:id/games
+   * Obtener juegos asignados a un usuario
+   */
+  async getUserGames(req, res) {
+    try {
+      const { id } = req.params;
+      const games = await authService.getUserGames(id);
+
+      res.json({
+        success: true,
+        data: games
+      });
+    } catch (error) {
+      logger.error('Error en getUserGames:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * POST /api/auth/users/:id/games
+   * Asignar juegos a un usuario
+   */
+  async assignGamesToUser(req, res) {
+    try {
+      const { id } = req.params;
+      const { gameIds } = req.body;
+
+      if (!Array.isArray(gameIds)) {
+        return res.status(400).json({
+          success: false,
+          error: 'gameIds debe ser un array'
+        });
+      }
+
+      await authService.assignGamesToUser(id, gameIds);
+
+      res.json({
+        success: true,
+        message: `${gameIds.length} juego(s) asignado(s) al usuario`
+      });
+    } catch (error) {
+      logger.error('Error en assignGamesToUser:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
 }
 
 export default new AuthController();

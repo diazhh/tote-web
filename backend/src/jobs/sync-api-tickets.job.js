@@ -96,14 +96,25 @@ class SyncApiTicketsJob {
           // Entonces desde las 5:00pm hasta las 5:55pm sincronizamos el sorteo de 6pm
           const oneHourFromNow = new Date(now.getTime() + 60 * 60 * 1000);
           
+          const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+          const todayVenezuela = getVenezuelaDateAsUTC();
+          const currentTime = getVenezuelaTimeString();
+          
+          // Calcular 1 hora desde ahora en hora Venezuela
+          const [hours, minutes] = currentTime.split(':');
+          let oneHourLaterHours = parseInt(hours) + 1;
+          const oneHourLaterTime = `${String(oneHourLaterHours).padStart(2, '0')}:${minutes}:00`;
+          const tomorrowVenezuela = new Date(todayVenezuela);
+          tomorrowVenezuela.setDate(tomorrowVenezuela.getDate() + 1);
+          
           const draw = await prisma.draw.findFirst({
             where: {
               gameId: game.id,
               status: 'SCHEDULED',
-              scheduledAt: {
-                gte: now,
-                lte: oneHourFromNow, // Sorteos en la próxima hora
-              },
+              OR: [
+                { drawDate: todayVenezuela, drawTime: { gte: currentTime, lte: oneHourLaterTime } },
+                { drawDate: tomorrowVenezuela, drawTime: { lte: oneHourLaterTime } }
+              ],
               apiMappings: {
                 some: {}, // Debe tener mapping de SRQ
               },
@@ -111,25 +122,30 @@ class SyncApiTicketsJob {
             include: {
               apiMappings: true,
             },
-            orderBy: {
-              scheduledAt: 'asc', // El más próximo
-            },
+            orderBy: [
+              { drawDate: 'asc' },
+              { drawTime: 'asc' }
+            ],
           });
 
           if (!draw) {
             continue; // No hay sorteo próximo para este juego
           }
 
-          // Calcular minutos hasta el sorteo
-          const minutesUntilDraw = Math.floor((draw.scheduledAt - now) / (1000 * 60));
+          // Calcular minutos hasta el sorteo usando drawTime
+          const [drawHours, drawMinutes] = draw.drawTime.split(':');
+          const [currentHours, currentMinutes] = currentTime.split(':');
+          const drawTotalMinutes = parseInt(drawHours) * 60 + parseInt(drawMinutes);
+          const currentTotalMinutes = parseInt(currentHours) * 60 + parseInt(currentMinutes);
+          const minutesUntilDraw = drawTotalMinutes - currentTotalMinutes;
           // Calcular minutos hasta el cierre (5 min antes del sorteo)
           const minutesUntilClose = minutesUntilDraw - 5;
 
-          const hora = draw.scheduledAt.toLocaleTimeString('es-VE', { 
-            timeZone: 'America/Caracas', 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          });
+          // Formatear hora para display
+          const hour = parseInt(drawHours);
+          const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+          const displayHour = hour % 12 || 12;
+          const hora = `${displayHour}:${drawMinutes} ${ampm}`;
 
           logger.info(`  📊 ${game.name} ${hora} (cierra en ${minutesUntilClose} min)`);
 
@@ -169,12 +185,12 @@ class SyncApiTicketsJob {
     try {
       const today = new Date();
       
+      const { getVenezuelaDateAsUTC } = await import('../lib/dateUtils.js');
+      const todayVenezuela = getVenezuelaDateAsUTC();
+      
       const draws = await prisma.draw.findMany({
         where: {
-          scheduledAt: {
-            gte: startOfDayInCaracas(today),
-            lte: endOfDayInCaracas(today),
-          },
+          drawDate: todayVenezuela,
           apiMappings: {
             some: {},
           },
@@ -183,7 +199,10 @@ class SyncApiTicketsJob {
           game: true,
           apiMappings: true,
         },
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ],
       });
 
       logger.info(`🎫 Importando tickets de ${draws.length} sorteos de hoy...`);
@@ -195,15 +214,17 @@ class SyncApiTicketsJob {
           results.push({
             drawId: draw.id,
             game: draw.game.name,
-            time: draw.scheduledAt,
+            drawDate: draw.drawDate,
+            drawTime: draw.drawTime,
             ...result,
           });
-          logger.info(`  ✓ ${draw.game.name} ${draw.scheduledAt.toLocaleTimeString()}: ${result.imported} tickets`);
+          logger.info(`  ✓ ${draw.game.name} ${draw.drawTime}: ${result.imported} tickets`);
         } catch (error) {
           results.push({
             drawId: draw.id,
             game: draw.game.name,
-            time: draw.scheduledAt,
+            drawDate: draw.drawDate,
+            drawTime: draw.drawTime,
             error: error.message,
           });
           logger.error(`  ✗ ${draw.game.name}: ${error.message}`);

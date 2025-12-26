@@ -38,10 +38,11 @@ export async function generateDrawImage(drawId) {
       throw new Error(`Unknown game slug: ${draw.game.slug}`);
     }
 
-    // Generate image
+    // Generate image - Pass drawDate and drawTime directly
     const imageData = await generateResultImage({
       result: draw.winnerItem.number,
-      scheduledAt: draw.scheduledAt,
+      drawDate: draw.drawDate,
+      drawTime: draw.drawTime,
       gameId: numericGameId
     });
 

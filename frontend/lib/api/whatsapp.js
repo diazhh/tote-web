@@ -140,6 +140,15 @@ const whatsappAPI = {
   toggleActive: async (instanceId, isActive) => {
     const response = await api.patch(`/whatsapp/instances/${instanceId}/toggle`, { isActive });
     return response.data;
+  },
+
+  /**
+   * Obtener grupos de una instancia de WhatsApp
+   * @param {string} instanceId - ID de la instancia
+   */
+  getGroups: async (instanceId) => {
+    const response = await api.get(`/whatsapp/instances/${instanceId}/groups`);
+    return response.data;
   }
 };
 

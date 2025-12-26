@@ -80,7 +80,7 @@ class PublishDrawJob {
 
           if (result.success) {
             logger.info(
-              `📢 Sorteo publicado: ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()}`
+              `📢 Sorteo publicado: ${draw.game.name} - ${draw.drawTime}`
             );
 
             // Emitir evento WebSocket
@@ -90,7 +90,8 @@ class PublishDrawJob {
                 name: draw.game.name,
                 slug: draw.game.slug
               },
-              scheduledAt: draw.scheduledAt,
+              drawDate: draw.drawDate,
+              drawTime: draw.drawTime,
               publications: result.results
             });
 

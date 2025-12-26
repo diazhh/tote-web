@@ -44,15 +44,42 @@ class ChannelConfigService {
     const channel = await prisma.gameChannel.findUnique({
       where: { id: channelId },
       include: {
-        whatsappInstance: true,
-        telegramInstance: true,
-        facebookInstance: true,
-        instagramInstance: true
+        game: true
       }
     });
 
     if (!channel) {
       throw new Error('Canal no encontrado');
+    }
+
+    // Obtener las instancias si existen
+    let whatsappInstance = null;
+    let telegramInstance = null;
+    let facebookInstance = null;
+    let instagramInstance = null;
+
+    if (channel.whatsappInstanceId) {
+      whatsappInstance = await prisma.whatsAppInstance.findUnique({
+        where: { instanceId: channel.whatsappInstanceId }
+      });
+    }
+
+    if (channel.telegramInstanceId) {
+      telegramInstance = await prisma.telegramInstance.findUnique({
+        where: { id: channel.telegramInstanceId }
+      });
+    }
+
+    if (channel.facebookInstanceId) {
+      facebookInstance = await prisma.facebookInstance.findUnique({
+        where: { id: channel.facebookInstanceId }
+      });
+    }
+
+    if (channel.instagramInstanceId) {
+      instagramInstance = await prisma.instagramInstance.findUnique({
+        where: { id: channel.instagramInstanceId }
+      });
     }
 
     // Generar imagen de prueba
@@ -65,7 +92,7 @@ class ChannelConfigService {
       switch (channel.channelType) {
         case 'WHATSAPP':
           result = await this._testWhatsApp(
-            channel.whatsappInstance,
+            whatsappInstance,
             testConfig.recipient,
             testImage,
             testMessage
@@ -74,7 +101,7 @@ class ChannelConfigService {
 
         case 'TELEGRAM':
           result = await this._testTelegram(
-            channel.telegramInstance,
+            telegramInstance,
             testConfig.recipient,
             testImage,
             testMessage
@@ -83,7 +110,7 @@ class ChannelConfigService {
 
         case 'FACEBOOK':
           result = await this._testFacebook(
-            channel.facebookInstance,
+            facebookInstance,
             testImage,
             testMessage
           );
@@ -91,7 +118,7 @@ class ChannelConfigService {
 
         case 'INSTAGRAM':
           result = await this._testInstagram(
-            channel.instagramInstance,
+            instagramInstance,
             testImage,
             testMessage
           );
@@ -117,8 +144,8 @@ class ChannelConfigService {
   }
 
   async _testWhatsApp(instance, recipient, imageBuffer, message) {
-    if (!instance || instance.status !== 'CONNECTED') {
-      throw new Error('Instancia de WhatsApp no conectada');
+    if (!instance) {
+      throw new Error('Instancia de WhatsApp no encontrada');
     }
 
     // Validar formato de número
@@ -127,12 +154,10 @@ class ChannelConfigService {
       throw new Error('Número de teléfono inválido');
     }
 
-    const jid = cleanNumber.includes('@') ? cleanNumber : `${cleanNumber}@s.whatsapp.net`;
+    // Enviar mensaje de prueba usando el método del servicio (igual que en /api/whatsapp/instances/:id/test)
+    await whatsappService.sendTestMessage(instance.instanceId, cleanNumber, message);
 
-    await whatsappService.sendMessage(instance.instanceId, jid, message);
-    await whatsappService.sendImage(instance.instanceId, jid, imageBuffer, message);
-
-    return { platform: 'WhatsApp', recipient: jid };
+    return { platform: 'WhatsApp', recipient: cleanNumber };
   }
 
   async _testTelegram(instance, chatId, imageBuffer, message) {

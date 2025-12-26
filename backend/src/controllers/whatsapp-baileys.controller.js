@@ -323,6 +323,26 @@ class WhatsAppBaileysController {
       });
     }
   }
+
+  /**
+   * Obtener grupos de una instancia
+   * GET /api/whatsapp/instances/:instanceId/groups
+   */
+  async getGroups(req, res) {
+    try {
+      const { instanceId } = req.params;
+
+      const result = await whatsappBaileysService.getGroups(instanceId);
+
+      res.json(result);
+    } catch (error) {
+      logger.error('Error al obtener grupos:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
 }
 
 export default new WhatsAppBaileysController();

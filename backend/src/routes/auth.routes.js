@@ -17,5 +17,7 @@ router.patch('/profile', authenticate, authController.updateProfile.bind(authCon
 router.post('/register', authenticate, authorize('ADMIN'), authController.register.bind(authController));
 router.get('/users', authenticate, authorize('ADMIN'), authController.listUsers.bind(authController));
 router.patch('/users/:id', authenticate, authorize('ADMIN'), authController.updateUser.bind(authController));
+router.get('/users/:id/games', authenticate, authorize('ADMIN'), authController.getUserGames.bind(authController));
+router.post('/users/:id/games', authenticate, authorize('ADMIN'), authController.assignGamesToUser.bind(authController));
 
 export default router;

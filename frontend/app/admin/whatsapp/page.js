@@ -7,168 +7,153 @@ import {
   QrCode, 
   RefreshCw, 
   Power, 
-  Trash2, 
-  Plus,
-  MessageSquare,
   CheckCircle,
-  XCircle
+  XCircle,
+  Users,
+  Send
 } from 'lucide-react';
-import whatsappAPI from '@/lib/api/whatsapp';
-import WhatsAppQRModal from '@/components/admin/whatsapp/WhatsAppQRModal';
-import TestMessageModal from '@/components/admin/whatsapp/TestMessageModal';
-import NewInstanceModal from '@/components/admin/whatsapp/NewInstanceModal';
-import { formatCaracasDateTime } from '@/lib/utils/dateUtils';
+import api from '@/lib/api/axios';
 
 export default function WhatsAppPage() {
-  const [instances, setInstances] = useState([]);
+  const [status, setStatus] = useState(null);
+  const [qrCode, setQrCode] = useState(null);
+  const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedInstance, setSelectedInstance] = useState(null);
-  const [showQRModal, setShowQRModal] = useState(false);
-  const [showTestModal, setShowTestModal] = useState(false);
-  const [showNewInstanceModal, setShowNewInstanceModal] = useState(false);
+  const [testRecipient, setTestRecipient] = useState('');
+  const [testMessage, setTestMessage] = useState('');
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    loadInstances();
+    loadStatus();
+    const interval = setInterval(loadStatus, 5000);
+    return () => clearInterval(interval);
   }, []);
 
-  const loadInstances = async () => {
+  const loadStatus = async () => {
     try {
-      setLoading(true);
-      const response = await whatsappAPI.listInstances();
-      setInstances(response.instances || []);
+      const response = await api.get('/admin/whatsapp/status');
+      setStatus(response.data);
+      
+      if (response.data.hasQR && !response.data.isReady) {
+        loadQRCode();
+      } else {
+        setQrCode(null);
+      }
+      
+      if (response.data.isReady) {
+        loadGroups();
+      }
     } catch (error) {
-      console.error('Error al cargar instancias:', error);
-      toast.error('Error al cargar instancias de WhatsApp');
+      console.error('Error al cargar estado:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleShowQR = (instance) => {
-    setSelectedInstance(instance);
-    setShowQRModal(true);
-  };
-
-  const handleShowTestMessage = (instance) => {
-    setSelectedInstance(instance);
-    setShowTestModal(true);
-  };
-
-  const handleReconnect = async (instanceId) => {
+  const loadQRCode = async () => {
     try {
-      toast.loading(`Reconectando instancia ${instanceId}...`);
-      await whatsappAPI.reconnectInstance(instanceId);
-      toast.success('Instancia reconectada. Escanea el código QR para conectar.');
-      loadInstances();
+      const response = await api.get('/admin/whatsapp/qr');
+      setQrCode(response.data.qrCode);
     } catch (error) {
-      console.error('Error al reconectar:', error);
-      toast.error('Error al reconectar instancia');
+      console.error('Error al cargar QR:', error);
     }
   };
 
-  const handleDisconnect = async (instanceId) => {
+  const loadGroups = async () => {
     try {
-      if (!confirm('¿Estás seguro de que deseas desconectar esta instancia?')) {
+      const response = await api.get('/admin/whatsapp/groups');
+      setGroups(response.data.groups || []);
+    } catch (error) {
+      console.error('Error al cargar grupos:', error);
+    }
+  };
+
+  const handleInitialize = async () => {
+    try {
+      toast.loading('Inicializando WhatsApp...');
+      await api.post('/admin/whatsapp/initialize');
+      toast.success('WhatsApp inicializado. Escanea el código QR.');
+      setTimeout(loadStatus, 2000);
+    } catch (error) {
+      console.error('Error al inicializar:', error);
+      toast.error('Error al inicializar WhatsApp');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      if (!confirm('¿Estás seguro de que deseas desconectar WhatsApp?')) {
         return;
       }
-      
-      toast.loading(`Desconectando instancia ${instanceId}...`);
-      await whatsappAPI.disconnectInstance(instanceId);
-      toast.success('Instancia desconectada correctamente');
-      loadInstances();
+      toast.loading('Desconectando...');
+      await api.post('/admin/whatsapp/logout');
+      toast.success('WhatsApp desconectado');
+      loadStatus();
     } catch (error) {
       console.error('Error al desconectar:', error);
-      toast.error('Error al desconectar instancia');
+      toast.error('Error al desconectar WhatsApp');
     }
   };
 
-  const handleDelete = async (instanceId) => {
+  const handleSendTest = async (e) => {
+    e.preventDefault();
+    if (!testRecipient || !testMessage) {
+      toast.error('Completa todos los campos');
+      return;
+    }
+    
     try {
-      if (!confirm('¿Estás seguro de que deseas eliminar esta instancia y todos sus datos? Esta acción no se puede deshacer.')) {
-        return;
-      }
-      
-      toast.loading(`Eliminando instancia ${instanceId}...`);
-      await whatsappAPI.deleteInstance(instanceId);
-      toast.success('Instancia eliminada correctamente');
-      loadInstances();
+      setSending(true);
+      await api.post('/admin/whatsapp/test', {
+        chatId: testRecipient,
+        message: testMessage
+      });
+      toast.success('Mensaje enviado correctamente');
+      setTestMessage('');
     } catch (error) {
-      console.error('Error al eliminar:', error);
-      toast.error('Error al eliminar instancia');
+      console.error('Error al enviar:', error);
+      toast.error('Error al enviar mensaje');
+    } finally {
+      setSending(false);
     }
   };
 
-  const handleToggleActive = async (instance) => {
-    try {
-      const newStatus = !instance.isActive;
-      await whatsappAPI.toggleActive(instance.instanceId, newStatus);
-      toast.success(newStatus ? 'Canal activado - Se enviarán mensajes' : 'Canal pausado - No se enviarán mensajes');
-      loadInstances();
-    } catch (error) {
-      console.error('Error:', error);
-      toast.error('Error al cambiar estado');
+  const getStatusBadge = () => {
+    if (!status) return null;
+    
+    if (status.isReady) {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+          <CheckCircle className="w-4 h-4 mr-2" />
+          Conectado
+        </span>
+      );
     }
-  };
-
-  const handleCleanup = async () => {
-    try {
-      if (!confirm('¿Estás seguro de que deseas limpiar todas las sesiones inactivas?')) {
-        return;
-      }
-      
-      toast.loading('Limpiando sesiones inactivas...');
-      const result = await whatsappAPI.cleanupSessions();
-      toast.success(`Se limpiaron ${result.cleaned} sesiones inactivas`);
-      loadInstances();
-    } catch (error) {
-      console.error('Error al limpiar sesiones:', error);
-      toast.error('Error al limpiar sesiones inactivas');
+    
+    if (status.connectionStatus === 'qr_ready') {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+          <QrCode className="w-4 h-4 mr-2" />
+          Esperando escaneo
+        </span>
+      );
     }
-  };
-
-  const handleCreateInstance = async (instanceId, name) => {
-    try {
-      toast.loading(`Creando nueva instancia ${name}...`);
-      await whatsappAPI.initializeInstance(instanceId, name);
-      toast.success('Instancia creada. Escanea el código QR para conectar.');
-      setShowNewInstanceModal(false);
-      loadInstances();
-    } catch (error) {
-      console.error('Error al crear instancia:', error);
-      toast.error('Error al crear instancia');
+    
+    if (status.isInitializing) {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
+          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+          Inicializando
+        </span>
+      );
     }
-  };
-
-  const getStatusBadge = (status) => {
-    switch (status) {
-      case 'connected':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <CheckCircle className="w-3 h-3 mr-1" />
-            Conectado
-          </span>
-        );
-      case 'disconnected':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            <XCircle className="w-3 h-3 mr-1" />
-            Desconectado
-          </span>
-        );
-      case 'qr_ready':
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-            <QrCode className="w-3 h-3 mr-1" />
-            QR Listo
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-            {status || 'Desconocido'}
-          </span>
-        );
-    }
+    
+    return (
+      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-800">
+        <XCircle className="w-4 h-4 mr-2" />
+        Desconectado
+      </span>
+    );
   };
 
   if (loading) {
@@ -176,7 +161,7 @@ export default function WhatsAppPage() {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Cargando instancias de WhatsApp...</p>
+          <p className="mt-4 text-gray-600">Cargando estado de WhatsApp...</p>
         </div>
       </div>
     );
@@ -186,177 +171,135 @@ export default function WhatsAppPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">WhatsApp</h1>
-          <p className="text-gray-600 mt-1">Gestiona tus instancias de WhatsApp</p>
+          <h1 className="text-2xl font-bold text-gray-900">WhatsApp Service</h1>
+          <p className="text-gray-600 mt-1">Servicio standalone con whatsapp-web.js</p>
         </div>
-        <div className="flex flex-col sm:flex-row gap-3">
-          <button
-            onClick={() => setShowNewInstanceModal(true)}
-            className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Nueva Instancia
-          </button>
-          <button
-            onClick={handleCleanup}
-            className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Limpiar Inactivas
-          </button>
+        <div className="flex items-center gap-3">
+          {getStatusBadge()}
+          {!status?.isReady && !status?.isInitializing && (
+            <button
+              onClick={handleInitialize}
+              className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+            >
+              <Power className="w-4 h-4 mr-2" />
+              Inicializar
+            </button>
+          )}
+          {status?.isReady && (
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+            >
+              <Power className="w-4 h-4 mr-2" />
+              Desconectar
+            </button>
+          )}
         </div>
       </div>
 
-      {instances.length === 0 ? (
-        <div className="bg-white rounded-lg shadow p-6 lg:p-8 text-center">
-          <Smartphone className="w-12 h-12 text-gray-400 mx-auto" />
-          <h2 className="mt-4 text-lg font-medium text-gray-900">No hay instancias de WhatsApp</h2>
-          <p className="mt-2 text-gray-500">
-            Crea una nueva instancia para comenzar a enviar mensajes.
-          </p>
-          <button
-            onClick={() => setShowNewInstanceModal(true)}
-            className="mt-4 inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Crear Instancia
-          </button>
-        </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Instancia
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Envíos
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Teléfono
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Conectado
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Canal
-                  </th>
-                  <th className="px-4 lg:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {instances.map((instance) => (
-                  <tr key={instance.instanceId}>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-8 w-8 lg:h-10 lg:w-10 bg-gray-100 rounded-full flex items-center justify-center">
-                          <Smartphone className="h-4 w-4 lg:h-5 lg:w-5 text-gray-500" />
-                        </div>
-                        <div className="ml-3 lg:ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {instance.name || instance.instanceId}
-                          </div>
-                          {instance.name && (
-                            <div className="text-xs text-gray-500">
-                              {instance.instanceId}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                      {getStatusBadge(instance.status)}
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => handleToggleActive(instance)}
-                        className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          instance.isActive !== false
-                            ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                            : 'bg-red-100 text-red-800 hover:bg-red-200'
-                        }`}
-                        title={instance.isActive !== false ? 'Click para pausar envíos' : 'Click para activar envíos'}
-                      >
-                        {instance.isActive !== false ? '✓ Activo' : '⏸ Pausado'}
-                      </button>
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {instance.phoneNumber || 'No conectado'}
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {instance.connectedAt ? formatCaracasDateTime(instance.connectedAt) : 'N/A'}
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {instance.channelName || 'Sin asociar'}
-                    </td>
-                    <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex justify-end space-x-1 lg:space-x-2">
-                        {instance.status === 'connected' && (
-                          <button
-                            onClick={() => handleShowTestMessage(instance)}
-                            className="text-blue-600 hover:text-blue-900 p-1"
-                            title="Enviar mensaje de prueba"
-                          >
-                            <MessageSquare className="w-4 h-4 lg:w-5 lg:h-5" />
-                          </button>
-                        )}
-                        
-                        {(instance.status === 'qr_ready' || instance.status === 'disconnected') && (
-                          <button
-                            onClick={() => handleShowQR(instance)}
-                            className="text-blue-600 hover:text-blue-900 p-1"
-                            title="Ver código QR"
-                          >
-                            <QrCode className="w-4 h-4 lg:w-5 lg:h-5" />
-                          </button>
-                        )}
-                        
-                        <button
-                          onClick={() => handleReconnect(instance.instanceId)}
-                          className="text-green-600 hover:text-green-900 p-1"
-                          title="Reconectar"
-                        >
-                          <RefreshCw className="w-4 h-4 lg:w-5 lg:h-5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* QR Code Section */}
+      {qrCode && (
+        <div className="bg-white rounded-lg shadow p-6">
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">Escanear Código QR</h2>
+          <div className="flex flex-col items-center">
+            <img src={qrCode} alt="QR Code" className="max-w-sm w-full" />
+            <p className="mt-4 text-sm text-gray-600 text-center">
+              Escanea este código con WhatsApp en tu teléfono para conectar
+            </p>
           </div>
         </div>
       )}
 
-      {/* Modales */}
-      {showQRModal && selectedInstance && (
-        <WhatsAppQRModal
-          instanceId={selectedInstance.instanceId}
-          onClose={() => setShowQRModal(false)}
-          onSuccess={loadInstances}
-        />
+      {/* Groups Section */}
+      {status?.isReady && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-gray-900">Grupos Disponibles</h2>
+              <button
+                onClick={loadGroups}
+                className="text-blue-600 hover:text-blue-700"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {groups.length === 0 ? (
+                <p className="text-gray-500 text-sm">No hay grupos disponibles</p>
+              ) : (
+                groups.map((group) => (
+                  <div key={group.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                    <div className="flex items-center space-x-3">
+                      <Users className="w-5 h-5 text-gray-400" />
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">{group.name}</p>
+                        <p className="text-xs text-gray-500">{group.participantsCount} participantes</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setTestRecipient(group.id)}
+                      className="text-blue-600 hover:text-blue-700 text-xs"
+                    >
+                      Usar
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Enviar Mensaje de Prueba</h2>
+            <form onSubmit={handleSendTest} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  ID del Chat/Grupo
+                </label>
+                <input
+                  type="text"
+                  value={testRecipient}
+                  onChange={(e) => setTestRecipient(e.target.value)}
+                  placeholder="123456789@g.us"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Formato: número@c.us para contactos, número@g.us para grupos
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mensaje
+                </label>
+                <textarea
+                  value={testMessage}
+                  onChange={(e) => setTestMessage(e.target.value)}
+                  rows={4}
+                  placeholder="Escribe tu mensaje aquí..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={sending || !testRecipient || !testMessage}
+                className="w-full inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                {sending ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Enviar Mensaje
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
+        </div>
       )}
-      
-      {showTestModal && selectedInstance && (
-        <TestMessageModal
-          instanceId={selectedInstance.instanceId}
-          onClose={() => setShowTestModal(false)}
-        />
-      )}
-      
-      {showNewInstanceModal && (
-        <NewInstanceModal
-          onClose={() => setShowNewInstanceModal(false)}
-          onSubmit={handleCreateInstance}
-        />
-      )}
+
     </div>
   );
 }

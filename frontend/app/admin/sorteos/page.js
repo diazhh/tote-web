@@ -9,7 +9,7 @@ import ResponsiveTable from '@/components/common/ResponsiveTable';
 import ChangeWinnerModal from '@/components/admin/ChangeWinnerModal';
 import DrawDetailModal from '@/components/admin/DrawDetailModal';
 import RefreshControl from '@/components/common/RefreshControl';
-import { formatCaracasDate, formatCaracasTime, todayInCaracas } from '@/lib/utils/dateUtils';
+import { formatCaracasDate, formatCaracasTime, todayInCaracas, buildDrawDateTime, formatDrawTime } from '@/lib/utils/dateUtils';
 
 export default function SorteosPage() {
   const [draws, setDraws] = useState([]);
@@ -24,7 +24,7 @@ export default function SorteosPage() {
     status: '',
     date: todayInCaracas(), // Default to today in Caracas timezone
     page: 1,
-    pageSize: 20
+    pageSize: 100 // Aumentado para mostrar todos los sorteos del día
   });
 
   const [pagination, setPagination] = useState({
@@ -62,10 +62,15 @@ export default function SorteosPage() {
         delete apiFilters.date;
       }
       
+      console.log('🔍 Filtros enviados al API:', apiFilters);
       const response = await drawsAPI.list(apiFilters);
+      console.log('📊 Respuesta del API:', { total: response.total, count: response.count, dataLength: response.data?.length });
+      
       if (response.success) {
         // El backend retorna { success: true, data: [...], count: N, total: M }
-        setDraws(Array.isArray(response.data) ? response.data : []);
+        const drawsData = Array.isArray(response.data) ? response.data : [];
+        console.log('✅ Sorteos cargados:', drawsData.length);
+        setDraws(drawsData);
         setPagination({
           total: response.total || 0,
           totalPages: Math.ceil((response.total || 0) / filters.pageSize)
@@ -111,13 +116,14 @@ export default function SorteosPage() {
   // Verificar si un sorteo puede ser totalizado manualmente
   const canForceTotalize = (draw) => {
     if (!['SCHEDULED', 'CLOSED'].includes(draw.status)) return false;
-    const scheduledTime = new Date(draw.scheduledAt);
+    if (!draw.drawDate || !draw.drawTime) return false;
+    const scheduledTime = buildDrawDateTime(draw.drawDate, draw.drawTime);
     return scheduledTime < new Date();
   };
 
   // Totalizar sorteo manualmente
   const handleForceTotalize = async (draw) => {
-    if (!confirm(`¿Totalizar manualmente el sorteo de ${formatCaracasTime(draw.scheduledAt)}?`)) return;
+    if (!confirm(`¿Totalizar manualmente el sorteo de ${formatDrawTime(draw)}?`)) return;
     
     try {
       toast.loading('Totalizando sorteo...');
@@ -155,7 +161,7 @@ export default function SorteosPage() {
 
   // Republicar sorteo en canales
   const handleRepublish = async (draw) => {
-    if (!confirm(`¿Reenviar el sorteo de ${formatCaracasTime(draw.scheduledAt)} a los canales de distribución?`)) return;
+    if (!confirm(`¿Reenviar el sorteo de ${formatDrawTime(draw)} a los canales de distribución?`)) return;
     
     try {
       toast.loading('Republicando en canales...');
@@ -301,11 +307,11 @@ export default function SorteosPage() {
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <div>
                       <p className="text-xs text-gray-500">Fecha</p>
-                      <p className="text-sm font-medium text-gray-900">{formatCaracasDate(draw.scheduledAt)}</p>
+                      <p className="text-sm font-medium text-gray-900">{formatCaracasDate(draw.drawDate)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500">Hora</p>
-                      <p className="text-sm font-medium text-gray-900">{formatCaracasTime(draw.scheduledAt)}</p>
+                      <p className="text-sm font-medium text-gray-900">{draw.drawTime?.substring(0, 5) || '-'}</p>
                     </div>
                   </div>
                   
@@ -355,12 +361,12 @@ export default function SorteosPage() {
                     )
                   },
                   {
-                    key: 'scheduledAt',
+                    key: 'drawDate',
                     label: 'Fecha/Hora',
                     render: (draw) => (
                       <div>
-                        <div className="text-sm text-gray-900">{formatCaracasDate(draw.scheduledAt)}</div>
-                        <div className="text-sm text-gray-500">{formatCaracasTime(draw.scheduledAt)}</div>
+                        <div className="text-sm text-gray-900">{formatCaracasDate(draw.drawDate)}</div>
+                        <div className="text-sm text-gray-500">{draw.drawTime?.substring(0, 5) || '-'}</div>
                       </div>
                     )
                   },

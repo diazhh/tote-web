@@ -2,7 +2,7 @@
 
 import { Clock, Trophy } from 'lucide-react';
 import { useCountdown } from '@/hooks/useCountdown';
-import { formatTime } from '@/lib/utils/format';
+import { getDrawDateTimeForCountdown, formatDrawTime } from '@/lib/utils/dateUtils';
 
 /**
  * Next draw countdown component
@@ -10,7 +10,8 @@ import { formatTime } from '@/lib/utils/format';
  * @param {Object} props.draw - Draw object
  */
 export default function NextDrawCountdown({ draw }) {
-  const { timeLeft, isExpired } = useCountdown(draw?.scheduledAt);
+  const drawDateTime = getDrawDateTimeForCountdown(draw);
+  const { timeLeft, isExpired } = useCountdown(drawDateTime);
 
   if (!draw) return null;
 
@@ -34,7 +35,7 @@ export default function NextDrawCountdown({ draw }) {
           </h2>
           <div className="flex items-center justify-center gap-2 text-lg opacity-90">
             <Clock className="h-5 w-5" />
-            <span>{formatTime(draw.scheduledAt)}</span>
+            <span>{formatDrawTime(draw)}</span>
           </div>
         </div>
 

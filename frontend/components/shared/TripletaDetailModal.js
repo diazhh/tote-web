@@ -222,7 +222,7 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
                               <div className="flex items-center gap-2">
                                 <CheckCircle className="w-4 h-4 text-green-600" />
                                 <span className="text-sm text-green-700 font-semibold">
-                                  Ganó: {formatTime(item.wonInDraw.scheduledAt)}
+                                  Ganó: {formatDrawTime(item.wonInDraw)}
                                 </span>
                               </div>
                             )}
@@ -262,7 +262,7 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
                   <tbody className="divide-y divide-gray-200">
                     {drawsInRange.draws.map((draw, idx) => (
                       <tr key={idx} className={draw.isRelevant ? 'bg-green-50' : ''}>
-                        <td className="px-3 py-2">{formatTime(draw.scheduledAt)}</td>
+                        <td className="px-3 py-2">{formatDrawTime(draw)}</td>
                         <td className="px-3 py-2">
                           <span className={`px-2 py-0.5 rounded-full text-xs ${
                             draw.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :

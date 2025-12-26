@@ -199,10 +199,10 @@ export default function ReportesPage() {
               data={report.draws}
               columns={[
                 {
-                  key: 'scheduledAt',
+                  key: 'drawTime',
                   label: 'Hora',
                   primary: true,
-                  render: (draw) => <span className="font-medium">{formatTime(draw.scheduledAt)}</span>
+                  render: (draw) => <span className="font-medium">{formatDrawTime(draw)}</span>
                 },
                 {
                   key: 'game',

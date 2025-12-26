@@ -86,10 +86,6 @@ export default function JugarPage() {
             const game = gamesRes.data.find(g => g.id === draw.gameId);
             const itemsRes = await gamesAPI.getItems(draw.gameId);
             
-            const scheduledTime = new Date(draw.scheduledAt);
-            const closeMinutes = game?.config?.closeMinutesBefore || 5;
-            const closeTime = new Date(scheduledTime.getTime() - closeMinutes * 60000);
-            
             // Extract items array from API response
             // API returns: {success: true, data: {items: [...], total: X}}
             let items = [];
@@ -97,12 +93,14 @@ export default function JugarPage() {
               items = Array.isArray(itemsRes.data.items) ? itemsRes.data.items : [];
             }
             
+            // drawTime ya viene en hora Venezuela (ej: "08:00" o "08:00:00")
+            // No necesitamos calcular closeTime ya que se verifica en DrawSelector
             return {
               ...draw,
               game,
               items: items,
-              drawTime: draw.scheduledAt,
-              closeTime: closeTime.toISOString()
+              // Mantener drawTime como viene del backend (hora Venezuela)
+              drawTime: draw.drawTime
             };
           })
         );
@@ -184,7 +182,7 @@ export default function JugarPage() {
 
     setSelections([...selections, {
       drawId: selectedDraw.id,
-      drawTime: selectedDraw.drawTime || selectedDraw.scheduledAt,
+      drawTime: selectedDraw.drawTime,
       gameName: selectedDraw.game?.name,
       gameMultiplier: selectedDraw.game?.multiplier || 1,
       itemId: item.id,
@@ -248,10 +246,28 @@ export default function JugarPage() {
           continue;
         }
 
-        const closeTime = new Date(draw.closeTime);
-        if (closeTime <= new Date()) {
-          toast.error(`El sorteo de ${groupedByDraw[drawId].gameName} ya cerró`);
-          continue;
+        // Verificar cierre usando hora Venezuela (5 minutos antes del sorteo)
+        const now = new Date();
+        const venezuelaTime = now.toLocaleTimeString('es-VE', {
+          timeZone: 'America/Caracas',
+          hour12: false,
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        });
+        
+        const drawTime = draw.drawTime;
+        if (drawTime) {
+          const [hours, mins] = drawTime.split(':').map(Number);
+          const totalMinutes = hours * 60 + mins - 5; // 5 minutos antes
+          const closeHour = Math.floor(totalMinutes / 60);
+          const closeMin = totalMinutes % 60;
+          const closeTimeStr = `${closeHour.toString().padStart(2, '0')}:${closeMin.toString().padStart(2, '0')}:00`;
+          
+          if (venezuelaTime >= closeTimeStr) {
+            toast.error(`El sorteo de ${groupedByDraw[drawId].gameName} ya cerró`);
+            continue;
+          }
         }
 
         const response = await ticketsAPI.create({

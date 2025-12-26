@@ -9,10 +9,13 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
   const [loading, setLoading] = useState(false);
   const [loadingInstances, setLoadingInstances] = useState(false);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [loadingGroups, setLoadingGroups] = useState(false);
   const [whatsappInstances, setWhatsappInstances] = useState([]);
+  const [whatsappGroups, setWhatsappGroups] = useState([]);
   const [showVariables, setShowVariables] = useState(false);
   const [variables, setVariables] = useState([]);
   const [preview, setPreview] = useState('');
+  const [recipientType, setRecipientType] = useState('numbers'); // 'numbers' or 'groups'
   
   const [formData, setFormData] = useState({
     name: '',
@@ -51,6 +54,12 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
     }
   }, [formData.channelType]);
 
+  useEffect(() => {
+    if (formData.whatsappInstanceId && formData.channelType === 'WHATSAPP') {
+      loadWhatsAppGroups(formData.whatsappInstanceId);
+    }
+  }, [formData.whatsappInstanceId]);
+
   const loadWhatsAppInstances = async () => {
     setLoadingInstances(true);
     try {
@@ -61,6 +70,21 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
       toast.error('Error al cargar instancias de WhatsApp');
     } finally {
       setLoadingInstances(false);
+    }
+  };
+
+  const loadWhatsAppGroups = async (instanceId) => {
+    setLoadingGroups(true);
+    setWhatsappGroups([]);
+    try {
+      const whatsappAPI = (await import('@/lib/api/whatsapp')).default;
+      const response = await whatsappAPI.getGroups(instanceId);
+      setWhatsappGroups(response.groups || []);
+    } catch (error) {
+      console.error('Error loading WhatsApp groups:', error);
+      toast.error('Error al cargar grupos. Asegúrate de que la instancia esté conectada.');
+    } finally {
+      setLoadingGroups(false);
     }
   };
 
@@ -323,46 +347,129 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
               {/* Destinatarios */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Destinatarios (Números de WhatsApp) *
+                  Destinatarios *
                 </label>
-                <div className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={newRecipient}
-                    onChange={(e) => setNewRecipient(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddRecipient())}
-                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                    placeholder="584121234567 (código de país + número, sin +)"
-                    disabled={loading}
-                  />
+                
+                {/* Selector de tipo de destinatario */}
+                <div className="flex gap-2 mb-3">
                   <button
                     type="button"
-                    onClick={handleAddRecipient}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                    disabled={loading}
+                    onClick={() => setRecipientType('numbers')}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition ${
+                      recipientType === 'numbers'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
                   >
-                    <Plus className="w-5 h-5" />
+                    Números individuales
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRecipientType('groups')}
+                    className={`flex-1 px-4 py-2 rounded-lg text-sm font-medium transition ${
+                      recipientType === 'groups'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                    disabled={!formData.whatsappInstanceId || loadingGroups}
+                  >
+                    Grupos de WhatsApp
                   </button>
                 </div>
-                <div className="space-y-2">
-                  {formData.recipients.map((recipient, index) => (
-                    <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
-                      <span className="text-sm text-gray-700">+{recipient}</span>
+
+                {recipientType === 'numbers' ? (
+                  <>
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={newRecipient}
+                        onChange={(e) => setNewRecipient(e.target.value)}
+                        onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddRecipient())}
+                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                        placeholder="584121234567 (código de país + número, sin +)"
+                        disabled={loading}
+                      />
                       <button
                         type="button"
-                        onClick={() => handleRemoveRecipient(index)}
-                        className="text-red-600 hover:text-red-800"
+                        onClick={handleAddRecipient}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                         disabled={loading}
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <Plus className="w-5 h-5" />
                       </button>
                     </div>
-                  ))}
-                </div>
-                {formData.recipients.length === 0 && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Agrega al menos un número de WhatsApp
-                  </p>
+                    <div className="space-y-2">
+                      {formData.recipients.map((recipient, index) => (
+                        <div key={index} className="flex items-center justify-between bg-gray-50 px-3 py-2 rounded-lg">
+                          <span className="text-sm text-gray-700">{recipient}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveRecipient(index)}
+                            className="text-red-600 hover:text-red-800"
+                            disabled={loading}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    {formData.recipients.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Agrega al menos un número de WhatsApp
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    {loadingGroups ? (
+                      <div className="text-sm text-gray-500 py-4 text-center">Cargando grupos...</div>
+                    ) : whatsappGroups.length === 0 ? (
+                      <div className="text-sm text-gray-500 py-4 text-center">
+                        {formData.whatsappInstanceId 
+                          ? 'No se encontraron grupos. Asegúrate de que la instancia esté conectada.'
+                          : 'Selecciona una instancia primero'}
+                      </div>
+                    ) : (
+                      <div className="space-y-2 max-h-60 overflow-y-auto">
+                        {whatsappGroups.map((group) => (
+                          <div
+                            key={group.id}
+                            className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition ${
+                              formData.recipients.includes(group.id)
+                                ? 'border-blue-500 bg-blue-50'
+                                : 'border-gray-300 hover:border-blue-300'
+                            }`}
+                            onClick={() => {
+                              if (formData.recipients.includes(group.id)) {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  recipients: prev.recipients.filter(id => id !== group.id)
+                                }));
+                              } else {
+                                setFormData(prev => ({
+                                  ...prev,
+                                  recipients: [...prev.recipients, group.id]
+                                }));
+                              }
+                            }}
+                          >
+                            <div>
+                              <div className="text-sm font-medium text-gray-900">{group.name}</div>
+                              <div className="text-xs text-gray-500">{group.participants} participantes</div>
+                            </div>
+                            {formData.recipients.includes(group.id) && (
+                              <div className="text-blue-600">✓</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {formData.recipients.length === 0 && (
+                      <p className="text-xs text-gray-500 mt-2">
+                        Selecciona al menos un grupo
+                      </p>
+                    )}
+                  </>
                 )}
               </div>
             </>

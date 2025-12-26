@@ -7,6 +7,7 @@ import adminNotificationService from '../services/admin-notification.service.js'
 import prizeProcessorService from '../services/prize-processor.service.js';
 import drawStatsService from '../services/draw-stats.service.js';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
+import { getVenezuelaTimeString, getVenezuelaDateAsUTC } from '../lib/dateUtils.js';
 
 /**
  * Job para ejecutar sorteos en su hora programada
@@ -50,16 +51,18 @@ class ExecuteDrawJob {
         return;
       }
 
-      const now = new Date();
-      const oneMinuteAgo = new Date(now.getTime() - 60 * 1000);
+      // Obtener fecha y hora actual en Venezuela
+      const venezuelaTime = getVenezuelaTimeString(); // HH:MM:SS
+      const venezuelaDate = getVenezuelaDateAsUTC(); // Date object para DB
 
       // Buscar sorteos que deben ejecutarse (hora programada ya pasó)
+      // Usar drawDate y drawTime (hora Venezuela directa)
       const drawsToExecute = await prisma.draw.findMany({
         where: {
           status: 'CLOSED',
-          scheduledAt: {
-            lte: now,
-            gte: oneMinuteAgo
+          drawDate: venezuelaDate,
+          drawTime: {
+            lte: venezuelaTime
           }
         },
         include: {
@@ -99,7 +102,7 @@ class ExecuteDrawJob {
           });
 
           logger.info(
-            `🎲 Sorteo ejecutado: ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()} ` +
+            `🎲 Sorteo ejecutado: ${draw.game.name} - ${draw.drawTime} ` +
             `| Ganador: ${updatedDraw.winnerItem.number} - ${updatedDraw.winnerItem.name}`
           );
 
@@ -110,7 +113,8 @@ class ExecuteDrawJob {
               name: updatedDraw.game.name,
               slug: updatedDraw.game.slug
             },
-            scheduledAt: updatedDraw.scheduledAt,
+            drawDate: updatedDraw.drawDate,
+            drawTime: updatedDraw.drawTime,
             winnerItem: {
               number: updatedDraw.winnerItem.number,
               name: updatedDraw.winnerItem.name
@@ -119,7 +123,8 @@ class ExecuteDrawJob {
 
           emitToGame(updatedDraw.game.slug, 'draw:executed', {
             drawId: updatedDraw.id,
-            scheduledAt: updatedDraw.scheduledAt,
+            drawDate: updatedDraw.drawDate,
+            drawTime: updatedDraw.drawTime,
             winnerItem: {
               number: updatedDraw.winnerItem.number,
               name: updatedDraw.winnerItem.name
@@ -189,7 +194,8 @@ class ExecuteDrawJob {
             await adminNotificationService.notifyDrawResult({
               drawId: updatedDraw.id,
               game: updatedDraw.game,
-              scheduledAt: updatedDraw.scheduledAt,
+              drawDate: updatedDraw.drawDate,
+              drawTime: updatedDraw.drawTime,
               winnerItem: updatedDraw.winnerItem,
               totalSales: stats.totalSales,
               totalPayout: stats.totalPayout,
@@ -204,7 +210,24 @@ class ExecuteDrawJob {
             logger.error(`❌ Error notificando administradores para sorteo ${updatedDraw.id}:`, notifyError);
           }
 
-          // NOTA: El PublishDrawJob se encargará de publicar en los canales automáticamente
+          // Publicar en canales INMEDIATAMENTE después de totalizar
+          // Esto asegura que las imágenes se envíen al momento, no en el siguiente minuto
+          try {
+            logger.info(`📢 Publicando sorteo ${updatedDraw.id} en canales...`);
+            const publicationService = (await import('../services/publication.service.js')).default;
+            const publicationResult = await publicationService.publishDraw(updatedDraw.id);
+            
+            if (publicationResult.success) {
+              const successCount = publicationResult.results.filter(r => r.success).length;
+              const totalCount = publicationResult.results.length;
+              logger.info(
+                `✅ Sorteo publicado en ${successCount}/${totalCount} canales para ${updatedDraw.game.name} - ${updatedDraw.drawTime}`
+              );
+            }
+          } catch (publishError) {
+            logger.error(`❌ Error publicando sorteo ${updatedDraw.id}:`, publishError);
+            // No fallar el sorteo si la publicación falla, ya está ejecutado
+          }
         } catch (error) {
           logger.error(`Error al ejecutar sorteo ${draw.id}:`, error);
         }
@@ -281,7 +304,7 @@ class ExecuteDrawJob {
       const draws = await prisma.draw.findMany({
         where: {
           gameId,
-          scheduledAt: {
+          drawDate: {
             gte: startDate,
             lte: endDate
           },

@@ -435,30 +435,51 @@ Para pre-seleccionar el ganador del próximo sorteo:
       }
 
       // Buscar el próximo sorteo pendiente (SCHEDULED o CLOSED)
-      // Buscar el más cercano a la hora actual que aún no se ha ejecutado
+      // Usar drawDate y drawTime con hora de Venezuela
       const now = new Date();
+      const venezuelaDateStr = now.toLocaleDateString('en-CA', {
+        timeZone: 'America/Caracas',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const venezuelaTime = now.toLocaleTimeString('es-VE', {
+        timeZone: 'America/Caracas',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
       
-      // Primero buscar sorteos futuros
+      const [year, month, day] = venezuelaDateStr.split('-').map(Number);
+      const todayVenezuela = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+      
+      // Primero buscar sorteos de hoy con hora mayor a la actual
       let nextDraw = await prisma.draw.findFirst({
         where: {
           gameId: game.id,
           status: { in: ['SCHEDULED', 'CLOSED'] },
-          scheduledAt: { gte: now }
+          drawDate: todayVenezuela,
+          drawTime: { gt: venezuelaTime }
         },
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: { drawTime: 'asc' },
         include: {
           preselectedItem: true
         }
       });
       
-      // Si no hay futuros, buscar el más reciente que esté pendiente (puede estar atrasado)
+      // Si no hay de hoy, buscar de días futuros
       if (!nextDraw) {
         nextDraw = await prisma.draw.findFirst({
           where: {
             gameId: game.id,
-            status: { in: ['SCHEDULED', 'CLOSED'] }
+            status: { in: ['SCHEDULED', 'CLOSED'] },
+            drawDate: { gt: todayVenezuela }
           },
-          orderBy: { scheduledAt: 'desc' },
+          orderBy: [
+            { drawDate: 'asc' },
+            { drawTime: 'asc' }
+          ],
           include: {
             preselectedItem: true
           }
@@ -496,12 +517,13 @@ Para pre-seleccionar el ganador del próximo sorteo:
         }
       });
 
-      // Formatear hora del sorteo
-      const drawTime = nextDraw.scheduledAt.toLocaleTimeString('es-VE', {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'America/Caracas'
-      });
+      // Formatear hora del sorteo (drawTime ya está en hora Venezuela)
+      const [hours, mins] = nextDraw.drawTime.split(':');
+      const hour = parseInt(hours, 10);
+      const minute = mins;
+      const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+      const displayHour = hour % 12 || 12;
+      const drawTime = `${displayHour.toString().padStart(2, '0')}:${minute} ${ampm}`;
 
       // Confirmar al usuario que hizo el cambio
       await bot.sendMessage(chatId, `

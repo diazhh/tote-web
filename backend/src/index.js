@@ -40,7 +40,7 @@ app.use(helmet({
 const isProduction = process.env.NODE_ENV === 'production';
 
 // En producción: solo https://tote.atilax.io
-// En desarrollo: permitir cualquier origen localhost
+// En desarrollo: permitir localhost y servidor de desarrollo
 const corsOptions = {
   origin: (origin, callback) => {
     if (isProduction) {
@@ -52,8 +52,11 @@ const corsOptions = {
         callback(new Error('Not allowed by CORS'));
       }
     } else {
-      // Desarrollo: permitir localhost en cualquier puerto
-      if (!origin || origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:')) {
+      // Desarrollo: permitir localhost y servidor de desarrollo (144.126.150.120:10000)
+      if (!origin || 
+          origin.startsWith('http://localhost:') || 
+          origin.startsWith('http://127.0.0.1:') ||
+          origin === 'http://144.126.150.120:10000') {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
@@ -93,6 +96,13 @@ app.use('/api/', generalLimiter);
 // Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Servir archivos estáticos del directorio storage
+import path from 'path';
+import { fileURLToPath } from 'url';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use('/storage', express.static(path.join(__dirname, '../storage')));
 
 // Logging de requests
 app.use((req, res, next) => {
@@ -154,6 +164,7 @@ import tripletaRoutes from './routes/tripleta.routes.js';
 import monitorRoutes from './routes/monitor.routes.js';
 import drawAnalysisRoutes from './routes/draw-analysis.routes.js';
 import playerRoutes from './routes/player.routes.js';
+import numberHistoryRoutes from './routes/number-history.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -161,6 +172,10 @@ import playerRoutes from './routes/player.routes.js';
 
 // Rutas públicas
 app.use('/api/public', publicRoutes);
+
+// Rutas públicas para imágenes (sin autenticación)
+import publicImagesRoutes from './routes/public-images.routes.js';
+app.use('/api/public/images', publicImagesRoutes);
 
 // Rutas protegidas
 app.use('/api/auth', authRoutes);
@@ -201,6 +216,7 @@ app.use('/api/tripleta', tripletaRoutes);
 app.use('/api/monitor', monitorRoutes);
 app.use('/api/analysis', drawAnalysisRoutes);
 app.use('/api/players', playerRoutes);
+app.use('/api/number-history', numberHistoryRoutes);
 
 // Rutas anidadas para items de juegos
 import gameItemController from './controllers/game-item.controller.js';

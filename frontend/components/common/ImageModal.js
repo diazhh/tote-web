@@ -1,7 +1,8 @@
 'use client';
 
 import { X, Download } from 'lucide-react';
-import { formatTime, formatDate } from '@/lib/utils/format';
+import { formatDrawDate, formatDrawTime } from '@/lib/utils/dateUtils';
+import { formatDate, formatTime } from '@/lib/utils/format';
 
 export default function ImageModal({ draw, imageUrl, onClose }) {
   if (!draw || !imageUrl) return null;
@@ -13,7 +14,7 @@ export default function ImageModal({ draw, imageUrl, onClose }) {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${draw.game.slug}_${draw.winnerItem.number}_${formatDate(draw.scheduledAt).replace(/\//g, '-')}.png`;
+      a.download = `${draw.game.slug}_${draw.winnerItem.number}_${formatDrawDate(draw).replace(/\//g, '-')}.png`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -86,11 +87,11 @@ export default function ImageModal({ draw, imageUrl, onClose }) {
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-1">Fecha</div>
-              <div className="font-semibold text-gray-900">{formatDate(draw.scheduledAt)}</div>
+              <div className="font-semibold text-gray-900">{formatDrawDate(draw)}</div>
             </div>
             <div>
               <div className="text-xs text-gray-500 mb-1">Hora</div>
-              <div className="font-semibold text-gray-900">{formatTime(draw.scheduledAt)}</div>
+              <div className="font-semibold text-gray-900">{formatDrawTime(draw)}</div>
             </div>
           </div>
           

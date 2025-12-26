@@ -1,0 +1,25 @@
+{
+  "name": "tote-whatsapp-service",
+  "version": "1.0.0",
+  "description": "Standalone WhatsApp service for Tote system using whatsapp-web.js",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "keywords": ["whatsapp", "whatsapp-web.js", "tote"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "whatsapp-web.js": "^1.23.0",
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "qrcode": "^1.5.3",
+    "dotenv": "^16.3.1",
+    "axios": "^1.6.2",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

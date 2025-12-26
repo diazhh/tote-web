@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import drawsAPI from '@/lib/api/draws';
 import { toast } from 'sonner';
 import { X, Image as ImageIcon, Send, CheckCircle, XCircle, Clock, RefreshCw, Sparkles, Target, Download, Edit, Play, SendHorizontal } from 'lucide-react';
-import { formatCaracasTime, formatCaracasDateTime, formatDateTimeAMPM } from '@/lib/utils/dateUtils';
+import { formatCaracasTime, formatCaracasDateTime, formatDateTimeAMPM, buildDrawDateTime, formatDrawDateTime, formatDrawTime } from '@/lib/utils/dateUtils';
 
 export default function DrawDetailModal({ draw, onClose, onUpdate }) {
   const [drawData, setDrawData] = useState(draw);
@@ -253,7 +253,8 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
       
       const link = document.createElement('a');
       link.href = url;
-      link.download = `sorteo_${drawData.game?.name}_${new Date(drawData.scheduledAt).toISOString().split('T')[0]}.png`;
+      const dateStr = drawData.drawDate ? new Date(drawData.drawDate).toISOString().split('T')[0] : 'unknown';
+      link.download = `sorteo_${drawData.game?.name}_${dateStr}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -290,7 +291,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
   };
 
   const handleForceTotalize = async () => {
-    if (!confirm(`¿Totalizar manualmente el sorteo de ${formatCaracasTime(drawData.scheduledAt)}?`)) return;
+    if (!confirm(`¿Totalizar manualmente el sorteo de ${formatDrawTime(drawData)}?`)) return;
     
     setLoading(true);
     try {
@@ -364,7 +365,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
               Detalles del Sorteo
             </h2>
             <p className="text-xs sm:text-sm text-gray-600 mt-1 truncate">
-              {drawData.game?.name} - {formatDateTimeAMPM(drawData.scheduledAt)}
+              {drawData.game?.name} - {formatDrawDateTime(drawData)}
             </p>
           </div>
           <button
@@ -548,7 +549,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
           )}
 
           {/* Totalizar manualmente - solo si no está totalizado */}
-          {['SCHEDULED', 'CLOSED'].includes(drawData.status) && new Date(drawData.scheduledAt) < new Date() && (
+          {['SCHEDULED', 'CLOSED'].includes(drawData.status) && drawData.drawDate && drawData.drawTime && buildDrawDateTime(drawData.drawDate, drawData.drawTime) < new Date() && (
             <div className="bg-gradient-to-r from-orange-50 to-red-50 border border-orange-200 rounded-lg p-3 sm:p-4">
               <h3 className="text-sm font-medium text-orange-900 mb-3 flex items-center">
                 <Play className="w-4 h-4 mr-2 flex-shrink-0" />

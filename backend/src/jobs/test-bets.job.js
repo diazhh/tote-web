@@ -91,12 +91,17 @@ class TestBetsJob {
   async insertTestBets(config) {
     try {
       // Obtener sorteos abiertos
+      const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+      const todayVenezuela = getVenezuelaDateAsUTC();
+      const currentTime = getVenezuelaTimeString();
+      
       const openDraws = await prisma.draw.findMany({
         where: {
           status: 'OPEN',
-          scheduledAt: {
-            gt: new Date()
-          }
+          OR: [
+            { drawDate: todayVenezuela, drawTime: { gt: currentTime } },
+            { drawDate: { gt: todayVenezuela } }
+          ]
         },
         include: {
           game: {

@@ -5,7 +5,7 @@ import { X, Search } from 'lucide-react';
 import drawsAPI from '@/lib/api/draws';
 import api from '@/lib/api/axios';
 import { toast } from 'sonner';
-import { formatCaracasDateTime } from '@/lib/utils/dateUtils';
+import { formatDrawDateTime } from '@/lib/utils/dateUtils';
 
 export default function ChangeWinnerModal({ draw, onClose, onSuccess }) {
   const [items, setItems] = useState([]);
@@ -62,7 +62,7 @@ export default function ChangeWinnerModal({ draw, onClose, onSuccess }) {
           <div>
             <h2 className="text-xl font-bold text-gray-900">Cambiar Ganador</h2>
             <p className="text-sm text-gray-600 mt-1">
-              {draw.game.name} - {formatCaracasDateTime(draw.scheduledAt)}
+              {draw.game.name} - {formatDrawDateTime(draw)}
             </p>
           </div>
           <button

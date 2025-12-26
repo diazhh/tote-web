@@ -9,6 +9,7 @@ import prewinnerSelectionService from '../services/prewinner-selection.service.j
 import pdfReportService from '../services/pdf-report.service.js';
 import betSimulatorService from '../services/bet-simulator.service.js';
 import { startOfDay } from 'date-fns';
+import { getVenezuelaDateString, getVenezuelaTimeString, getVenezuelaDateAsUTC, addMinutesToTime } from '../lib/dateUtils.js';
 
 /**
  * Job para cerrar sorteos 5 minutos antes y preseleccionar ganador
@@ -52,17 +53,20 @@ class CloseDrawJob {
         return; // Silenciosamente no hacer nada
       }
 
-      const now = new Date();
-      const fiveMinutesFromNow = new Date(now.getTime() + 5 * 60 * 1000);
+      // Obtener fecha y hora actual en Venezuela
+      const venezuelaTime = getVenezuelaTimeString(); // HH:MM:SS
+      const venezuelaDate = getVenezuelaDateAsUTC(); // Date object para DB
+      
+      // Calcular hora + 5 minutos (para cerrar sorteos 5 min antes)
+      const targetDrawTime = addMinutesToTime(venezuelaTime, 5);
 
       // Buscar sorteos que deben cerrarse (5 minutos antes)
+      // Usar drawDate y drawTime (hora Venezuela directa)
       const drawsToClose = await prisma.draw.findMany({
         where: {
           status: 'SCHEDULED',
-          scheduledAt: {
-            lte: fiveMinutesFromNow,
-            gte: now
-          }
+          drawDate: venezuelaDate,
+          drawTime: targetDrawTime
         },
         include: {
           game: {
@@ -104,7 +108,7 @@ class CloseDrawJob {
             if (selectedItem) {
               selectionMethod = 'admin';
               logger.info(
-                `👤 Sorteo ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()} ` +
+                `👤 Sorteo ${draw.game.name} - ${draw.drawTime} ` +
                 `| Pre-ganador ya seleccionado por admin: ${selectedItem.number} - ${selectedItem.name}`
               );
             }
@@ -141,18 +145,20 @@ class CloseDrawJob {
                   emitToAll('draw:closed', {
                     drawId: updatedDraw.id,
                     game: { name: updatedDraw.game.name, slug: updatedDraw.game.slug },
-                    scheduledAt: updatedDraw.scheduledAt,
+                    drawDate: updatedDraw.drawDate,
+                    drawTime: updatedDraw.drawTime,
                     preselectedItem: { number: selectedItem.number, name: selectedItem.name }
                   });
 
                   emitToGame(updatedDraw.game.slug, 'draw:closed', {
                     drawId: updatedDraw.id,
-                    scheduledAt: updatedDraw.scheduledAt,
+                    drawDate: updatedDraw.drawDate,
+                    drawTime: updatedDraw.drawTime,
                     preselectedItem: { number: selectedItem.number, name: selectedItem.name }
                   });
 
                   logger.info(
-                    `🔒 Sorteo cerrado: ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()} ` +
+                    `🔒 Sorteo cerrado: ${draw.game.name} - ${draw.drawTime} ` +
                     `| Preselección inteligente: ${selectedItem.number} - ${selectedItem.name}`
                   );
                   continue; // Ya se procesó todo en el servicio
@@ -164,7 +170,7 @@ class CloseDrawJob {
 
             // Selección aleatoria (sin tickets o si falló la inteligente)
             // Aplicar filtro de items no usados hoy
-            const usedItemsToday = await this.getUsedItemsToday(draw.gameId, draw.scheduledAt);
+            const usedItemsToday = await this.getUsedItemsToday(draw.gameId, draw.drawDate);
             let availableItems = items.filter(item => !usedItemsToday.has(item.id));
             
             if (availableItems.length === 0) {
@@ -192,7 +198,7 @@ class CloseDrawJob {
           });
 
           logger.info(
-            `🔒 Sorteo cerrado: ${draw.game.name} - ${draw.scheduledAt.toLocaleTimeString()} ` +
+            `🔒 Sorteo cerrado: ${draw.game.name} - ${draw.drawTime} ` +
             `| Preselección aleatoria: ${selectedItem.number} - ${selectedItem.name}`
           );
 
@@ -200,13 +206,15 @@ class CloseDrawJob {
           emitToAll('draw:closed', {
             drawId: updatedDraw.id,
             game: { name: updatedDraw.game.name, slug: updatedDraw.game.slug },
-            scheduledAt: updatedDraw.scheduledAt,
+            drawDate: updatedDraw.drawDate,
+            drawTime: updatedDraw.drawTime,
             preselectedItem: { number: selectedItem.number, name: selectedItem.name }
           });
 
           emitToGame(updatedDraw.game.slug, 'draw:closed', {
             drawId: updatedDraw.id,
-            scheduledAt: updatedDraw.scheduledAt,
+            drawDate: updatedDraw.drawDate,
+            drawTime: updatedDraw.drawTime,
             preselectedItem: { number: selectedItem.number, name: selectedItem.name }
           });
 
@@ -230,7 +238,8 @@ class CloseDrawJob {
             pdfPath = await pdfReportService.generateDrawClosingReport({
               drawId: draw.id,
               game: updatedDraw.game,
-              scheduledAt: updatedDraw.scheduledAt,
+              drawDate: updatedDraw.drawDate,
+              drawTime: updatedDraw.drawTime,
               prewinnerItem: selectedItem,
               totalSales: 0,
               maxPayout: 0,
@@ -249,7 +258,8 @@ class CloseDrawJob {
             await adminNotificationService.notifyPrewinnerSelected({
               drawId: updatedDraw.id,
               game: updatedDraw.game,
-              scheduledAt: updatedDraw.scheduledAt,
+              drawDate: updatedDraw.drawDate,
+              drawTime: updatedDraw.drawTime,
               prewinnerItem: updatedDraw.preselectedItem,
               totalSales: 0,
               maxPayout: 0,
@@ -281,10 +291,7 @@ class CloseDrawJob {
     const drawsToday = await prisma.draw.findMany({
       where: {
         gameId,
-        scheduledAt: {
-          gte: today,
-          lt: tomorrow
-        },
+        drawDate: referenceDate,
         OR: [
           { preselectedItemId: { not: null } },
           { winnerItemId: { not: null } }

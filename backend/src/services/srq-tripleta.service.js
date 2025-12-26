@@ -161,17 +161,22 @@ class SRQTripletaService {
     const multiplier = tripletaConfig.multiplier || 50;
 
     // Obtener sorteos futuros para calcular rango de la tripleta
+    const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+    const todayVenezuela = getVenezuelaDateAsUTC();
+    const currentTime = getVenezuelaTimeString();
+    
     const futureDraws = await prisma.draw.findMany({
       where: {
         gameId,
-        scheduledAt: {
-          gte: new Date()
-        },
+        OR: [
+          { drawDate: todayVenezuela, drawTime: { gte: currentTime } },
+          { drawDate: { gt: todayVenezuela } }
+        ],
         status: 'SCHEDULED'
       },
-      orderBy: { scheduledAt: 'asc' },
+      orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }],
       take: drawsCount + 1,
-      select: { id: true, scheduledAt: true }
+      select: { id: true, drawDate: true, drawTime: true }
     });
 
     if (futureDraws.length < 2) {
@@ -181,7 +186,11 @@ class SRQTripletaService {
 
     const startDrawId = futureDraws[0].id;
     const endDrawId = futureDraws[Math.min(drawsCount, futureDraws.length) - 1].id;
-    const expiresAt = futureDraws[Math.min(drawsCount, futureDraws.length) - 1].scheduledAt;
+    // Construir expiresAt desde drawDate y drawTime
+    const lastDraw = futureDraws[Math.min(drawsCount, futureDraws.length) - 1];
+    const expiresAt = new Date(lastDraw.drawDate);
+    const [hours, minutes] = lastDraw.drawTime.split(':');
+    expiresAt.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
 
     for (const ticket of tickets) {
       try {
@@ -315,14 +324,17 @@ class SRQTripletaService {
    * @returns {Promise<Array>}
    */
   async syncUpcomingTripletaTickets(minutesBefore = 5) {
-    const now = new Date();
-    const targetTime = new Date(now.getTime() + minutesBefore * 60000);
+    const { getVenezuelaDateAsUTC, getVenezuelaTimeString, addMinutesToTime } = await import('../lib/dateUtils.js');
+    const todayVenezuela = getVenezuelaDateAsUTC();
+    const currentTime = getVenezuelaTimeString();
+    const targetTime = addMinutesToTime(currentTime, minutesBefore);
 
     // Buscar sorteos que cierran pronto y tienen configuración de tripleta
     const draws = await prisma.draw.findMany({
       where: {
-        scheduledAt: {
-          gte: now,
+        drawDate: todayVenezuela,
+        drawTime: {
+          gte: currentTime,
           lte: targetTime,
         },
         status: {

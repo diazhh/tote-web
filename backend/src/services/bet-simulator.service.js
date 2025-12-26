@@ -51,7 +51,9 @@ class BetSimulatorService {
    * Obtener el próximo sorteo disponible por cada juego (SCHEDULED y no cerrado)
    */
   async getNextDrawPerGame() {
-    const now = new Date();
+    const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+    const todayVenezuela = getVenezuelaDateAsUTC();
+    const currentTime = getVenezuelaTimeString();
     
     // Obtener todos los juegos activos
     const games = await prisma.game.findMany({
@@ -66,26 +68,33 @@ class BetSimulatorService {
     const nextDraws = [];
 
     for (const game of games) {
-      // Obtener solo el próximo sorteo de este juego
+      // Obtener solo el próximo sorteo de este juego usando drawDate/drawTime
       const nextDraw = await prisma.draw.findFirst({
         where: {
           gameId: game.id,
           status: 'SCHEDULED',
-          scheduledAt: {
-            gt: now
-          }
+          OR: [
+            { drawDate: todayVenezuela, drawTime: { gt: currentTime } },
+            { drawDate: { gt: todayVenezuela } }
+          ]
         },
-        orderBy: {
-          scheduledAt: 'asc'
-        }
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ]
       });
 
       if (nextDraw) {
         // Verificar que no haya cerrado (5 min antes)
-        const closeTime = new Date(nextDraw.scheduledAt);
-        closeTime.setMinutes(closeTime.getMinutes() - 5);
+        // Calcular tiempo de cierre usando drawTime
+        const [hours, minutes] = nextDraw.drawTime.split(':');
+        const [currentHours, currentMinutes] = currentTime.split(':');
+        const drawTotalMinutes = parseInt(hours) * 60 + parseInt(minutes);
+        const currentTotalMinutes = parseInt(currentHours) * 60 + parseInt(currentMinutes);
+        const minutesUntilDraw = drawTotalMinutes - currentTotalMinutes;
         
-        if (now < closeTime) {
+        // Solo incluir si faltan más de 5 minutos (no ha cerrado)
+        if (minutesUntilDraw > 5) {
           nextDraws.push({
             ...nextDraw,
             game
@@ -223,18 +232,24 @@ class BetSimulatorService {
       const selectedItems = this.randomSample(game.items, 3);
       const amount = this.randomInt(1, 25);
 
-      // Obtener próximos sorteos
+      // Obtener próximos sorteos usando drawDate/drawTime
+      const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+      const todayVenezuela = getVenezuelaDateAsUTC();
+      const currentTime = getVenezuelaTimeString();
+      
       const nextDraws = await prisma.draw.findMany({
         where: {
           gameId: gameId,
           status: 'SCHEDULED',
-          scheduledAt: {
-            gt: new Date()
-          }
+          OR: [
+            { drawDate: todayVenezuela, drawTime: { gt: currentTime } },
+            { drawDate: { gt: todayVenezuela } }
+          ]
         },
-        orderBy: {
-          scheduledAt: 'asc'
-        },
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ],
         take: tripletaConfig.drawsCount
       });
 
@@ -245,7 +260,11 @@ class BetSimulatorService {
 
       const startDrawId = nextDraws[0].id;
       const endDrawId = nextDraws[nextDraws.length - 1].id;
-      const expiresAt = nextDraws[nextDraws.length - 1].scheduledAt;
+      // Construir expiresAt desde drawDate y drawTime del último sorteo
+      const lastDraw = nextDraws[nextDraws.length - 1];
+      const expiresAt = new Date(lastDraw.drawDate);
+      const [hours, minutes] = lastDraw.drawTime.split(':');
+      expiresAt.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
 
       const tripleBet = await prisma.$transaction(async (tx) => {
         // Verificar saldo

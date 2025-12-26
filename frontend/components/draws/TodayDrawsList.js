@@ -1,7 +1,7 @@
 'use client';
 
 import { Trophy, Clock, CheckCircle2 } from 'lucide-react';
-import { formatTime } from '@/lib/utils/format';
+import { formatDrawTime } from '@/lib/utils/dateUtils';
 import EmptyState from '@/components/common/EmptyState';
 
 /**
@@ -72,7 +72,7 @@ function DrawCard({ draw }) {
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
           <Clock className="h-4 w-4" />
-          <span>{formatTime(draw.scheduledAt)}</span>
+          <span>{formatDrawTime(draw)}</span>
         </div>
         
         {isDrawn && (

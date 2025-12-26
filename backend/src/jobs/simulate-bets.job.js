@@ -45,6 +45,12 @@ class SimulateBetsJob {
         return; // Silenciosamente no hacer nada
       }
 
+      // Verificar si el simulador está habilitado
+      const isSimulatorEnabled = await systemConfigService.isBetSimulatorEnabled();
+      if (!isSimulatorEnabled) {
+        return; // Silenciosamente no hacer nada si está desactivado
+      }
+
       logger.info('🎲 Iniciando simulación automática de jugadas...');
 
       const result = await betSimulatorService.runSimulation({

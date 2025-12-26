@@ -328,9 +328,10 @@ class DrawStatsService {
         }
       },
       orderBy: {
-        draw: {
-          scheduledAt: 'asc'
-        }
+        draw: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ]
       }
     });
 

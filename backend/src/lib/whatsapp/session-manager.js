@@ -1,4 +1,5 @@
-import makeWASocket, { 
+import { 
+  makeWASocket,
   DisconnectReason, 
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
@@ -391,15 +392,38 @@ class WhatsAppSessionManager {
         throw new Error(`Instancia ${instanceId} no está conectada`);
       }
 
-      // Formatear número de teléfono (debe incluir código de país)
       const jid = phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`;
+      const isGroup = jid.includes('@g.us');
 
-      const result = await session.socket.sendMessage(jid, { text: message });
-      
-      logger.info(`Mensaje enviado desde ${instanceId} a ${phoneNumber}`);
+      // CRÍTICO: Para grupos, obtener metadatos primero para establecer sesiones de cifrado
+      if (isGroup) {
+        try {
+          logger.info(`Obteniendo metadatos del grupo ${jid}...`);
+          const metadata = await session.socket.groupMetadata(jid);
+          logger.info(`Metadatos del grupo obtenidos: ${metadata.subject}, ${metadata.participants.length} participantes`);
+          
+          // Intentar obtener información de los participantes para establecer sesiones
+          const participantJids = metadata.participants.map(p => p.id);
+          logger.info(`Participantes del grupo: ${participantJids.length}`);
+        } catch (metadataError) {
+          logger.warn(`No se pudieron obtener metadatos del grupo: ${metadataError.message}`);
+        }
+      }
+
+      // Enviar mensaje con opciones específicas para grupos
+      const messageOptions = isGroup ? {
+        // Para grupos, no esperar acknowledgment inmediato
+        waitForAck: false
+      } : {};
+
+      const result = await session.socket.sendMessage(jid, {
+        text: message
+      }, messageOptions);
+
+      logger.info(`✅ Mensaje enviado desde ${instanceId} a ${phoneNumber}`);
       return result;
     } catch (error) {
-      logger.error(`Error al enviar mensaje desde ${instanceId}:`, error);
+      logger.error(`❌ Error al enviar mensaje desde ${instanceId}:`, error);
       throw error;
     }
   }
@@ -443,15 +467,64 @@ class WhatsAppSessionManager {
       // Formatear número de teléfono
       const jid = phoneNumber.includes('@') ? phoneNumber : `${phoneNumber}@s.whatsapp.net`;
 
+      // Detectar si es un grupo
+      const isGroup = jid.includes('@g.us');
+      
+      logger.info(`Enviando imagen a ${jid} (${isGroup ? 'GRUPO' : 'INDIVIDUAL'})`);
+
+      // CRÍTICO: Para grupos, obtener metadatos primero para establecer sesiones de cifrado
+      if (isGroup) {
+        try {
+          logger.info(`Obteniendo metadatos del grupo ${jid}...`);
+          await session.socket.groupMetadata(jid);
+          logger.info(`Metadatos del grupo obtenidos correctamente`);
+        } catch (metadataError) {
+          logger.warn(`No se pudieron obtener metadatos del grupo: ${metadataError.message}`);
+          // Continuar de todos modos, puede que funcione
+        }
+
+        try {
+          const axios = (await import('axios')).default;
+          const response = await axios.get(imageUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000
+          });
+          
+          const imageBuffer = Buffer.from(response.data);
+          logger.info(`Imagen descargada (${imageBuffer.length} bytes), enviando a grupo...`);
+          
+          const result = await session.socket.sendMessage(jid, {
+            image: imageBuffer,
+            caption: caption || ''
+          });
+          
+          logger.info(`✅ Imagen enviada exitosamente a grupo ${jid}`);
+          return result;
+        } catch (downloadError) {
+          logger.error(`Error descargando/enviando imagen para grupo: ${downloadError.message}`);
+          // Intentar con URL directa como fallback
+          logger.info('Intentando envío directo con URL como fallback...');
+          
+          const result = await session.socket.sendMessage(jid, {
+            image: { url: imageUrl },
+            caption: caption || ''
+          });
+          
+          logger.info(`✅ Imagen (URL) enviada a grupo ${jid}`);
+          return result;
+        }
+      }
+
+      // Para individuales, usar URL directa
       const result = await session.socket.sendMessage(jid, {
         image: { url: imageUrl },
         caption: caption || ''
       });
 
-      logger.info(`Imagen (URL) enviada desde ${instanceId} a ${phoneNumber}`);
+      logger.info(`✅ Imagen enviada desde ${instanceId} a ${phoneNumber}`);
       return result;
     } catch (error) {
-      logger.error(`Error al enviar imagen desde URL ${instanceId}:`, error);
+      logger.error(`❌ Error al enviar imagen desde URL ${instanceId}:`, error);
       throw error;
     }
   }
@@ -473,6 +546,36 @@ class WhatsAppSessionManager {
     } catch (error) {
       logger.error(`Error al verificar número ${phoneNumber}:`, error);
       return false;
+    }
+  }
+
+  /**
+   * Obtener lista de grupos de WhatsApp
+   */
+  async getGroups(instanceId) {
+    try {
+      const session = this.getSession(instanceId);
+      if (!session || session.status !== 'connected') {
+        throw new Error(`Instancia ${instanceId} no está conectada`);
+      }
+
+      // Obtener todos los chats
+      const chats = await session.socket.groupFetchAllParticipating();
+      
+      // Convertir a array y filtrar solo grupos
+      const groups = Object.values(chats).map(group => ({
+        id: group.id,
+        name: group.subject || 'Sin nombre',
+        participants: group.participants?.length || 0,
+        createdAt: group.creation ? new Date(group.creation * 1000) : null,
+        description: group.desc || null
+      }));
+
+      logger.info(`Grupos obtenidos de ${instanceId}: ${groups.length}`);
+      return groups;
+    } catch (error) {
+      logger.error(`Error al obtener grupos de ${instanceId}:`, error);
+      throw error;
     }
   }
 

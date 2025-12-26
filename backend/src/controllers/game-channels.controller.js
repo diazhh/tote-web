@@ -384,9 +384,11 @@ export const previewTemplate = async (req, res) => {
     }
 
     // Crear datos de prueba
+    const now = new Date();
     const testDraw = {
       id: 'preview-id',
-      scheduledAt: new Date().toISOString(),
+      drawDate: now,
+      drawTime: now.toTimeString().split(' ')[0].substring(0, 8), // "HH:MM:SS"
       status: 'DRAWN',
       game: game || {
         name: 'LOTOANIMALITO',

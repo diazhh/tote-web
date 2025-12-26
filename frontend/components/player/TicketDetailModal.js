@@ -145,7 +145,7 @@ export default function TicketDetailModal({ ticket, onClose }) {
                 <div>
                   <p className="text-xs text-gray-600">Fecha del Sorteo</p>
                   <p className="font-semibold text-gray-900">
-                    {ticket.draw?.scheduledAt ? formatDateTime(ticket.draw.scheduledAt) : (ticket.draw?.drawTime ? formatDateTime(ticket.draw.drawTime) : 'N/A')}
+                    {formatDrawDateTime(ticket.draw)}
                   </p>
                 </div>
               </div>
@@ -183,8 +183,7 @@ export default function TicketDetailModal({ ticket, onClose }) {
                         {group.draw?.game?.name || 'Juego'}
                       </p>
                       <p className="text-xs text-blue-700">
-                        {group.draw?.scheduledAt ? formatDateTime(group.draw.scheduledAt) : 
-                         group.draw?.drawTime || 'Hora no disponible'}
+                        {formatDrawDateTime(group.draw) || 'Hora no disponible'}
                       </p>
                     </div>
                     {group.draw?.winnerItem && (

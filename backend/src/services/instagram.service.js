@@ -10,7 +10,7 @@ const prisma = new PrismaClient();
 class InstagramService {
   constructor() {
     this.instances = new Map(); // Cache de instancias activas
-    this.baseUrl = 'https://graph.instagram.com';
+    this.baseUrl = 'https://graph.facebook.com/v18.0';
   }
 
   /**
@@ -74,7 +74,7 @@ class InstagramService {
   async exchangeCodeForToken(instanceId, authCode, redirectUri) {
     try {
       const instance = await this.getInstance(instanceId);
-      const appSecret = this.decryptSecret(instance.appSecret);
+      const appSecret = instance.appSecret; // Ya no encriptado
 
       // Intercambiar código por token de corta duración
       const shortTokenResponse = await axios.post('https://api.instagram.com/oauth/access_token', {
@@ -222,25 +222,45 @@ class InstagramService {
       }
 
       // Paso 1: Crear container de media
+      logger.info(`📸 Instagram: Creando container de media para ${instance.userId}`, {
+        imageUrl,
+        captionLength: caption.length
+      });
+      
       const containerResponse = await axios.post(
         `${this.baseUrl}/${instance.userId}/media`,
+        null,
         {
-          image_url: imageUrl,
-          caption: caption,
-          access_token: instance.accessToken
+          params: {
+            image_url: imageUrl,
+            caption: caption,
+            access_token: instance.accessToken
+          }
         }
       );
 
       const creationId = containerResponse.data.id;
+      logger.info(`✅ Instagram: Container creado exitosamente: ${creationId}`);
+
+      // Esperar 3 segundos para que Instagram procese la imagen
+      logger.info(`⏳ Instagram: Esperando 3 segundos para que Instagram procese la imagen...`);
+      await this.sleep(3000);
 
       // Paso 2: Publicar el container
+      logger.info(`📤 Instagram: Publicando container ${creationId}`);
+      
       const publishResponse = await axios.post(
         `${this.baseUrl}/${instance.userId}/media_publish`,
+        null,
         {
-          creation_id: creationId,
-          access_token: instance.accessToken
+          params: {
+            creation_id: creationId,
+            access_token: instance.accessToken
+          }
         }
       );
+      
+      logger.info(`✅ Instagram: Publicación exitosa, media ID: ${publishResponse.data.id}`);
 
       await this.updateLastSeen(instanceId);
 
@@ -251,7 +271,13 @@ class InstagramService {
       };
 
     } catch (error) {
-      logger.error('Error al publicar foto en Instagram:', error);
+      logger.error('Error al publicar foto en Instagram:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        imageUrl: imageUrl
+      });
 
       // Manejar errores específicos
       if (error.response?.status === 401) {
@@ -373,18 +399,18 @@ class InstagramService {
       const response = await axios.get('https://graph.instagram.com/refresh_access_token', {
         params: {
           grant_type: 'ig_refresh_token',
-          access_token: instance.accessToken
+          access_token: instance.accessToken // Ya no encriptado
         }
       });
 
       const newToken = response.data.access_token;
       const expiresIn = response.data.expires_in;
 
-      // Actualizar token
+      // Actualizar token (texto plano)
       await prisma.instagramInstance.update({
         where: { instanceId },
         data: {
-          accessToken: newToken,
+          accessToken: newToken, // Guardar en texto plano
           tokenExpiresAt: new Date(Date.now() + expiresIn * 1000),
           status: 'CONNECTED',
           lastSeen: new Date()

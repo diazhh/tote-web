@@ -5,7 +5,7 @@ import drawTemplateService from '../services/draw-template.service.js';
 import drawPauseService from '../services/draw-pause.service.js';
 import systemConfigService from '../services/system-config.service.js';
 import { emitToAll } from '../lib/socket.js';
-import { now, getDayOfWeek, timeStringToDate } from '../lib/dateUtils.js';
+import { getVenezuelaDateString, getVenezuelaDateAsUTC, getVenezuelaDayOfWeek } from '../lib/dateUtils.js';
 
 /**
  * Job para generar sorteos diarios basados en plantillas
@@ -52,9 +52,12 @@ class GenerateDailyDrawsJob {
         return;
       }
 
-      // Get current date
-      const today = now();
-      const dayOfWeek = getDayOfWeek(today);
+      // Obtener fecha actual en Venezuela
+      const venezuelaDateStr = getVenezuelaDateString(); // YYYY-MM-DD
+      const today = getVenezuelaDateAsUTC(); // Date object para guardar en DB
+      const dayOfWeek = getVenezuelaDayOfWeek(); // 1-7 (Lun-Dom)
+      
+      logger.info(`📅 Fecha Venezuela: ${venezuelaDateStr}, Día: ${dayOfWeek}`);
 
       // Obtener plantillas activas para este día
       const templates = await drawTemplateService.getActiveForDay(dayOfWeek);
@@ -82,14 +85,15 @@ class GenerateDailyDrawsJob {
 
         // Crear sorteos para cada hora de la plantilla
         for (const time of template.drawTimes) {
-          // Convert time string to date
-          const scheduledAt = timeStringToDate(today, time);
+          // drawTime se guarda directamente como hora de Venezuela (HH:MM)
+          // drawDate es la fecha del sorteo en Venezuela como Date UTC
 
           // Verificar si ya existe un sorteo para esta fecha/hora/juego
           const existing = await prisma.draw.findFirst({
             where: {
               gameId: template.gameId,
-              scheduledAt
+              drawDate: today,
+              drawTime: time
             }
           });
 
@@ -99,14 +103,13 @@ class GenerateDailyDrawsJob {
             continue;
           }
 
-          // Crear el sorteo
+          // Crear el sorteo con hora de Venezuela
           await prisma.draw.create({
             data: {
               gameId: template.gameId,
               templateId: template.id,
               drawDate: today,
-              drawTime: time,
-              scheduledAt,
+              drawTime: time, // Hora Venezuela directa (ej: "08:00")
               status: 'SCHEDULED'
             }
           });

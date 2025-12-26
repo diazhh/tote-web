@@ -53,7 +53,7 @@ export const authenticate = async (req, res, next) => {
 /**
  * Middleware para verificar roles
  */
-export const authorize = (...roles) => {
+export const authorize = (roles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
@@ -62,7 +62,13 @@ export const authorize = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.user.role)) {
+    // Asegurar que roles sea un array
+    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+
+    logger.debug(`Verificando autorización: Usuario ${req.user.username} con rol ${req.user.role}, roles permitidos: ${allowedRoles.join(', ')}`);
+
+    if (!allowedRoles.includes(req.user.role)) {
+      logger.warn(`Acceso denegado: Usuario ${req.user.username} con rol ${req.user.role} intentó acceder a ruta que requiere roles: ${allowedRoles.join(', ')}`);
       return res.status(403).json({
         success: false,
         error: 'No tienes permisos para realizar esta acción'

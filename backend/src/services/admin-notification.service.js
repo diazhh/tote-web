@@ -54,7 +54,8 @@ class AdminNotificationService {
     const {
       drawId,
       game,
-      scheduledAt,
+      drawDate,
+      drawTime,
       prewinnerItem,
       totalSales,
       maxPayout,
@@ -67,7 +68,8 @@ class AdminNotificationService {
       // Formatear mensaje
       const message = this.formatPrewinnerMessage({
         game,
-        scheduledAt,
+        drawDate,
+        drawTime,
         prewinnerItem,
         totalSales,
         maxPayout,
@@ -93,7 +95,8 @@ class AdminNotificationService {
   formatPrewinnerMessage(data) {
     const {
       game,
-      scheduledAt,
+      drawDate,
+      drawTime,
       prewinnerItem,
       totalSales,
       maxPayout,
@@ -101,8 +104,13 @@ class AdminNotificationService {
       salesByItem
     } = data;
 
-    const dateStr = format(new Date(scheduledAt), "EEEE d 'de' MMMM, yyyy", { locale: es });
-    const timeStr = format(new Date(scheduledAt), 'hh:mm a');
+    const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
+    // drawTime ya está en formato HH:MM:SS, convertir a 12h
+    const [hours, minutes] = drawTime.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+    const displayHour = hour % 12 || 12;
+    const timeStr = `${displayHour}:${minutes} ${ampm}`;
 
     // Top 5 números más jugados
     const topItems = salesByItem
@@ -205,7 +213,8 @@ ${topItemsStr}
     const {
       drawId,
       game,
-      scheduledAt,
+      drawDate,
+      drawTime,
       winnerItem,
       totalSales,
       totalPayout,
@@ -219,7 +228,8 @@ ${topItemsStr}
     try {
       const message = this.formatDrawResultMessage({
         game,
-        scheduledAt,
+        drawDate,
+        drawTime,
         winnerItem,
         totalSales,
         totalPayout,
@@ -247,7 +257,8 @@ ${topItemsStr}
   formatDrawResultMessage(data) {
     const {
       game,
-      scheduledAt,
+      drawDate,
+      drawTime,
       winnerItem,
       totalSales,
       totalPayout,
@@ -257,8 +268,13 @@ ${topItemsStr}
       monthlyStats
     } = data;
 
-    const dateStr = format(new Date(scheduledAt), "EEEE d 'de' MMMM, yyyy", { locale: es });
-    const timeStr = format(new Date(scheduledAt), 'hh:mm a');
+    const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
+    // drawTime ya está en formato HH:MM:SS, convertir a 12h
+    const [hours, minutes] = drawTime.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+    const displayHour = hour % 12 || 12;
+    const timeStr = `${displayHour}:${minutes} ${ampm}`;
 
     const profitEmoji = profit >= 0 ? '📈' : '📉';
     const profitSign = profit >= 0 ? '+' : '';

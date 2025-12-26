@@ -1,29 +1,57 @@
 import { Clock, ChevronDown, X } from 'lucide-react';
 
 export default function DrawSelector({ draws, selectedDraw, onSelectDraw, isOpen, onToggle }) {
-  const formatDrawTime = (drawTime) => {
+  /**
+   * Formatea drawTime (HH:MM o HH:MM:SS) a formato 12h AM/PM
+   * El drawTime ya está en hora de Venezuela, no necesita conversión
+   */
+  const formatDrawTime = (draw) => {
     try {
-      if (!drawTime) return 'Hora no disponible';
-      const date = new Date(drawTime);
-      if (isNaN(date.getTime())) return 'Hora no disponible';
+      // Usar drawTime directamente si está disponible (ya está en hora Venezuela)
+      const timeStr = draw.drawTime;
+      if (!timeStr) return 'Hora no disponible';
       
-      const hours = date.getHours();
-      const minutes = date.getMinutes();
+      const [hoursStr, minutesStr] = timeStr.split(':');
+      const hours = parseInt(hoursStr, 10);
+      const minutes = minutesStr || '00';
+      
+      if (isNaN(hours)) return 'Hora no disponible';
+      
       const ampm = hours >= 12 ? 'PM' : 'AM';
       const displayHours = hours % 12 || 12;
-      const displayMinutes = minutes.toString().padStart(2, '0');
       
-      return `${displayHours}:${displayMinutes} ${ampm}`;
+      return `${displayHours}:${minutes.substring(0, 2)} ${ampm}`;
     } catch (e) {
       return 'Hora no disponible';
     }
   };
 
+  /**
+   * Verifica si el sorteo ya cerró usando hora Venezuela
+   */
   const isDrawClosed = (draw) => {
     try {
-      const closeTime = new Date(draw.closeTime);
-      if (isNaN(closeTime.getTime())) return false;
-      return closeTime <= new Date();
+      // Obtener hora actual en Venezuela
+      const now = new Date();
+      const venezuelaTime = now.toLocaleTimeString('es-VE', {
+        timeZone: 'America/Caracas',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+      
+      // El sorteo cierra 5 minutos antes de drawTime
+      const drawTime = draw.drawTime;
+      if (!drawTime) return false;
+      
+      const [hours, mins] = drawTime.split(':').map(Number);
+      const totalMinutes = hours * 60 + mins - 5; // 5 minutos antes
+      const closeHour = Math.floor(totalMinutes / 60);
+      const closeMin = totalMinutes % 60;
+      const closeTimeStr = `${closeHour.toString().padStart(2, '0')}:${closeMin.toString().padStart(2, '0')}:00`;
+      
+      return venezuelaTime >= closeTimeStr;
     } catch (e) {
       return false;
     }
@@ -46,7 +74,7 @@ export default function DrawSelector({ draws, selectedDraw, onSelectDraw, isOpen
         <div className="flex items-center gap-2">
           <Clock className="w-5 h-5" />
           {selectedDraw ? (
-            <span>{formatDrawTime(selectedDraw.drawTime)}</span>
+            <span>{formatDrawTime(selectedDraw)}</span>
           ) : availableDraws.length === 0 ? (
             <span>No hay sorteos disponibles</span>
           ) : (
@@ -77,7 +105,7 @@ export default function DrawSelector({ draws, selectedDraw, onSelectDraw, isOpen
                 <div className="flex items-center gap-3">
                   <Clock className={`w-5 h-5 ${selectedDraw?.id === draw.id ? 'text-green-600' : 'text-gray-500'}`} />
                   <div>
-                    <p className="font-bold text-lg text-gray-900">{formatDrawTime(draw.drawTime)}</p>
+                    <p className="font-bold text-lg text-gray-900">{formatDrawTime(draw)}</p>
                     <p className="text-sm text-gray-600">{draw.game?.name}</p>
                   </div>
                 </div>
@@ -119,7 +147,7 @@ export default function DrawSelector({ draws, selectedDraw, onSelectDraw, isOpen
                   >
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-bold text-lg">{formatDrawTime(draw.drawTime)}</p>
+                        <p className="font-bold text-lg">{formatDrawTime(draw)}</p>
                         <p className="text-sm text-gray-600">{draw.game?.name}</p>
                       </div>
                       <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-semibold rounded-full">

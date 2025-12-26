@@ -65,17 +65,23 @@ export class TripletaService {
       }
 
       // Obtener los próximos sorteos programados
+      const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+      const todayVenezuela = getVenezuelaDateAsUTC();
+      const currentTime = getVenezuelaTimeString();
+      
       const nextDraws = await prisma.draw.findMany({
         where: {
           gameId: gameId,
           status: 'SCHEDULED',
-          scheduledAt: {
-            gt: new Date(),
-          },
+          OR: [
+            { drawDate: todayVenezuela, drawTime: { gt: currentTime } },
+            { drawDate: { gt: todayVenezuela } }
+          ],
         },
-        orderBy: {
-          scheduledAt: 'asc',
-        },
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ],
         take: tripletaConfig.drawsCount,
       });
 
@@ -85,7 +91,11 @@ export class TripletaService {
 
       const startDrawId = nextDraws[0].id;
       const endDrawId = nextDraws[nextDraws.length - 1].id;
-      const expiresAt = nextDraws[nextDraws.length - 1].scheduledAt;
+      // Construir fecha/hora de expiración del último sorteo
+      const lastDraw = nextDraws[nextDraws.length - 1];
+      const expiresAt = new Date(lastDraw.drawDate);
+      const [hours, minutes] = lastDraw.drawTime.split(':');
+      expiresAt.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
 
       // Crear la apuesta en una transacción
       const result = await prisma.$transaction(async (tx) => {
@@ -216,6 +226,11 @@ export class TripletaService {
 
       // Obtener todas las apuestas tripleta activas para este juego
       // que tengan este sorteo en su rango
+      // Construir fecha/hora del sorteo
+      const drawDateTime = new Date(draw.drawDate);
+      const [drawHours, drawMinutes] = draw.drawTime.split(':');
+      drawDateTime.setUTCHours(parseInt(drawHours), parseInt(drawMinutes), 0, 0);
+      
       const activeTripleBets = await prisma.tripleBet.findMany({
         where: {
           gameId: draw.gameId,
@@ -224,7 +239,7 @@ export class TripletaService {
             lte: drawId,
           },
           expiresAt: {
-            gte: draw.scheduledAt,
+            gte: drawDateTime,
           },
         },
       });
@@ -236,13 +251,16 @@ export class TripletaService {
 
       for (const bet of activeTripleBets) {
         // Obtener todos los sorteos en el rango de esta apuesta que ya fueron ejecutados
+        const startDraw = await prisma.draw.findUnique({ where: { id: bet.startDrawId } });
+        const expiresDate = new Date(bet.expiresAt).toISOString().split('T')[0] + 'T00:00:00.000Z';
+        
         const executedDraws = await prisma.draw.findMany({
           where: {
             gameId: draw.gameId,
-            scheduledAt: {
-              gte: (await prisma.draw.findUnique({ where: { id: bet.startDrawId } })).scheduledAt,
-              lte: bet.expiresAt,
-            },
+            OR: [
+              { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+              { drawDate: { gt: startDraw.drawDate, lte: expiresDate } }
+            ],
             status: { in: ['DRAWN', 'PUBLISHED'] },
             winnerItemId: { not: null },
           },
@@ -342,15 +360,20 @@ export class TripletaService {
       }
 
       // Obtener sorteos desde la creación hasta expiración (limitado a drawsCount)
+      const expiresDate = new Date(tripleta.expiresAt).toISOString().split('T')[0] + 'T00:00:00.000Z';
+      
       const draws = await prisma.draw.findMany({
         where: {
           gameId: tripleta.gameId,
-          scheduledAt: {
-            gte: startDraw.scheduledAt,
-            lte: tripleta.expiresAt,
-          },
+          OR: [
+            { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+            { drawDate: { gt: startDraw.drawDate, lte: expiresDate } }
+          ],
         },
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: [
+          { drawDate: 'asc' },
+          { drawTime: 'asc' }
+        ],
         take: tripleta.drawsCount,
         include: {
           winnerItem: {
@@ -380,7 +403,8 @@ export class TripletaService {
         }
         return {
           id: draw.id,
-          scheduledAt: draw.scheduledAt,
+          drawDate: draw.drawDate,
+          drawTime: draw.drawTime,
           status: draw.status,
           winnerItemId: draw.winnerItemId,
           winnerItem: draw.winnerItem,

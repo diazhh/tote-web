@@ -1,5 +1,6 @@
 import express from 'express';
 import publicController from '../controllers/public.controller.js';
+import resultsController from '../controllers/results.controller.js';
 
 const router = express.Router();
 
@@ -12,5 +13,8 @@ router.get('/draws/:id', publicController.getDraw.bind(publicController));
 router.get('/draws/game/:gameSlug/today', publicController.getGameDrawsToday.bind(publicController));
 router.get('/draws/game/:gameSlug/history', publicController.getGameHistory.bind(publicController));
 router.get('/stats/game/:gameSlug', publicController.getGameStats.bind(publicController));
+
+// Resultados del día
+router.get('/results/today', resultsController.getTodayResults.bind(resultsController));
 
 export default router;

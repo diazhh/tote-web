@@ -18,8 +18,8 @@ export function startAllJobs() {
     // Jobs del ciclo de vida de sorteos
     generateDailyDrawsJob.start();  // 00:05 AM - Generar sorteos del día
     closeDrawJob.start();            // Cada minuto - Cerrar sorteos 5 min antes
-    executeDrawJob.start();          // Cada minuto - Ejecutar sorteos
-    publishDrawJob.start();          // Cada minuto - Publicar en canales
+    executeDrawJob.start();          // Cada minuto - Ejecutar sorteos Y publicar inmediatamente
+    // publishDrawJob.start();       // DESHABILITADO - La publicación ahora ocurre en executeDrawJob
 
     // Jobs de integración con APIs externas
     syncApiPlanningJob.start();      // Cada 5 minutos - Sincronizar planificación
@@ -46,7 +46,7 @@ export function stopAllJobs() {
     generateDailyDrawsJob.stop();
     closeDrawJob.stop();
     executeDrawJob.stop();
-    publishDrawJob.stop();
+    // publishDrawJob.stop(); // Ya no se inicia
     syncApiPlanningJob.stop();
     syncApiTicketsJob.stop();
     simulateBetsJob.stop();

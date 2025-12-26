@@ -30,7 +30,8 @@ class PdfReportService {
     const {
       drawId,
       game,
-      scheduledAt,
+      drawDate,
+      drawTime,
       prewinnerItem,
       totalSales,
       maxPayout,
@@ -41,8 +42,8 @@ class PdfReportService {
       tripletaRiskData
     } = data;
 
-    const dateStr = format(new Date(scheduledAt), 'yyyy-MM-dd');
-    const timeStr = format(new Date(scheduledAt), 'HH-mm');
+    const dateStr = format(new Date(drawDate), 'yyyy-MM-dd');
+    const timeStr = drawTime.replace(':', '-');
     const filename = `cierre_${game.slug}_${dateStr}_${timeStr}.pdf`;
     const filepath = path.join(this.reportsPath, filename);
 
@@ -58,7 +59,7 @@ class PdfReportService {
         doc.pipe(stream);
 
         // Header
-        this.drawHeader(doc, game, scheduledAt, totalSales, maxPayout, prewinnerItem);
+        this.drawHeader(doc, game, drawDate, drawTime, totalSales, maxPayout, prewinnerItem);
 
         // Top 10 Candidates section
         this.drawCandidatesSection(doc, candidates, prewinnerItem);
@@ -96,9 +97,13 @@ class PdfReportService {
   /**
    * Dibujar encabezado del reporte
    */
-  drawHeader(doc, game, scheduledAt, totalSales, maxPayout, prewinnerItem) {
-    const dateStr = format(new Date(scheduledAt), "EEEE d 'de' MMMM, yyyy", { locale: es });
-    const timeStr = format(new Date(scheduledAt), 'hh:mm a');
+  drawHeader(doc, game, drawDate, drawTime, totalSales, maxPayout, prewinnerItem) {
+    const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
+    const [hours, mins] = drawTime.split(':');
+    const hour = parseInt(hours, 10);
+    const ampm = hour >= 12 ? 'PM' : 'AM';
+    const displayHour = hour % 12 || 12;
+    const timeStr = `${displayHour}:${mins} ${ampm}`.toLowerCase();
     const percentageToDistribute = game.config?.percentageToDistribute || 70;
 
     // Título
@@ -195,7 +200,7 @@ class PdfReportService {
     
     candidates.slice(0, 10).forEach((candidate, index) => {
       x = startX;
-      const isPrewinner = prewinnerItem && candidate.item.number === prewinnerItem.number;
+      const isPrewinner = prewinnerItem && candidate.item && candidate.item.number === prewinnerItem.number;
       
       if (isPrewinner) {
         doc.font('Helvetica-Bold');
@@ -209,13 +214,13 @@ class PdfReportService {
 
       const rowData = [
         `${index + 1}`,
-        candidate.item.number,
-        candidate.item.name.substring(0, 12),
-        `${candidate.sales.count}`,
-        `$${candidate.sales.amount.toFixed(2)}`,
-        `$${candidate.potentialPayout.toFixed(2)}`,
-        `${candidate.daysSinceLastWin}`,
-        candidate.score.toFixed(2)
+        candidate.item?.number || candidate.number || '-',
+        (candidate.item?.name || candidate.name || '-').substring(0, 12),
+        `${candidate.sales?.count || 0}`,
+        `$${(candidate.sales?.amount || 0).toFixed(2)}`,
+        `$${(candidate.potentialPayout || 0).toFixed(2)}`,
+        `${candidate.daysSinceLastWin || 0}`,
+        (candidate.score || 0).toFixed(2)
       ];
 
       rowData.forEach((cell, i) => {
@@ -545,7 +550,8 @@ class PdfReportService {
       const filepath = await this.generateDrawClosingReport({
         drawId,
         game: draw.game,
-        scheduledAt: draw.scheduledAt,
+        drawDate: draw.drawDate,
+        drawTime: draw.drawTime,
         prewinnerItem: draw.preselectedItem,
         totalSales,
         maxPayout,

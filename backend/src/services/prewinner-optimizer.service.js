@@ -195,20 +195,25 @@ class PrewinnerOptimizerService {
     const salesByItem = this.groupSalesByItem(tickets);
 
     // Cargar tripletas activas
+    // Construir fecha/hora completa del sorteo
+    const drawDateTime = new Date(draw.drawDate);
+    const [hours, minutes] = draw.drawTime.split(':');
+    drawDateTime.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
     const activeTripletas = await prisma.tripleBet.findMany({
       where: {
         gameId: draw.gameId,
         status: 'ACTIVE',
-        expiresAt: { gte: draw.scheduledAt }
+        expiresAt: { gte: drawDateTime }
       }
     });
 
     // Obtener items usados hoy
-    const usedItemsToday = await this.getUsedItemsToday(draw.gameId, draw.scheduledAt);
+    const usedItemsToday = await this.getUsedItemsToday(draw.gameId, draw.drawDate);
     
     // Obtener centenas usadas hoy (solo para TRIPLE)
     const usedCentenasToday = draw.game.type === 'TRIPLE'
-      ? await this.getUsedCentenasToday(draw.gameId, draw.scheduledAt)
+      ? await this.getUsedCentenasToday(draw.gameId, draw.drawDate)
       : new Set();
 
     return {
@@ -293,9 +298,15 @@ class PrewinnerOptimizerService {
         gameId: game.id,
         status: { in: ['DRAWN', 'PUBLISHED'] },
         winnerItemId: { not: null },
-        scheduledAt: { lt: draw.scheduledAt }
+        OR: [
+          { drawDate: { lt: draw.drawDate } },
+          { drawDate: draw.drawDate, drawTime: { lt: draw.drawTime } }
+        ]
       },
-      orderBy: { scheduledAt: 'desc' },
+      orderBy: [
+        { drawDate: 'desc' },
+        { drawTime: 'desc' }
+      ],
       take: 20,
       include: {
         winnerItem: true
@@ -306,13 +317,13 @@ class PrewinnerOptimizerService {
     const recentWinners = recentDraws.map(d => ({
       number: parseInt(d.winnerItem.number),
       itemId: d.winnerItemId,
-      scheduledAt: d.scheduledAt
+      drawDate: d.drawDate,
+      drawTime: d.drawTime
     }));
 
     // Obtener sorteos del mismo día (anteriores)
-    const todayStart = startOfDayInCaracas(draw.scheduledAt);
     const todayDraws = recentDraws.filter(d => 
-      startOfDayInCaracas(d.scheduledAt).getTime() === todayStart.getTime()
+      d.drawDate.getTime() === draw.drawDate.getTime()
     );
 
     return {
@@ -531,13 +542,20 @@ class PrewinnerOptimizerService {
         if (!startDraw) continue;
 
         // Obtener sorteos ejecutados en el rango de la tripleta
+        // Construir fecha/hora del sorteo inicial
+        const startDateTime = new Date(startDraw.drawDate);
+        const [startHours, startMinutes] = startDraw.drawTime.split(':');
+        startDateTime.setUTCHours(parseInt(startHours), parseInt(startMinutes), 0, 0);
+        
+        const expiresDate = new Date(tripleta.expiresAt).toISOString().split('T')[0] + 'T00:00:00.000Z';
+        
         const executedDraws = await prisma.draw.findMany({
           where: {
             gameId,
-            scheduledAt: {
-              gte: startDraw.scheduledAt,
-              lte: tripleta.expiresAt
-            },
+            OR: [
+              { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+              { drawDate: { gt: startDraw.drawDate, lte: expiresDate } }
+            ],
             status: { in: ['DRAWN', 'PUBLISHED'] },
             winnerItemId: { not: null }
           },
@@ -590,16 +608,10 @@ class PrewinnerOptimizerService {
    * Obtener items usados hoy (preseleccionados o ganadores)
    */
   async getUsedItemsToday(gameId, referenceDate) {
-    const todayStart = startOfDayInCaracas(referenceDate);
-    const todayEnd = endOfDayInCaracas(referenceDate);
-
     const drawsToday = await prisma.draw.findMany({
       where: {
         gameId,
-        scheduledAt: {
-          gte: todayStart,
-          lte: todayEnd
-        },
+        drawDate: referenceDate,
         OR: [
           { preselectedItemId: { not: null } },
           { winnerItemId: { not: null } }
@@ -624,16 +636,10 @@ class PrewinnerOptimizerService {
    * Obtener centenas usadas hoy (solo para TRIPLE)
    */
   async getUsedCentenasToday(gameId, referenceDate) {
-    const todayStart = startOfDayInCaracas(referenceDate);
-    const todayEnd = endOfDayInCaracas(referenceDate);
-
     const drawsToday = await prisma.draw.findMany({
       where: {
         gameId,
-        scheduledAt: {
-          gte: todayStart,
-          lte: todayEnd
-        },
+        drawDate: referenceDate,
         OR: [
           { preselectedItemId: { not: null } },
           { winnerItemId: { not: null } }
@@ -695,12 +701,8 @@ class PrewinnerOptimizerService {
       return daysB - daysA;
     });
 
-    // Tomar del top 20% de los que más tiempo llevan sin ganar
-    const topCount = Math.max(Math.floor(validItems.length * 0.2), 5);
-    const topItems = validItems.slice(0, topCount);
-
-    // Filtrar los que serían sucesivos
-    const nonSequential = topItems.filter(item => {
+    // Filtrar los que serían sucesivos ANTES de ordenar
+    const nonSequential = validItems.filter(item => {
       const itemNumber = parseInt(item.number);
       for (const winnerNum of history.todayWinners) {
         if (Math.abs(itemNumber - winnerNum) <= 1) return false;
@@ -708,11 +710,23 @@ class PrewinnerOptimizerService {
       return true;
     });
 
-    const finalPool = nonSequential.length > 0 ? nonSequential : topItems;
+    // Si hay suficientes items no sucesivos, usar esos; sino usar todos
+    const itemsToSort = nonSequential.length >= 5 ? nonSequential : validItems;
+
+    // Ordenar por días sin ganar
+    itemsToSort.sort((a, b) => {
+      const daysA = a.lastWin ? differenceInDays(now, new Date(a.lastWin)) : 999;
+      const daysB = b.lastWin ? differenceInDays(now, new Date(b.lastWin)) : 999;
+      return daysB - daysA;
+    });
+
+    // Tomar del top 30% de los que más tiempo llevan sin ganar
+    const topCount = Math.max(Math.floor(itemsToSort.length * 0.3), 5);
+    const topItems = itemsToSort.slice(0, topCount);
     
     // Selección aleatoria del pool filtrado
-    const randomIndex = Math.floor(Math.random() * finalPool.length);
-    return finalPool[randomIndex];
+    const randomIndex = Math.floor(Math.random() * topItems.length);
+    return topItems[randomIndex];
   }
 
   /**
@@ -721,6 +735,7 @@ class PrewinnerOptimizerService {
    */
   async selectFallback(context, constraints) {
     const { gameItems, usedItemsToday, game } = context;
+    const history = await this.getDrawHistory(context);
     
     // Solo mantener restricción de no usado hoy
     let validItems = gameItems.filter(item => !usedItemsToday.has(item.id));
@@ -730,15 +745,33 @@ class PrewinnerOptimizerService {
       validItems = gameItems;
     }
 
-    // Preferir items con menos ventas (menor pago potencial)
+    // Filtrar números sucesivos con los ganadores de hoy
+    const nonSequential = validItems.filter(item => {
+      const itemNumber = parseInt(item.number);
+      for (const winnerNum of history.todayWinners) {
+        if (Math.abs(itemNumber - winnerNum) <= 1) return false;
+      }
+      return true;
+    });
+
+    // Si hay items no sucesivos, usar esos; sino usar todos
+    const candidatePool = nonSequential.length > 0 ? nonSequential : validItems;
+
+    // Ordenar por menos ventas para tener un pool de bajo riesgo
     const salesByItem = context.salesByItem;
-    validItems.sort((a, b) => {
+    candidatePool.sort((a, b) => {
       const salesA = salesByItem.get(a.id)?.amount || 0;
       const salesB = salesByItem.get(b.id)?.amount || 0;
       return salesA - salesB;
     });
 
-    return validItems[0];
+    // Tomar el top 30% con menos ventas y seleccionar aleatoriamente
+    const topCount = Math.max(Math.floor(candidatePool.length * 0.3), 3);
+    const lowSalesItems = candidatePool.slice(0, topCount);
+    
+    // Selección aleatoria del pool
+    const randomIndex = Math.floor(Math.random() * lowSalesItems.length);
+    return lowSalesItems[randomIndex];
   }
 
   /**
@@ -752,7 +785,10 @@ class PrewinnerOptimizerService {
           where: {
             status: { in: ['DRAWN', 'PUBLISHED'] }
           },
-          orderBy: { scheduledAt: 'desc' },
+          orderBy: [
+            { drawDate: 'desc' },
+            { drawTime: 'desc' }
+          ],
           take: 10
         }
       }
@@ -775,7 +811,8 @@ class PrewinnerOptimizerService {
       totalWins: item.drawsAsWinner.length,
       recentWins: item.drawsAsWinner.map(d => ({
         drawId: d.id,
-        scheduledAt: d.scheduledAt
+        drawDate: d.drawDate,
+        drawTime: d.drawTime
       }))
     };
   }

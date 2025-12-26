@@ -7,7 +7,7 @@ import publicAPI from '@/lib/api/public';
 import { Trophy, Calendar, Clock, CheckCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import Link from 'next/link';
-import { formatCaracasDateTime } from '@/lib/utils/dateUtils';
+import { formatDrawDateTime } from '@/lib/utils/dateUtils';
 
 export default function AdminDashboard() {
   usePageVisit(PAGE_TYPES.ADMIN_DASHBOARD, '/admin');
@@ -167,7 +167,7 @@ export default function AdminDashboard() {
                         {draw.game?.name}
                       </p>
                       <p className="text-sm text-gray-600">
-                        {formatCaracasDateTime(draw.scheduledAt)}
+                        {formatDrawDateTime(draw)}
                       </p>
                     </div>
                   </div>

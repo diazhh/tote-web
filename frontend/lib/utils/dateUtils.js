@@ -1,10 +1,64 @@
 /**
- * Utilidades para manejo de fechas - SIN conversiones de zona horaria
- * Todas las fechas se manejan como fechas planas sin conversiones
+ * Utilidades para manejo de fechas - ZONA HORARIA VENEZUELA (America/Caracas, UTC-4)
+ * Todas las fechas/horas se manejan en hora de Venezuela
  */
 
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+const VENEZUELA_TIMEZONE = 'America/Caracas';
+
+/**
+ * Obtiene la fecha actual en Venezuela como string YYYY-MM-DD
+ * @returns {string} Fecha en formato YYYY-MM-DD
+ */
+export function getVenezuelaDateString() {
+  const now = new Date();
+  return now.toLocaleDateString('en-CA', {
+    timeZone: VENEZUELA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+}
+
+/**
+ * Obtiene la hora actual en Venezuela como string HH:MM:SS
+ * @returns {string} Hora en formato HH:MM:SS
+ */
+export function getVenezuelaTimeString() {
+  const now = new Date();
+  return now.toLocaleTimeString('es-VE', {
+    timeZone: VENEZUELA_TIMEZONE,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+/**
+ * Formatea un drawTime (HH:MM o HH:MM:SS) a formato 12h AM/PM
+ * @param {string} timeStr - Hora en formato HH:MM o HH:MM:SS
+ * @returns {string} Hora formateada (ej: "8:00 AM")
+ */
+export function formatDrawTimeToAMPM(timeStr) {
+  if (!timeStr) return '-';
+  try {
+    const [hoursStr, minutesStr] = timeStr.split(':');
+    const hours = parseInt(hoursStr, 10);
+    const minutes = minutesStr || '00';
+    
+    if (isNaN(hours)) return '-';
+    
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    const displayHours = hours % 12 || 12;
+    
+    return `${displayHours}:${minutes.substring(0, 2)} ${ampm}`;
+  } catch (e) {
+    return '-';
+  }
+}
 
 /**
  * Convierte un string o Date a objeto Date
@@ -73,11 +127,11 @@ export function nowInCaracas() {
 }
 
 /**
- * Obtiene la fecha de hoy (sin hora)
+ * Obtiene la fecha de hoy en Venezuela (sin hora)
  * @returns {string} Fecha en formato YYYY-MM-DD
  */
 export function todayInCaracas() {
-  return format(new Date(), 'yyyy-MM-dd');
+  return getVenezuelaDateString();
 }
 
 /**
@@ -163,4 +217,105 @@ export function extractDateFromCaracasString(dateString) {
     return `${dateParts[2]}/${dateParts[1]}/${dateParts[0]}`;
   }
   return '';
+}
+
+/**
+ * Construye un Date a partir de drawDate y drawTime
+ * @param {Date|string} drawDate - Fecha del sorteo
+ * @param {string} drawTime - Hora en formato "HH:MM:SS" o "HH:MM"
+ * @returns {Date} Fecha y hora combinadas
+ */
+export function buildDrawDateTime(drawDate, drawTime) {
+  if (!drawDate || !drawTime) return null;
+  
+  const date = new Date(drawDate);
+  const [hours, minutes, seconds = '0'] = drawTime.split(':');
+  
+  date.setHours(parseInt(hours, 10), parseInt(minutes, 10), parseInt(seconds, 10), 0);
+  return date;
+}
+
+/**
+ * Formatea la hora de un draw (usando drawTime directamente)
+ * @param {Object} draw - Objeto draw con drawTime
+ * @returns {string} Hora formateada
+ */
+export function formatDrawTime(draw) {
+  if (!draw) return '-';
+  
+  // Si tiene drawTime, usarlo directamente (ya está en hora Venezuela)
+  if (draw.drawTime) {
+    return formatDrawTimeToAMPM(draw.drawTime);
+  }
+  
+  // Fallback a scheduledAt (legacy)
+  if (draw.scheduledAt) {
+    return formatCaracasTime(draw.scheduledAt);
+  }
+  
+  return '-';
+}
+
+/**
+ * Formatea la fecha de un draw (usando drawDate)
+ * @param {Object} draw - Objeto draw con drawDate
+ * @returns {string} Fecha formateada
+ */
+export function formatDrawDate(draw) {
+  if (!draw) return '-';
+  
+  // Si tiene drawDate, usarlo
+  if (draw.drawDate) {
+    return formatCaracasDate(draw.drawDate);
+  }
+  
+  // Fallback a scheduledAt (legacy)
+  if (draw.scheduledAt) {
+    return formatCaracasDate(draw.scheduledAt);
+  }
+  
+  return '-';
+}
+
+/**
+ * Formatea fecha y hora de un draw
+ * @param {Object} draw - Objeto draw con drawDate y drawTime
+ * @returns {string} Fecha y hora formateadas
+ */
+export function formatDrawDateTime(draw) {
+  if (!draw) return '-';
+  
+  // Si tiene drawDate y drawTime, combinarlos
+  if (draw.drawDate && draw.drawTime) {
+    const dateTime = buildDrawDateTime(draw.drawDate, draw.drawTime);
+    return formatCaracasDateTime(dateTime);
+  }
+  
+  // Fallback a scheduledAt (legacy)
+  if (draw.scheduledAt) {
+    return formatCaracasDateTime(draw.scheduledAt);
+  }
+  
+  return '-';
+}
+
+/**
+ * Obtiene el Date completo de un draw para countdown
+ * @param {Object} draw - Objeto draw con drawDate y drawTime
+ * @returns {Date|null} Fecha completa o null
+ */
+export function getDrawDateTimeForCountdown(draw) {
+  if (!draw) return null;
+  
+  // Si tiene drawDate y drawTime, combinarlos
+  if (draw.drawDate && draw.drawTime) {
+    return buildDrawDateTime(draw.drawDate, draw.drawTime);
+  }
+  
+  // Fallback a scheduledAt (legacy)
+  if (draw.scheduledAt) {
+    return new Date(draw.scheduledAt);
+  }
+  
+  return null;
 }

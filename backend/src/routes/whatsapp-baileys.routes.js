@@ -91,4 +91,11 @@ router.patch('/instances/:instanceId/toggle', whatsappBaileysController.toggleAc
  */
 router.post('/cleanup', whatsappBaileysController.cleanupSessions);
 
+/**
+ * @route   GET /api/whatsapp/instances/:instanceId/groups
+ * @desc    Obtener grupos de una instancia de WhatsApp
+ * @access  Private
+ */
+router.get('/instances/:instanceId/groups', whatsappBaileysController.getGroups);
+
 export default router;

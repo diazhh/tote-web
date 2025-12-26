@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import useAuthStore from '@/lib/stores/authStore';
 import authAPI from '@/lib/api/auth';
 import { toast } from 'sonner';
-import { Users, Shield, Eye, UserPlus, Edit2, X, Loader2 } from 'lucide-react';
+import { Users, Shield, Eye, UserPlus, Edit2, X, Loader2, Gamepad2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatCaracasDate } from '@/lib/utils/dateUtils';
 
@@ -12,9 +12,11 @@ export default function UsuariosPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const [users, setUsers] = useState([]);
+  const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAssignGamesModal, setShowAssignGamesModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -33,6 +35,7 @@ export default function UsuariosPage() {
       return;
     }
     loadUsers();
+    loadGames();
   }, [user, router]);
 
   const loadUsers = async () => {
@@ -46,6 +49,49 @@ export default function UsuariosPage() {
       toast.error('Error al cargar usuarios');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadGames = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api';
+      const res = await fetch(`${API_URL}/games`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGames(data.data);
+      }
+    } catch (error) {
+      console.error('Error loading games:', error);
+    }
+  };
+
+  const handleAssignGames = async (userId, gameIds) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api';
+      const res = await fetch(`${API_URL}/auth/users/${userId}/games`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ gameIds })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Juegos asignados correctamente');
+        setShowAssignGamesModal(false);
+        setSelectedUser(null);
+      } else {
+        toast.error(data.error || 'Error al asignar juegos');
+      }
+    } catch (error) {
+      toast.error('Error al asignar juegos');
     }
   };
 
@@ -232,13 +278,25 @@ export default function UsuariosPage() {
                     {formatCaracasDate(u.createdAt)}
                   </td>
                   <td className="px-4 lg:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => openEditModal(u)}
-                      className="text-blue-600 hover:text-blue-900 p-1"
-                      title="Editar usuario"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setShowAssignGamesModal(true);
+                        }}
+                        className="text-purple-600 hover:text-purple-900 p-1"
+                        title="Asignar juegos"
+                      >
+                        <Gamepad2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => openEditModal(u)}
+                        className="text-blue-600 hover:text-blue-900 p-1"
+                        title="Editar usuario"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -344,6 +402,121 @@ export default function UsuariosPage() {
           </div>
         </div>
       )}
+
+      {/* Assign Games Modal */}
+      {showAssignGamesModal && selectedUser && (
+        <AssignGamesModal
+          user={selectedUser}
+          games={games}
+          onClose={() => {
+            setShowAssignGamesModal(false);
+            setSelectedUser(null);
+          }}
+          onSave={handleAssignGames}
+        />
+      )}
+    </div>
+  );
+}
+
+function AssignGamesModal({ user, games, onClose, onSave }) {
+  const [selectedGames, setSelectedGames] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadUserGames();
+  }, []);
+
+  const loadUserGames = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api';
+      const res = await fetch(`${API_URL}/auth/users/${user.id}/games`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedGames(data.data.map(g => g.id));
+      }
+    } catch (error) {
+      console.error('Error loading user games:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleGame = (gameId) => {
+    setSelectedGames(prev => 
+      prev.includes(gameId) 
+        ? prev.filter(id => id !== gameId)
+        : [...prev, gameId]
+    );
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(user.id, selectedGames);
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <h2 className="text-xl font-bold mb-2">Asignar Juegos</h2>
+        <p className="text-gray-600 text-sm mb-4">
+          Selecciona los juegos para el usuario <strong>{user.username}</strong>
+        </p>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {games.map((game) => (
+              <label
+                key={game.id}
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                  selectedGames.includes(game.id)
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedGames.includes(game.id)}
+                  onChange={() => toggleGame(game.id)}
+                  className="w-4 h-4 text-blue-600 rounded"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{game.name}</p>
+                  <p className="text-xs text-gray-500">{game.slug}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || loading}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Guardar
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

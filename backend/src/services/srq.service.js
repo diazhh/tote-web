@@ -103,15 +103,13 @@ class SRQService {
         logger.info(`  📊 ${srqDraws.length} sorteos encontrados para ${config.game.name}`);
 
         // Obtener sorteos existentes del día para este juego
+        const drawDate = new Date(dateStr + 'T00:00:00.000Z');
         const existingDraws = await prisma.draw.findMany({
           where: {
             gameId: config.gameId,
-            scheduledAt: {
-              gte: startOfDay(date),
-              lte: endOfDay(date),
-            },
+            drawDate: drawDate,
           },
-          orderBy: { scheduledAt: 'asc' },
+          orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }],
           include: {
             apiMappings: true,
           },
@@ -169,12 +167,13 @@ class SRQService {
 
             if (!draw) {
               // Crear nuevo sorteo
-              const scheduledAt = this.buildScheduledAt(date, drawTime);
+              const drawDate = new Date(dateStr + 'T00:00:00.000Z');
               
               draw = await prisma.draw.create({
                 data: {
                   gameId: config.gameId,
-                  scheduledAt,
+                  drawDate: drawDate,
+                  drawTime: drawTime + ':00',
                   status: srqDraw.abierta ? 'SCHEDULED' : 'PUBLISHED',
                   notes: srqDraw.descripcion,
                 },
@@ -425,14 +424,17 @@ class SRQService {
    * @returns {Promise<Array>}
    */
   async syncUpcomingTickets(minutesBefore = 5) {
-    const now = new Date();
-    const targetTime = new Date(now.getTime() + minutesBefore * 60000);
+    const { getVenezuelaDateAsUTC, getVenezuelaTimeString, addMinutesToTime } = await import('../lib/dateUtils.js');
+    const todayVenezuela = getVenezuelaDateAsUTC();
+    const currentTime = getVenezuelaTimeString();
+    const targetTime = addMinutesToTime(currentTime, minutesBefore);
 
     // Buscar sorteos que cierran pronto
     const draws = await prisma.draw.findMany({
       where: {
-        scheduledAt: {
-          gte: now,
+        drawDate: todayVenezuela,
+        drawTime: {
+          gte: currentTime,
           lte: targetTime,
         },
         status: {
@@ -497,10 +499,8 @@ class SRQService {
   }
 
   /**
-   * Construir fecha/hora del sorteo
-   * @param {Date} date - Fecha base
-   * @param {string} time - Hora en formato HH:mm
-   * @returns {Date}
+   * DEPRECATED: buildScheduledAt - Ya no se usa scheduledAt
+   * Se mantiene por compatibilidad pero no debe usarse
    */
   buildScheduledAt(date, time) {
     const [hours, minutes] = time.split(':').map(Number);

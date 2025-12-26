@@ -106,7 +106,7 @@ model Draw {
   templateId          String?
   drawDate            DateTime      @db.Date // Fecha del sorteo (solo fecha, sin hora)
   drawTime            String        // Hora del sorteo en formato "HH:MM:SS"
-  scheduledAt         DateTime      // DEPRECATED: Mantener por compatibilidad temporal
+  scheduledAt         DateTime?     // DEPRECATED: Mantener por compatibilidad temporal, será eliminado
   status              DrawStatus    @default(SCHEDULED)
   preselectedItemId   String?       // Número preseleccionado (opcional)
   winnerItemId        String?       // Número ganador

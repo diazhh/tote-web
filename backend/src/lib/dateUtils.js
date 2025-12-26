@@ -1,10 +1,12 @@
 /**
- * Utilidades para manejo de fechas - SIN conversiones de zona horaria
- * Todas las fechas se manejan como fechas planas sin conversiones
+ * Utilidades para manejo de fechas - ZONA HORARIA VENEZUELA (America/Caracas, UTC-4)
+ * Todas las fechas/horas se manejan en hora de Venezuela
  */
 
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import { es } from 'date-fns/locale';
+
+const VENEZUELA_TIMEZONE = 'America/Caracas';
 
 /**
  * Convierte un string o Date a objeto Date
@@ -14,6 +16,92 @@ import { es } from 'date-fns/locale';
 function toDate(date) {
   if (!date) return null;
   return typeof date === 'string' ? parseISO(date) : date;
+}
+
+/**
+ * Obtiene la fecha actual en Venezuela como string YYYY-MM-DD
+ * @returns {string} Fecha en formato YYYY-MM-DD
+ */
+export function getVenezuelaDateString() {
+  const now = new Date();
+  return now.toLocaleDateString('en-CA', {
+    timeZone: VENEZUELA_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  });
+}
+
+/**
+ * Obtiene la hora actual en Venezuela como string HH:MM:SS
+ * @returns {string} Hora en formato HH:MM:SS
+ */
+export function getVenezuelaTimeString() {
+  const now = new Date();
+  return now.toLocaleTimeString('es-VE', {
+    timeZone: VENEZUELA_TIMEZONE,
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  });
+}
+
+/**
+ * Obtiene la fecha de Venezuela como objeto Date UTC (para guardar en DB)
+ * La fecha se guarda como UTC pero representa la fecha de Venezuela
+ * @returns {Date} Fecha como Date UTC
+ */
+export function getVenezuelaDateAsUTC() {
+  const dateStr = getVenezuelaDateString();
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+}
+
+/**
+ * Convierte un string de fecha YYYY-MM-DD a Date UTC (para queries de DB)
+ * @param {string} dateStr - Fecha en formato YYYY-MM-DD
+ * @returns {Date} Fecha como Date UTC
+ */
+export function dateStringToUTC(dateStr) {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+}
+
+/**
+ * Obtiene el día de la semana en Venezuela (1=Lunes, 7=Domingo)
+ * @returns {number} Día de la semana
+ */
+export function getVenezuelaDayOfWeek() {
+  const dateStr = getVenezuelaDateString();
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const date = new Date(year, month - 1, day);
+  const jsDay = date.getDay();
+  return jsDay === 0 ? 7 : jsDay;
+}
+
+/**
+ * Compara si una hora (HH:MM:SS) es menor o igual a otra
+ * @param {string} time1 - Primera hora
+ * @param {string} time2 - Segunda hora
+ * @returns {boolean} true si time1 <= time2
+ */
+export function isTimeLessThanOrEqual(time1, time2) {
+  return time1 <= time2;
+}
+
+/**
+ * Suma minutos a una hora y retorna el nuevo string HH:MM:SS
+ * @param {string} timeStr - Hora en formato HH:MM:SS
+ * @param {number} minutes - Minutos a sumar
+ * @returns {string} Nueva hora en formato HH:MM:SS
+ */
+export function addMinutesToTime(timeStr, minutes) {
+  const [hours, mins, secs = 0] = timeStr.split(':').map(Number);
+  const totalMinutes = hours * 60 + mins + minutes;
+  const newHours = Math.floor(totalMinutes / 60) % 24;
+  const newMins = totalMinutes % 60;
+  return `${newHours.toString().padStart(2, '0')}:${newMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
 /**

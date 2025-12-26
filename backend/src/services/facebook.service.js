@@ -86,7 +86,7 @@ class FacebookService {
   async setupWebhook(instanceId, webhookUrl) {
     try {
       const instance = await this.getInstance(instanceId);
-      const pageAccessToken = this.decryptSecret(instance.pageAccessToken);
+      const pageAccessToken = instance.pageAccessToken; // Ya no encriptado
 
       // Suscribir la página al webhook
       const response = await axios.post(`${this.baseUrl}/${instance.pageId}/subscribed_apps`, {
@@ -145,7 +145,7 @@ class FacebookService {
   async sendMessage(instanceId, recipientId, message, options = {}) {
     try {
       const instance = await this.getInstance(instanceId);
-      const pageAccessToken = this.decryptSecret(instance.pageAccessToken);
+      const pageAccessToken = instance.pageAccessToken; // Ya no encriptado
       
       const payload = {
         recipient: { id: recipientId },
@@ -178,7 +178,7 @@ class FacebookService {
   async sendImage(instanceId, recipientId, imageUrl, options = {}) {
     try {
       const instance = await this.getInstance(instanceId);
-      const pageAccessToken = this.decryptSecret(instance.pageAccessToken);
+      const pageAccessToken = instance.pageAccessToken; // Ya no encriptado
       
       const payload = {
         recipient: { id: recipientId },
@@ -215,7 +215,7 @@ class FacebookService {
   async getUserInfo(instanceId, userId) {
     try {
       const instance = await this.getInstance(instanceId);
-      const pageAccessToken = this.decryptSecret(instance.pageAccessToken);
+      const pageAccessToken = instance.pageAccessToken; // Ya no encriptado
       
       const response = await axios.get(`${this.baseUrl}/${userId}`, {
         params: {
@@ -241,7 +241,7 @@ class FacebookService {
   async processWebhook(instanceId, body, signature) {
     try {
       const instance = await this.getInstance(instanceId);
-      const appSecret = this.decryptSecret(instance.appSecret);
+      const appSecret = instance.appSecret; // Ya no encriptado
 
       // Verificar firma del webhook
       if (!this.verifySignature(body, signature, appSecret)) {
@@ -485,7 +485,7 @@ class FacebookService {
   async publishPost(instanceId, message, imageUrl = null, options = {}) {
     try {
       const instance = await this.getInstance(instanceId);
-      const pageAccessToken = this.decryptSecret(instance.pageAccessToken);
+      const pageAccessToken = instance.pageAccessToken; // Ya no encriptado
 
       const payload = {
         access_token: pageAccessToken
@@ -537,7 +537,7 @@ class FacebookService {
   async publishPhoto(instanceId, imageUrl, caption = '', options = {}) {
     try {
       const instance = await this.getInstance(instanceId);
-      const pageAccessToken = this.decryptSecret(instance.pageAccessToken);
+      const pageAccessToken = instance.pageAccessToken; // Ya no encriptado
 
       const payload = {
         url: imageUrl,
@@ -571,7 +571,7 @@ class FacebookService {
   async testConnection(instanceId) {
     try {
       const instance = await this.getInstance(instanceId);
-      const pageAccessToken = this.decryptSecret(instance.pageAccessToken);
+      const pageAccessToken = instance.pageAccessToken; // Ya no encriptado
 
       const pageInfo = await this.validatePageToken(pageAccessToken);
       await this.updateConnectionStatus(instanceId, 'CONNECTED');

@@ -10,6 +10,7 @@ import ResponsiveTable from '@/components/common/ResponsiveTable';
 import ResponsiveTabs from '@/components/common/ResponsiveTabs';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
+import numberHistoryApi from '@/lib/api/number-history';
 import axios from '@/lib/api/axios';
 import TripletaDetailModal from '@/components/shared/TripletaDetailModal';
 import { getTodayVenezuela } from '@/lib/dateUtils';
@@ -31,6 +32,8 @@ export default function MonitorPage() {
   const [tripletasModal, setTripletasModal] = useState({ open: false, data: null });
   const [ticketDetailModal, setTicketDetailModal] = useState({ open: false, data: null });
   const [tripletaDetailModal, setTripletaDetailModal] = useState({ open: false, data: null });
+  const [numberHistoryModal, setNumberHistoryModal] = useState({ open: false, number: null, history: null, loading: false });
+  const [lastSeenData, setLastSeenData] = useState({});
 
   useEffect(() => {
     fetchGames();
@@ -64,17 +67,23 @@ export default function MonitorPage() {
       setDraws(drawsList);
       
       if (drawsList.length > 0 && !selectedDraw) {
-        const now = new Date();
+        // Sort draws by drawDate and drawTime
+        const sortedDraws = [...drawsList].sort((a, b) => {
+          if (a.drawDate !== b.drawDate) {
+            return new Date(a.drawDate) - new Date(b.drawDate);
+          }
+          return a.drawTime.localeCompare(b.drawTime);
+        });
         
-        // Sort draws by scheduledAt to find the next one chronologically
-        const sortedDraws = [...drawsList].sort((a, b) => 
-          new Date(a.scheduledAt) - new Date(b.scheduledAt)
-        );
+        // Get current time in Venezuela
+        const now = new Date();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+        const currentTime = `${String(currentHours).padStart(2, '0')}:${String(currentMinutes).padStart(2, '0')}:00`;
         
         // Find the next draw that hasn't happened yet (SCHEDULED or CLOSED status)
         let nextDraw = sortedDraws.find(draw => {
-          const scheduledTime = new Date(draw.scheduledAt);
-          return (draw.status === 'SCHEDULED' || draw.status === 'CLOSED') && scheduledTime >= now;
+          return (draw.status === 'SCHEDULED' || draw.status === 'CLOSED') && draw.drawTime >= currentTime;
         });
         
         // If no future draw, find the most recent CLOSED draw
@@ -101,6 +110,16 @@ export default function MonitorPage() {
       } else if (activeTab === 'numeros') {
         const result = await monitorApi.getItemStats(selectedDraw);
         setItemStats(result.data);
+        
+        // Fetch last seen data for all numbers
+        if (selectedGame) {
+          try {
+            const lastSeenResult = await numberHistoryApi.getAllLastSeen(selectedGame);
+            setLastSeenData(lastSeenResult.data || {});
+          } catch (error) {
+            console.error('Error loading last seen data:', error);
+          }
+        }
       } else if (activeTab === 'reporte') {
         const result = await monitorApi.getDailyReport(selectedDate, selectedGame || null);
         setDailyReport(result.data);
@@ -149,6 +168,17 @@ export default function MonitorPage() {
     setTripletaDetailModal({ open: true, data: tripleta });
   };
 
+  const handleViewNumberHistory = async (number) => {
+    setNumberHistoryModal({ open: true, number, history: null, loading: true });
+    try {
+      const result = await numberHistoryApi.getHistory(selectedGame, number, 10);
+      setNumberHistoryModal({ open: true, number, history: result.data, loading: false });
+    } catch (error) {
+      toast.error('Error cargando historial');
+      setNumberHistoryModal({ open: false, number: null, history: null, loading: false });
+    }
+  };
+
   const getDangerBadge = (level) => {
     const styles = {
       low: 'bg-green-100 text-green-800',
@@ -175,10 +205,10 @@ export default function MonitorPage() {
     }).format(amount || 0);
   };
 
-  const formatTime = (dateStr) => {
-    const date = new Date(dateStr);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
+  const formatTime = (timeStr) => {
+    // timeStr ya viene en formato "HH:MM:SS", solo extraer HH:MM
+    if (!timeStr) return '-';
+    const [hours, minutes] = timeStr.split(':');
     return `${hours}:${minutes}`;
   };
 
@@ -240,7 +270,7 @@ export default function MonitorPage() {
               <option value="">Seleccionar sorteo</option>
               {draws.map(draw => (
                 <option key={draw.id} value={draw.id}>
-                  {formatTime(draw.scheduledAt)} - {draw.status}
+                  {formatTime(draw.drawTime)} - {draw.status}
                 </option>
               ))}
             </select>
@@ -278,7 +308,7 @@ export default function MonitorPage() {
                   <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="text-lg font-semibold">{bancaStats.game}</span>
-                      <span className="ml-2 text-gray-500">{formatTime(bancaStats.scheduledAt)}</span>
+                      <span className="ml-2 text-gray-500">{formatTime(bancaStats.drawTime)}</span>
                     </div>
                     {bancaStats.winnerItem && (
                       <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
@@ -315,7 +345,7 @@ export default function MonitorPage() {
                   <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
                       <span className="text-lg font-semibold">{itemStats.game}</span>
-                      <span className="ml-2 text-gray-500">{formatTime(itemStats.scheduledAt)}</span>
+                      <span className="ml-2 text-gray-500">{formatTime(itemStats.drawTime)}</span>
                       <span className="ml-4 text-sm text-gray-600">
                         Total: {formatCurrency(itemStats.totalSales)}
                       </span>
@@ -391,6 +421,25 @@ export default function MonitorPage() {
                       { key: 'ticketCount', label: 'Tickets', align: 'right' },
                       { key: 'potentialPrize', label: 'Premio Pot.', align: 'right', render: (i) => <span className="text-blue-600">{formatCurrency(i.potentialPrize)}</span> },
                       { key: 'percentageOfSales', label: '% Venta', align: 'right', render: (i) => `${i.percentageOfSales}%` },
+                      { 
+                        key: 'lastSeen', 
+                        label: 'Último', 
+                        align: 'right', 
+                        render: (i) => {
+                          const lastSeen = lastSeenData[i.number];
+                          if (!lastSeen) return <span className="text-gray-400">-</span>;
+                          if (lastSeen.neverSeen) return <span className="text-gray-400">Nunca</span>;
+                          return (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleViewNumberHistory(i.number); }}
+                              className="text-blue-600 hover:text-blue-800 hover:underline"
+                              title="Ver historial"
+                            >
+                              {lastSeen.daysAgo === 0 ? 'Hoy' : lastSeen.daysAgo === 1 ? 'Ayer' : `${lastSeen.daysAgo}d`}
+                            </button>
+                          );
+                        }
+                      },
                       { key: 'tripletaCount', label: 'Tripletas', align: 'right', render: (i) => i.tripletaCount > 0 ? <span className="text-purple-600 font-medium">{i.tripletaCount}</span> : <span className="text-gray-400">0</span> },
                       { key: 'tripletaPrize', label: 'Premio Trip.', align: 'right', render: (i) => <span className="text-purple-600">{formatCurrency(i.tripletaPrize)}</span> },
                       { 
@@ -463,7 +512,7 @@ export default function MonitorPage() {
                   <ResponsiveTable
                     data={dailyReport.draws}
                     columns={[
-                      { key: 'scheduledAt', label: 'Hora', primary: true, render: (d) => <span className="font-medium">{formatTime(d.scheduledAt)}</span> },
+                      { key: 'drawTime', label: 'Hora', primary: true, render: (d) => <span className="font-medium">{formatTime(d.drawTime)}</span> },
                       { key: 'game', label: 'Juego' },
                       { 
                         key: 'status', 
@@ -775,6 +824,73 @@ export default function MonitorPage() {
           tripleta={tripletaDetailModal.data}
           onClose={() => setTripletaDetailModal({ open: false, data: null })}
         />
+      )}
+
+      {/* Modal de Historial de Número */}
+      {numberHistoryModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[80vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">
+                Historial del Número {numberHistoryModal.number}
+              </h3>
+              <button onClick={() => setNumberHistoryModal({ open: false, number: null, history: null, loading: false })} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[60vh]">
+              {numberHistoryModal.loading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="mt-4 text-gray-600">Cargando historial...</p>
+                </div>
+              ) : !numberHistoryModal.history || numberHistoryModal.history.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  Este número nunca ha salido ganador
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-gray-600 mb-4">
+                    Últimas {numberHistoryModal.history.length} veces que salió este número:
+                  </p>
+                  {numberHistoryModal.history.map((entry, idx) => (
+                    <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100">
+                      <div className="flex items-center gap-3">
+                        <span className="w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center text-sm font-bold">
+                          {idx + 1}
+                        </span>
+                        <div>
+                          <p className="font-medium">{entry.number} - {entry.name}</p>
+                          <p className="text-sm text-gray-500">
+                            {new Date(entry.drawDate).toLocaleDateString('es-VE', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-medium text-blue-600">{formatTime(entry.drawTime)}</p>
+                        <p className="text-xs text-gray-500">
+                          {Math.floor((new Date() - new Date(entry.drawDate)) / (1000 * 60 * 60 * 24))} días atrás
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button 
+                onClick={() => setNumberHistoryModal({ open: false, number: null, history: null, loading: false })}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
