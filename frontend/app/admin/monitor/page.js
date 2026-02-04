@@ -659,7 +659,7 @@ export default function MonitorPage() {
                       }`}>
                         <td className="px-4 py-3 text-sm">
                           <span className="font-mono font-semibold text-gray-900">
-                            {tripleta.id.substring(0, 8)}
+                            {String(tripleta.id)}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm text-right font-bold text-purple-600">

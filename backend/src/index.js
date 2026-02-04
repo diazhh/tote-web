@@ -140,6 +140,7 @@ import publicRoutes from './routes/public.routes.js';
 import channelRoutes from './routes/channel.routes.js';
 import imageRoutes from './routes/images.js';
 import whatsappBaileysRoutes from './routes/whatsapp-baileys.routes.js';
+import whatsappAdminRoutes from './routes/whatsapp-admin.routes.js';
 import gameChannelsRoutes from './routes/game-channels.routes.js';
 import adminBotRoutes from './routes/admin-bot.routes.js';
 
@@ -191,6 +192,7 @@ app.use('/api/system', systemConfigRoutes);
 
 // Rutas de plataformas de canales
 app.use('/api/whatsapp', whatsappBaileysRoutes);
+app.use('/api/whatsapp-admin', whatsappAdminRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/facebook', facebookRoutes);

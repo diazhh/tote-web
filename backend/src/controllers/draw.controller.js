@@ -8,6 +8,7 @@ import prewinnerSelectionService from '../services/prewinner-selection.service.j
 import publicationService from '../services/publication.service.js';
 import * as imageService from '../services/imageService.js';
 import { prisma } from '../lib/prisma.js';
+import srqService from '../services/srq.service.js';
 
 export class DrawController {
   /**
@@ -503,6 +504,34 @@ export class DrawController {
         success: true,
         data: { results },
         message: `Sorteo republicado en ${results.filter(r => r.success).length}/${results.length} canales`,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/draws/sync-ids
+   * Sincronizar IDs de sorteos desde SRQ
+   */
+  async syncDrawIds(req, res, next) {
+    try {
+      const { date } = req.body;
+      
+      if (!date) {
+        return res.status(400).json({
+          success: false,
+          error: 'Fecha requerida (formato: YYYY-MM-DD)',
+        });
+      }
+
+      const syncDate = new Date(date + 'T00:00:00.000Z');
+      const result = await srqService.syncDraws(syncDate);
+
+      res.json({
+        success: true,
+        data: result,
+        message: `Sincronización completada: ${result.totalDraws} sorteos procesados`,
       });
     } catch (error) {
       next(error);

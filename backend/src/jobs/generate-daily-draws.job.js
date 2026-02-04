@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import drawTemplateService from '../services/draw-template.service.js';
@@ -21,9 +21,14 @@ class GenerateDailyDrawsJob {
    * Iniciar el job
    */
   start() {
-    this.task = cron.schedule(this.cronExpression, async () => {
+    this.task = new Cron(this.cronExpression, { 
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('Error en GenerateDailyDraws job:', error);
+      }
+    }, async () => {
       await this.execute();
-    }, { timezone: 'America/Caracas' });
+    });
 
     logger.info('✅ Job GenerateDailyDraws iniciado (01:05 AM diario, TZ: America/Caracas)');
   }
@@ -55,77 +60,98 @@ class GenerateDailyDrawsJob {
       // Obtener fecha actual en Venezuela
       const venezuelaDateStr = getVenezuelaDateString(); // YYYY-MM-DD
       const today = getVenezuelaDateAsUTC(); // Date object para guardar en DB
-      const dayOfWeek = getVenezuelaDayOfWeek(); // 1-7 (Lun-Dom)
       
-      logger.info(`📅 Fecha Venezuela: ${venezuelaDateStr}, Día: ${dayOfWeek}`);
+      // Calcular mañana (necesario para tripletas que abarcan múltiples días)
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      
+      const dayOfWeek = getVenezuelaDayOfWeek(); // 1-7 (Lun-Dom)
+      const tomorrowDayOfWeek = (dayOfWeek % 7) + 1; // Siguiente día
+      
+      logger.info(`📅 Generando sorteos para HOY (${venezuelaDateStr}) y MAÑANA`);
+      logger.info(`   Hoy: Día ${dayOfWeek}, Mañana: Día ${tomorrowDayOfWeek}`);
 
-      // Obtener plantillas activas para este día
-      const templates = await drawTemplateService.getActiveForDay(dayOfWeek);
+      let totalCreated = 0;
+      let totalSkipped = 0;
 
-      if (templates.length === 0) {
-        logger.info('No hay plantillas activas para hoy');
-        return;
-      }
+      // Generar sorteos para HOY y MAÑANA
+      const daysToGenerate = [
+        { date: today, dayOfWeek, label: 'HOY' },
+        { date: tomorrow, dayOfWeek: tomorrowDayOfWeek, label: 'MAÑANA' }
+      ];
 
-      let createdCount = 0;
-      let skippedCount = 0;
+      for (const { date, dayOfWeek: dow, label } of daysToGenerate) {
+        logger.info(`\n📆 Procesando sorteos para ${label}...`);
+        
+        // Obtener plantillas activas para este día
+        const templates = await drawTemplateService.getActiveForDay(dow);
 
-      for (const template of templates) {
-        // Verificar si el juego está pausado hoy
-        const isPaused = await drawPauseService.isGamePausedOnDate(
-          template.gameId,
-          today
-        );
-
-        if (isPaused) {
-          logger.info(`Juego ${template.game.name} está pausado hoy, saltando...`);
-          skippedCount += template.drawTimes.length;
+        if (templates.length === 0) {
+          logger.info(`   No hay plantillas activas para ${label}`);
           continue;
         }
 
-        // Crear sorteos para cada hora de la plantilla
-        for (const time of template.drawTimes) {
-          // drawTime se guarda directamente como hora de Venezuela (HH:MM)
-          // drawDate es la fecha del sorteo en Venezuela como Date UTC
+        let createdCount = 0;
+        let skippedCount = 0;
 
-          // Verificar si ya existe un sorteo para esta fecha/hora/juego
-          const existing = await prisma.draw.findFirst({
-            where: {
-              gameId: template.gameId,
-              drawDate: today,
-              drawTime: time
-            }
-          });
+        for (const template of templates) {
+          // Verificar si el juego está pausado en esta fecha
+          const isPaused = await drawPauseService.isGamePausedOnDate(
+            template.gameId,
+            date
+          );
 
-          if (existing) {
-            logger.debug(`Sorteo ya existe: ${template.game.name} - ${time}`);
-            skippedCount++;
+          if (isPaused) {
+            logger.info(`   Juego ${template.game.name} está pausado en ${label}, saltando...`);
+            skippedCount += template.drawTimes.length;
             continue;
           }
 
-          // Crear el sorteo con hora de Venezuela
-          await prisma.draw.create({
-            data: {
-              gameId: template.gameId,
-              templateId: template.id,
-              drawDate: today,
-              drawTime: time, // Hora Venezuela directa (ej: "08:00")
-              status: 'SCHEDULED'
-            }
-          });
+          // Crear sorteos para cada hora de la plantilla
+          for (const time of template.drawTimes) {
+            // Verificar si ya existe un sorteo para esta fecha/hora/juego
+            const existing = await prisma.draw.findFirst({
+              where: {
+                gameId: template.gameId,
+                drawDate: date,
+                drawTime: time
+              }
+            });
 
-          createdCount++;
-          logger.debug(`Sorteo creado: ${template.game.name} - ${time}`);
+            if (existing) {
+              logger.debug(`   Sorteo ya existe: ${template.game.name} - ${time}`);
+              skippedCount++;
+              continue;
+            }
+
+            // Crear el sorteo con hora de Venezuela
+            await prisma.draw.create({
+              data: {
+                gameId: template.gameId,
+                templateId: template.id,
+                drawDate: date,
+                drawTime: time, // Hora Venezuela directa (ej: "08:00")
+                status: 'SCHEDULED'
+              }
+            });
+
+            createdCount++;
+            logger.debug(`   Sorteo creado: ${template.game.name} - ${time}`);
+          }
         }
+
+        logger.info(`   ✅ ${label}: ${createdCount} creados, ${skippedCount} saltados`);
+        totalCreated += createdCount;
+        totalSkipped += skippedCount;
       }
 
-      logger.info(`✅ Sorteos generados: ${createdCount} creados, ${skippedCount} saltados`);
+      logger.info(`\n✅ Sorteos generados: ${totalCreated} creados, ${totalSkipped} saltados`);
 
       // Emitir evento WebSocket
       emitToAll('draws:generated', {
         date: today.toISOString(),
-        created: createdCount,
-        skipped: skippedCount
+        created: totalCreated,
+        skipped: totalSkipped
       });
 
       // Registrar en audit log
@@ -136,22 +162,23 @@ class GenerateDailyDrawsJob {
           entityId: 'batch',
           changes: {
             date: today.toISOString(),
-            created: createdCount,
-            skipped: skippedCount
+            tomorrow: tomorrow.toISOString(),
+            created: totalCreated,
+            skipped: totalSkipped
           }
         }
       });
 
-      logger.info(`✅ Generación completada: ${createdCount} sorteos creados, ${skippedCount} saltados`);
+      logger.info(`✅ Generación completada: ${totalCreated} sorteos creados, ${totalSkipped} saltados`);
 
       // Emitir evento de actualización
       emitToAll('draws:generated', {
-        created: createdCount,
-        skipped: skippedCount
+        created: totalCreated,
+        skipped: totalSkipped
       });
 
       // Si el simulador está habilitado, ejecutar generación de jugadas
-      if (createdCount > 0) {
+      if (totalCreated > 0) {
         const isSimulatorEnabled = await systemConfigService.isBetSimulatorEnabled();
         if (isSimulatorEnabled) {
           logger.info('🎲 Simulador habilitado - Generando jugadas para nuevos sorteos...');

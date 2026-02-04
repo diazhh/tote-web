@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
@@ -23,9 +23,14 @@ class ExecuteDrawJob {
    * Iniciar el job
    */
   start() {
-    this.task = cron.schedule(this.cronExpression, async () => {
+    this.task = new Cron(this.cronExpression, { 
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('Error en ExecuteDraws job:', error);
+      }
+    }, async () => {
       await this.execute();
-    }, { timezone: 'America/Caracas' });
+    });
 
     logger.info('✅ Job ExecuteDraws iniciado (cada minuto, TZ: America/Caracas)');
   }
@@ -54,6 +59,9 @@ class ExecuteDrawJob {
       // Obtener fecha y hora actual en Venezuela
       const venezuelaTime = getVenezuelaTimeString(); // HH:MM:SS
       const venezuelaDate = getVenezuelaDateAsUTC(); // Date object para DB
+
+      // Log cada ejecución para monitoreo
+      logger.info(`[ExecuteDraws] Ejecutando - VE Time: ${venezuelaTime}, VE Date: ${venezuelaDate.toISOString()}`);
 
       // Buscar sorteos que deben ejecutarse (hora programada ya pasó)
       // Usar drawDate y drawTime (hora Venezuela directa)

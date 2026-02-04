@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
@@ -21,9 +21,14 @@ class TestBetsJob {
   async start() {
     try {
       // Verificar cada minuto si debe estar activo
-      this.task = cron.schedule('* * * * *', async () => {
+      this.task = new Cron('* * * * *', { 
+        timezone: 'America/Caracas',
+        catch: (error) => {
+          logger.error('Error en TestBets job:', error);
+        }
+      }, async () => {
         await this.checkAndRun();
-      }, { timezone: 'America/Caracas' });
+      });
 
       logger.info('✅ Job TestBets iniciado (verificación cada minuto)');
     } catch (error) {

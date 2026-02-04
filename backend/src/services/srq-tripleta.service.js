@@ -9,6 +9,177 @@ import logger from '../lib/logger.js';
 
 class SRQTripletaService {
   /**
+   * Verificar tickets de tripleta externos después de ejecutar un sorteo
+   * @param {string} drawId - ID del sorteo ejecutado
+   * @returns {Promise<Object>} Resumen de verificación
+   */
+  async checkExternalTripletasForDraw(drawId) {
+    try {
+      const draw = await prisma.draw.findUnique({
+        where: { id: drawId },
+        include: {
+          game: true,
+          winnerItem: true
+        }
+      });
+
+      if (!draw || !draw.winnerItemId) {
+        throw new Error('Sorteo no encontrado o sin ganador');
+      }
+
+      // Obtener configuración de tripleta del juego
+      const tripletaConfig = draw.game.config?.tripleta;
+      if (!tripletaConfig?.enabled) {
+        return { checked: 0, winners: 0, expired: 0 };
+      }
+
+      const drawsCount = tripletaConfig.drawsCount || 10;
+      const multiplier = tripletaConfig.multiplier || 50;
+
+      // Obtener todos los tickets de tripleta ACTIVOS que participan en este sorteo
+      const activeTripletas = await prisma.ticket.findMany({
+        where: {
+          drawId: draw.id,
+          source: 'EXTERNAL_API',
+          status: 'ACTIVE',
+          providerData: {
+            path: ['type'],
+            equals: 'TRIPLETA'
+          }
+        },
+        include: {
+          details: true
+        }
+      });
+
+      logger.info(`🎯 Verificando ${activeTripletas.length} tripletas externas para sorteo ${drawId}`);
+
+      let winnersCount = 0;
+      let expiredCount = 0;
+
+      for (const ticket of activeTripletas) {
+        try {
+          // Obtener los 3 números de la tripleta
+          const itemIds = ticket.details.map(d => d.gameItemId);
+          
+          if (itemIds.length !== 3) {
+            logger.warn(`Tripleta ${ticket.id} no tiene 3 números, tiene ${itemIds.length}`);
+            continue;
+          }
+
+          // Obtener sorteos ejecutados desde el sorteo de inicio
+          // El sorteo de inicio es el drawId del ticket
+          const startDraw = await prisma.draw.findUnique({
+            where: { id: ticket.drawId }
+          });
+
+          // Calcular la fecha de expiración (drawsCount sorteos desde el inicio)
+          const futureDraws = await prisma.draw.findMany({
+            where: {
+              gameId: draw.gameId,
+              OR: [
+                { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+                { drawDate: { gt: startDraw.drawDate } }
+              ]
+            },
+            orderBy: [
+              { drawDate: 'asc' },
+              { drawTime: 'asc' }
+            ],
+            take: drawsCount
+          });
+
+          // Obtener sorteos ya ejecutados en la ventana
+          const executedDraws = await prisma.draw.findMany({
+            where: {
+              id: { in: futureDraws.map(d => d.id) },
+              status: { in: ['DRAWN', 'PUBLISHED'] },
+              winnerItemId: { not: null }
+            },
+            select: {
+              id: true,
+              winnerItemId: true
+            }
+          });
+
+          // Verificar si los 3 números han salido
+          const winnerItemIds = executedDraws.map(d => d.winnerItemId);
+          const item1Won = winnerItemIds.includes(itemIds[0]);
+          const item2Won = winnerItemIds.includes(itemIds[1]);
+          const item3Won = winnerItemIds.includes(itemIds[2]);
+
+          if (item1Won && item2Won && item3Won) {
+            // ¡GANADOR! Los 3 números salieron
+            const prize = parseFloat(ticket.totalAmount) * multiplier;
+
+            await prisma.$transaction(async (tx) => {
+              // Actualizar todos los detalles como WON
+              await tx.ticketDetail.updateMany({
+                where: { ticketId: ticket.id },
+                data: {
+                  status: 'WON',
+                  prize: parseFloat(ticket.totalAmount) * multiplier / 3 // Dividir premio entre los 3
+                }
+              });
+
+              // Actualizar el ticket
+              await tx.ticket.update({
+                where: { id: ticket.id },
+                data: {
+                  status: 'WON',
+                  totalPrize: prize
+                }
+              });
+            });
+
+            winnersCount++;
+            logger.info(`✅ Tripleta externa ganadora: ${ticket.externalTicketId} - Premio: ${prize}`);
+
+          } else if (executedDraws.length >= drawsCount) {
+            // Ya se ejecutaron todos los sorteos de la ventana y no ganó
+            await prisma.$transaction(async (tx) => {
+              // Actualizar todos los detalles como LOST
+              await tx.ticketDetail.updateMany({
+                where: { ticketId: ticket.id },
+                data: {
+                  status: 'LOST',
+                  prize: 0
+                }
+              });
+
+              // Actualizar el ticket
+              await tx.ticket.update({
+                where: { id: ticket.id },
+                data: {
+                  status: 'LOST',
+                  totalPrize: 0
+                }
+              });
+            });
+
+            expiredCount++;
+            logger.info(`❌ Tripleta externa expirada: ${ticket.externalTicketId}`);
+          }
+          // Si no cumple ninguna condición, sigue ACTIVE
+
+        } catch (ticketError) {
+          logger.error(`Error verificando tripleta ${ticket.id}:`, ticketError);
+        }
+      }
+
+      return {
+        checked: activeTripletas.length,
+        winners: winnersCount,
+        expired: expiredCount
+      };
+
+    } catch (error) {
+      logger.error('Error verificando tripletas externas:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Llamar a la API de SRQ para tripleta
    * @param {string} url - URL completa
    * @param {string} token - Token de autenticación
@@ -43,31 +214,30 @@ class SRQTripletaService {
   }
 
   /**
-   * Sincronizar jugadas de tripleta de un sorteo desde SRQ
-   * @param {string} drawId - ID del sorteo local
+   * Sincronizar jugadas de tripleta desde SRQ para una fecha específica
+   * Las tripletas de SRQ vienen de un sorteo especial que abarca todo el día
+   * @param {Date} date - Fecha para sincronizar (default: hoy)
    * @returns {Promise<Object>} Resumen de sincronización
    */
-  async syncTripletaTickets(drawId) {
-    const draw = await prisma.draw.findUnique({
-      where: { id: drawId },
-      include: {
-        game: true,
-        apiMappings: {
-          include: {
-            apiConfig: true,
-          },
-        },
-      },
+  async syncTripletaTicketsForDate(date = new Date()) {
+    const { getVenezuelaDateAsUTC } = await import('../lib/dateUtils.js');
+    const dateVenezuela = getVenezuelaDateAsUTC(date);
+    const dateStr = dateVenezuela.toISOString().split('T')[0];
+    
+    logger.info(`🎯 Sincronizando tripletas de SRQ para ${dateStr}`);
+
+    // Buscar configuración de tripleta para LOTOANIMALITO
+    const game = await prisma.game.findFirst({
+      where: { name: 'LOTOANIMALITO' }
     });
 
-    if (!draw) {
-      throw new Error(`Sorteo ${drawId} no encontrado`);
+    if (!game) {
+      throw new Error('Juego LOTOANIMALITO no encontrado');
     }
 
-    // Buscar configuración de ventas para este juego
     const salesConfig = await prisma.apiConfiguration.findFirst({
       where: {
-        gameId: draw.gameId,
+        gameId: game.id,
         type: 'SALES',
         isActive: true,
         tripletaUrl: { not: null },
@@ -76,63 +246,308 @@ class SRQTripletaService {
     });
 
     if (!salesConfig) {
-      logger.warn(`No hay configuración de tripleta para ${draw.game.name}`);
+      logger.warn(`No hay configuración de tripleta para ${game.name}`);
       return {
-        drawId,
         skipped: true,
         reason: 'No tripleta configuration found',
       };
     }
 
-    // Obtener el mapping del sorteo
-    const mapping = draw.apiMappings.find(m => 
-      m.apiConfig?.apiSystemId === salesConfig.apiSystemId
-    );
-
-    if (!mapping) {
-      const anyMapping = draw.apiMappings[0];
-      if (!anyMapping) {
-        throw new Error(`No hay mapping de API para el sorteo ${drawId}`);
-      }
-    }
-
-    const externalDrawId = mapping?.externalDrawId || draw.apiMappings[0]?.externalDrawId;
-    if (!externalDrawId) {
-      throw new Error(`No hay ID externo para el sorteo ${drawId}`);
-    }
-
-    const url = `${salesConfig.tripletaUrl}${externalDrawId}`;
-    logger.info(`🎫 Sincronizando jugadas de tripleta: ${url}`);
-
+    // Obtener sorteos de tripleta de SRQ para esta fecha
+    const planningUrl = `https://api2.sistemasrq.com/externalapi/operator/loteries?date=${dateStr}`;
+    
     try {
-      const tickets = await this.callAPI(url, salesConfig.tripletaToken);
-
-      if (!Array.isArray(tickets)) {
-        throw new Error('Respuesta de tickets de tripleta no es un array');
+      const planningResponse = await this.callAPI(planningUrl, salesConfig.tripletaToken);
+      
+      if (!Array.isArray(planningResponse)) {
+        throw new Error('Respuesta de planificación no es un array');
       }
 
-      logger.info(`  📊 ${tickets.length} jugadas de tripleta encontradas`);
+      // Buscar sorteos de tripleta (descripción contiene "TRIPLETA")
+      const tripletaDraws = planningResponse.filter(d => 
+        d.descripcion && d.descripcion.toUpperCase().includes('TRIPLETA')
+      );
 
-      // Procesar y guardar tickets de tripleta
-      const processed = await this.processTripletaTickets(tickets, drawId, draw.gameId);
+      if (tripletaDraws.length === 0) {
+        logger.info(`  No hay sorteos de tripleta para ${dateStr}`);
+        return {
+          skipped: true,
+          reason: 'No tripleta draws found for date',
+          date: dateStr
+        };
+      }
 
-      logger.info(`  ✅ ${processed} jugadas de tripleta procesadas`);
+      logger.info(`  📊 ${tripletaDraws.length} sorteos de tripleta encontrados`);
+
+      let totalProcessed = 0;
+      let totalTickets = 0;
+
+      // Procesar cada sorteo de tripleta individualmente
+      for (const tripletaDraw of tripletaDraws) {
+        try {
+          logger.info(`  📌 ${tripletaDraw.descripcion} (ID: ${tripletaDraw.sorteoID})`);
+
+          // Obtener tickets del sorteo de tripleta
+          const url = `${salesConfig.tripletaUrl}${tripletaDraw.sorteoID}`;
+          const tickets = await this.callAPI(url, salesConfig.tripletaToken);
+
+          if (!Array.isArray(tickets)) {
+            throw new Error('Respuesta de tickets de tripleta no es un array');
+          }
+
+          logger.info(`    📦 ${tickets.length} tickets encontrados`);
+          totalTickets += tickets.length;
+
+          if (tickets.length === 0) {
+            continue;
+          }
+
+          // Procesar tickets usando el sorteoID del ticket para encontrar el sorteo de inicio
+          const processed = await this.processTripletaTicketsWithMapping(tickets, game.id, tripletaDraw.sorteoID);
+          totalProcessed += processed;
+          logger.info(`    ✅ ${processed} tickets procesados`);
+
+        } catch (error) {
+          logger.error(`  Error procesando sorteo de tripleta ${tripletaDraw.sorteoID}:`, error);
+        }
+      }
+
+      logger.info(`  ✅ Total: ${totalProcessed} de ${totalTickets} tickets de tripleta procesados`);
 
       return {
-        drawId,
-        externalDrawId,
-        totalTripletaTickets: tickets.length,
-        processed,
-        rawSample: tickets.length > 0 ? tickets[0] : null,
+        date: dateStr,
+        totalTripletaTickets: totalTickets,
+        processed: totalProcessed,
       };
     } catch (error) {
-      logger.error(`Error sincronizando tripleta para sorteo ${drawId}:`, error);
+      logger.error(`Error sincronizando tripletas para ${dateStr}:`, error);
       throw error;
     }
   }
 
   /**
-   * Procesar y guardar tickets de tripleta
+   * Sincronizar jugadas de tripleta de un sorteo desde SRQ (método legacy)
+   * @param {string} drawId - ID del sorteo local
+   * @returns {Promise<Object>} Resumen de sincronización
+   */
+  async syncTripletaTickets(drawId) {
+    const draw = await prisma.draw.findUnique({
+      where: { id: drawId },
+      select: { drawDate: true }
+    });
+
+    if (!draw) {
+      throw new Error(`Sorteo ${drawId} no encontrado`);
+    }
+
+    // Delegar a syncTripletaTicketsForDate
+    return this.syncTripletaTicketsForDate(draw.drawDate);
+  }
+
+  /**
+   * Procesar y guardar tickets de tripleta usando mapping de sorteoID
+   * @param {Array} tickets - Array de tickets de tripleta desde SRQ
+   * @param {string} gameId - ID del juego
+   * @param {string} tripletaDrawId - ID del sorteo de tripleta en SRQ (para referencia)
+   * @returns {Promise<number>} Cantidad de tickets procesados
+   */
+  async processTripletaTicketsWithMapping(tickets, gameId, tripletaDrawId) {
+    let processed = 0;
+    let skipped = 0;
+
+    // Obtener configuración de tripleta del juego
+    const game = await prisma.game.findUnique({
+      where: { id: gameId },
+      select: {
+        config: true,
+        name: true
+      }
+    });
+
+    const tripletaConfig = game?.config?.tripleta;
+    if (!tripletaConfig?.enabled) {
+      logger.warn(`Tripleta no habilitada para ${game?.name}`);
+      return 0;
+    }
+
+    const drawsCount = tripletaConfig.drawsCount || 10;
+    const multiplier = tripletaConfig.multiplier || 50;
+
+    // Buscar el mapping del sorteo de tripleta (ya debe existir)
+    const tripletaMapping = await prisma.apiDrawMapping.findFirst({
+      where: {
+        externalDrawId: tripletaDrawId.toString()
+      },
+      include: {
+        draw: true
+      }
+    });
+
+    if (!tripletaMapping) {
+      logger.warn(`No se encontró mapping para sorteo de tripleta ${tripletaDrawId}`);
+      return 0;
+    }
+
+    const startDraw = tripletaMapping.draw;
+
+    for (const ticket of tickets) {
+      try {
+        // Ignorar tickets anulados
+        if (ticket.anulado) {
+          skipped++;
+          continue;
+        }
+
+        // Validar estructura del ticket
+        if (!ticket.ticketID || !ticket.numerosTexto || !ticket.ventaID) {
+          logger.warn(`Ticket de tripleta con estructura incompleta: ${JSON.stringify(ticket)}`);
+          skipped++;
+          continue;
+        }
+
+        // Obtener sorteos desde el sorteo de inicio hacia adelante
+        const futureDraws = await prisma.draw.findMany({
+          where: {
+            gameId,
+            OR: [
+              { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+              { drawDate: { gt: startDraw.drawDate } }
+            ]
+          },
+          orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }],
+          take: drawsCount + 1,
+          select: { id: true, drawDate: true, drawTime: true, status: true }
+        });
+
+        if (futureDraws.length < 2) {
+          logger.warn(`No hay suficientes sorteos desde ${startDraw.drawDate.toISOString().split('T')[0]} ${startDraw.drawTime} para ticket ${ticket.ticketID}`);
+          skipped++;
+          continue;
+        }
+
+        const startDrawId = futureDraws[0].id;
+        const endDrawId = futureDraws[Math.min(drawsCount, futureDraws.length) - 1].id;
+        const lastDraw = futureDraws[Math.min(drawsCount, futureDraws.length) - 1];
+        const expiresAt = new Date(lastDraw.drawDate);
+        const [hours, minutes] = lastDraw.drawTime.split(':');
+        expiresAt.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
+
+        // Parsear los números de animalitos
+        const numbers = ticket.numerosTexto.split(',').map(num => {
+          const trimmed = num.trim();
+          return trimmed === '0' ? '0' : trimmed.padStart(2, '0');
+        });
+        
+        if (numbers.length !== 3) {
+          logger.warn(`Ticket de tripleta no tiene exactamente 3 números: ${ticket.numerosTexto}`);
+          skipped++;
+          continue;
+        }
+
+        // Buscar los GameItems por número
+        const items = await Promise.all(
+          numbers.map(number => 
+            prisma.gameItem.findFirst({
+              where: {
+                number,
+                gameId,
+                isActive: true
+              }
+            })
+          )
+        );
+
+        if (items.some(item => !item)) {
+          logger.warn(`No se encontraron todos los GameItems para tripleta. Números: ${ticket.numerosTexto}`);
+          skipped++;
+          continue;
+        }
+
+        const [item1, item2, item3] = items;
+        const amount = parseFloat(ticket.monto || 0);
+        if (amount <= 0) {
+          skipped++;
+          continue;
+        }
+
+        // Verificar si ya existe usando ventaID como identificador único
+        const existingTicket = await prisma.ticket.findFirst({
+          where: {
+            drawId: startDrawId,
+            source: 'EXTERNAL_API',
+            externalTicketId: ticket.ventaID.toString()
+          }
+        });
+
+        if (existingTicket) {
+          skipped++;
+          continue;
+        }
+
+        // Crear el ticket de tripleta
+        await prisma.ticket.create({
+          data: {
+            drawId: startDrawId,
+            source: 'EXTERNAL_API',
+            externalTicketId: ticket.ventaID.toString(),
+            totalAmount: amount,
+            totalPrize: 0,
+            status: 'ACTIVE',
+            providerData: {
+              ticketID: ticket.ticketID,
+              ventaID: ticket.ventaID,
+              taquillaID: ticket.taquillaID,
+              bancaID: ticket.bancaID,
+              usuarioID: ticket.usuarioID,
+              codigo: ticket.codigo,
+              type: 'TRIPLETA',
+              numeros: ticket.numeros,
+              numerosTexto: ticket.numerosTexto,
+              numbers: [item1.number, item2.number, item3.number],
+              sorteoID: ticket.sorteoID,
+              tripletaDrawId: tripletaDrawId
+            },
+            details: {
+              create: [
+                {
+                  gameItemId: item1.id,
+                  amount: amount / 3,
+                  multiplier,
+                  prize: 0,
+                  status: 'ACTIVE'
+                },
+                {
+                  gameItemId: item2.id,
+                  amount: amount / 3,
+                  multiplier,
+                  prize: 0,
+                  status: 'ACTIVE'
+                },
+                {
+                  gameItemId: item3.id,
+                  amount: amount / 3,
+                  multiplier,
+                  prize: 0,
+                  status: 'ACTIVE'
+                }
+              ]
+            }
+          }
+        });
+
+        processed++;
+      } catch (error) {
+        logger.error(`Error procesando ticket de tripleta ${ticket.ticketID}:`, error);
+        skipped++;
+      }
+    }
+
+    logger.info(`    📊 Tripletas: ${processed} guardadas, ${skipped} saltadas`);
+    return processed;
+  }
+
+  /**
+   * Procesar y guardar tickets de tripleta (método legacy)
    * @param {Array} tickets - Array de tickets de tripleta desde SRQ
    * @param {string} drawId - ID del sorteo inicial
    * @param {string} gameId - ID del juego
@@ -160,27 +575,33 @@ class SRQTripletaService {
     const drawsCount = tripletaConfig.drawsCount || 10;
     const multiplier = tripletaConfig.multiplier || 50;
 
-    // Obtener sorteos futuros para calcular rango de la tripleta
-    const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
-    const todayVenezuela = getVenezuelaDateAsUTC();
-    const currentTime = getVenezuelaTimeString();
-    
+    // Obtener el sorteo base desde el cual se calculan los próximos sorteos
+    const baseDraw = await prisma.draw.findUnique({
+      where: { id: drawId },
+      select: { drawDate: true, drawTime: true }
+    });
+
+    if (!baseDraw) {
+      logger.error(`Sorteo base ${drawId} no encontrado`);
+      return 0;
+    }
+
+    // Obtener sorteos desde el sorteo base (incluyéndolo) hacia adelante
     const futureDraws = await prisma.draw.findMany({
       where: {
         gameId,
         OR: [
-          { drawDate: todayVenezuela, drawTime: { gte: currentTime } },
-          { drawDate: { gt: todayVenezuela } }
-        ],
-        status: 'SCHEDULED'
+          { drawDate: baseDraw.drawDate, drawTime: { gte: baseDraw.drawTime } },
+          { drawDate: { gt: baseDraw.drawDate } }
+        ]
       },
       orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }],
       take: drawsCount + 1,
-      select: { id: true, drawDate: true, drawTime: true }
+      select: { id: true, drawDate: true, drawTime: true, status: true }
     });
 
     if (futureDraws.length < 2) {
-      logger.warn(`No hay suficientes sorteos futuros para procesar tripletas (necesario: al menos 2, disponibles: ${futureDraws.length})`);
+      logger.warn(`No hay suficientes sorteos desde ${baseDraw.drawDate.toISOString().split('T')[0]} ${baseDraw.drawTime} para procesar tripletas (necesario: al menos 2, disponibles: ${futureDraws.length})`);
       return 0;
     }
 
@@ -200,40 +621,46 @@ class SRQTripletaService {
           continue;
         }
 
-        // Validar estructura del ticket
-        if (!ticket.ticketID || !ticket.numero1 || !ticket.numero2 || !ticket.numero3) {
+        // Validar estructura del ticket - SRQ usa campo 'numerosTexto' con números separados por coma
+        if (!ticket.ticketID || !ticket.numerosTexto) {
           logger.warn(`Ticket de tripleta con estructura incompleta: ${JSON.stringify(ticket)}`);
           skipped++;
           continue;
         }
 
-        // Buscar los GameItems para los 3 números
-        const [item1, item2, item3] = await Promise.all([
-          prisma.gameItem.findFirst({
-            where: {
-              gameId,
-              number: ticket.numero1.toString().padStart(2, '0')
-            }
-          }),
-          prisma.gameItem.findFirst({
-            where: {
-              gameId,
-              number: ticket.numero2.toString().padStart(2, '0')
-            }
-          }),
-          prisma.gameItem.findFirst({
-            where: {
-              gameId,
-              number: ticket.numero3.toString().padStart(2, '0')
-            }
-          })
-        ]);
-
-        if (!item1 || !item2 || !item3) {
-          logger.warn(`No se encontraron GameItems para tripleta: ${ticket.numero1}-${ticket.numero2}-${ticket.numero3}`);
+        // Parsear los números de animalitos (formato: "21,26,30")
+        // Special case: '0' should stay '0', not become '00' (0=DELFIN, 00=BALLENA)
+        const numbers = ticket.numerosTexto.split(',').map(num => {
+          const trimmed = num.trim();
+          return trimmed === '0' ? '0' : trimmed.padStart(2, '0');
+        });
+        
+        if (numbers.length !== 3) {
+          logger.warn(`Ticket de tripleta no tiene exactamente 3 números: ${ticket.numerosTexto}`);
           skipped++;
           continue;
         }
+
+        // Buscar los GameItems por número
+        const items = await Promise.all(
+          numbers.map(number => 
+            prisma.gameItem.findFirst({
+              where: {
+                number,
+                gameId,
+                isActive: true
+              }
+            })
+          )
+        );
+
+        if (items.some(item => !item)) {
+          logger.warn(`No se encontraron todos los GameItems para tripleta. Números: ${ticket.numerosTexto}`);
+          skipped++;
+          continue;
+        }
+
+        const [item1, item2, item3] = items;
 
         const amount = parseFloat(ticket.monto || 0);
         if (amount <= 0) {
@@ -241,18 +668,13 @@ class SRQTripletaService {
           continue;
         }
 
-        // Verificar si ya existe este ticket de tripleta
+        // Verificar si ya existe usando ventaID como identificador único
+        // Un mismo ticketID puede tener múltiples jugadas (ventaID diferente)
         const existingTicket = await prisma.ticket.findFirst({
           where: {
             drawId,
             source: 'EXTERNAL_API',
-            externalTicketId: ticket.ticketID.toString(),
-            // Verificar que sea específicamente una tripleta
-            details: {
-              some: {
-                gameItemId: { in: [item1.id, item2.id, item3.id] }
-              }
-            }
+            externalTicketId: ticket.ventaID.toString()
           }
         });
 
@@ -261,23 +683,26 @@ class SRQTripletaService {
           continue;
         }
 
-        // Crear el ticket de tripleta con sus 3 números
+        // Crear el ticket de tripleta usando ventaID como identificador único
         await prisma.ticket.create({
           data: {
             drawId,
             source: 'EXTERNAL_API',
-            externalTicketId: ticket.ticketID.toString(),
+            externalTicketId: ticket.ventaID.toString(), // ventaID es el identificador único de cada jugada
             totalAmount: amount,
             totalPrize: 0,
             status: 'ACTIVE',
             providerData: {
-              ticketID: ticket.ticketID,
+              ticketID: ticket.ticketID, // ID del ticket (puede repetirse)
+              ventaID: ticket.ventaID,   // ID único de la jugada
               taquillaID: ticket.taquillaID,
-              grupoID: ticket.grupoID,
               bancaID: ticket.bancaID,
-              comercialID: ticket.comercialID,
+              usuarioID: ticket.usuarioID,
+              codigo: ticket.codigo,
               type: 'TRIPLETA',
-              numbers: [ticket.numero1, ticket.numero2, ticket.numero3]
+              numeros: ticket.numeros,
+              numerosTexto: ticket.numerosTexto,
+              numbers: [item1.number, item2.number, item3.number]
             },
             details: {
               create: [

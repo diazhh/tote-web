@@ -29,10 +29,17 @@ class PrizeProcessorService {
 
         // Obtener SOLO los detalles de tickets que pertenecen a este sorteo
         // Un ticket puede tener detalles de múltiples sorteos
+        // EXCLUIR tickets de tripleta externa (se verifican con lógica especial)
         const ticketDetails = await tx.ticketDetail.findMany({
           where: {
             ticket: {
-              drawId
+              drawId,
+              NOT: {
+                AND: [
+                  { source: 'EXTERNAL_API' },
+                  { providerData: { path: ['type'], equals: 'TRIPLETA' } }
+                ]
+              }
             },
             status: 'ACTIVE'
           },

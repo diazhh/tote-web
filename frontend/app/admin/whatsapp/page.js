@@ -40,7 +40,7 @@ export default function WhatsAppPage() {
         setQrCode(null);
       }
       
-      if (response.data.isReady) {
+      if (response.data.isReady || response.data.connectionStatus === 'authenticated' || response.data.connectionStatus === 'connected') {
         loadGroups();
       }
     } catch (error) {
@@ -121,11 +121,20 @@ export default function WhatsAppPage() {
   const getStatusBadge = () => {
     if (!status) return null;
     
-    if (status.isReady) {
+    if (status.isReady || status.connectionStatus === 'connected') {
       return (
         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
           <CheckCircle className="w-4 h-4 mr-2" />
           Conectado
+        </span>
+      );
+    }
+    
+    if (status.connectionStatus === 'authenticated') {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+          <CheckCircle className="w-4 h-4 mr-2" />
+          Autenticado (Conectando...)
         </span>
       );
     }
@@ -144,6 +153,24 @@ export default function WhatsAppPage() {
         <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800">
           <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
           Inicializando
+        </span>
+      );
+    }
+    
+    if (status.connectionStatus === 'failed') {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+          <XCircle className="w-4 h-4 mr-2" />
+          Falló - Reintentar manualmente
+        </span>
+      );
+    }
+    
+    if (status.connectionStatus === 'auth_failure') {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
+          <XCircle className="w-4 h-4 mr-2" />
+          Error de autenticación
         </span>
       );
     }
@@ -176,7 +203,7 @@ export default function WhatsAppPage() {
         </div>
         <div className="flex items-center gap-3">
           {getStatusBadge()}
-          {!status?.isReady && !status?.isInitializing && (
+          {!status?.isReady && !status?.isInitializing && status?.connectionStatus !== 'authenticated' && status?.connectionStatus !== 'connected' && (
             <button
               onClick={handleInitialize}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
@@ -185,7 +212,7 @@ export default function WhatsAppPage() {
               Inicializar
             </button>
           )}
-          {status?.isReady && (
+          {(status?.isReady || status?.connectionStatus === 'authenticated' || status?.connectionStatus === 'connected') && (
             <button
               onClick={handleLogout}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -211,7 +238,7 @@ export default function WhatsAppPage() {
       )}
 
       {/* Groups Section */}
-      {status?.isReady && (
+      {(status?.isReady || status?.connectionStatus === 'authenticated' || status?.connectionStatus === 'connected') && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">

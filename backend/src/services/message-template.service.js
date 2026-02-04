@@ -60,13 +60,10 @@ class MessageTemplateService {
     const winnerNumber = draw.winnerItem?.number || 'N/A';
     const winnerName = draw.winnerItem?.name || 'N/A';
     
-    // Formatear número con padding según tipo de juego
-    let winnerNumberPadded = winnerNumber;
-    if (draw.game?.type === 'ANIMALITOS') {
-      winnerNumberPadded = winnerNumber.padStart(2, '0');
-    } else if (draw.game?.type === 'TRIPLE') {
-      winnerNumberPadded = winnerNumber.padStart(3, '0');
-    }
+    // El número ya viene correctamente formateado desde la DB
+    // '0' = DELFIN, '00' = BALLENA, '01' = CARNERO, etc.
+    // No aplicar padding para evitar convertir '0' en '00'
+    const winnerNumberPadded = winnerNumber;
     
     // Formatos de fecha
     const date = format(drawDateObj, "PPP", { locale: es }); // 4 de octubre de 2025

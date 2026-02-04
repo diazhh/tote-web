@@ -17,22 +17,26 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
     try {
       setLoading(true);
       
-      // Fetch game items
-      const itemIds = [tripleta.item1Id, tripleta.item2Id, tripleta.item3Id];
-      const itemResponses = await Promise.all(
-        itemIds.map(id => axios.get(`/game-items/${id}`).catch(() => null))
-      );
-      const items = itemResponses.map(r => r?.data?.data).filter(Boolean);
-      setGameItems(items);
-
-      // Fetch draws in range to calculate executed/remaining
-      try {
-        const drawsResponse = await axios.get(`/tripleta/${tripleta.id}/draws`);
-        if (drawsResponse.data?.success) {
-          setDrawsInRange(drawsResponse.data.data);
-        }
-      } catch (error) {
-        console.error('Error fetching draws:', error);
+      // Si la tripleta ya tiene drawsInRange (viene del backend), usarlo directamente
+      if (tripleta.drawsInRange) {
+        setDrawsInRange(tripleta.drawsInRange);
+      }
+      
+      // Si la tripleta ya tiene items (tripletas externas de SRQ), usarlos directamente
+      if (tripleta.items && Array.isArray(tripleta.items)) {
+        setGameItems(tripleta.items);
+        setLoading(false);
+        return;
+      }
+      
+      // Para tripletas locales, fetch game items
+      if (tripleta.item1Id && tripleta.item2Id && tripleta.item3Id) {
+        const itemIds = [tripleta.item1Id, tripleta.item2Id, tripleta.item3Id];
+        const itemResponses = await Promise.all(
+          itemIds.map(id => axios.get(`/game-items/${id}`).catch(() => null))
+        );
+        const items = itemResponses.map(r => r?.data?.data).filter(Boolean);
+        setGameItems(items);
       }
     } catch (error) {
       console.error('Error fetching tripleta details:', error);
@@ -59,6 +63,20 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${hours}:${minutes}`;
+  };
+
+  const formatDrawTime = (draw) => {
+    if (draw.drawTime) {
+      // Si drawTime es un string "HH:MM:SS", extraer solo HH:MM
+      return draw.drawTime.substring(0, 5);
+    }
+    if (draw.drawDate) {
+      const date = new Date(draw.drawDate);
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${hours}:${minutes}`;
+    }
+    return 'N/A';
   };
 
   const getStatusBadge = (status) => {
@@ -94,10 +112,30 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
   const numbersWon = tripleta.numbersWon || (tripleta.items?.filter(i => i.won).length) || 0;
   const numbersRemaining = 3 - numbersWon;
   
-  // Calculate draws executed/remaining
-  const drawsExecuted = drawsInRange?.executed || 0;
-  const drawsTotal = drawsInRange?.total || tripleta.drawsCount || 0;
+  // Calculate draws executed/remaining - usar directamente de tripleta si está disponible
+  const drawsData = drawsInRange || tripleta.drawsInRange;
+  const drawsExecuted = drawsData?.executed || 0;
+  const drawsTotal = drawsData?.total || tripleta.drawsCount || 11;
   const drawsRemaining = drawsTotal - drawsExecuted;
+  
+  // Calcular fecha de expiración para tripletas externas
+  const getExpirationInfo = () => {
+    if (tripleta.expiresAt) {
+      return formatDateTime(tripleta.expiresAt);
+    }
+    // Para tripletas externas, mostrar el último sorteo del rango
+    if (drawsData?.draws && drawsData.draws.length > 0) {
+      const lastDraw = drawsData.draws[drawsData.draws.length - 1];
+      const date = new Date(lastDraw.drawDate);
+      const dateStr = date.toLocaleDateString('es-VE', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric'
+      });
+      return `${dateStr}, ${formatDrawTime(lastDraw)}`;
+    }
+    return 'N/A';
+  };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
@@ -111,7 +149,7 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
               </div>
               <div>
                 <h2 className="text-2xl font-bold">Detalle de Tripleta</h2>
-                <p className="text-purple-100 text-sm mt-1">ID: {tripleta.id?.slice(0, 13)}...</p>
+                <p className="text-purple-100 text-sm mt-1">Ticket ID: {String(tripleta.id)}</p>
               </div>
             </div>
             <button
@@ -242,7 +280,7 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
           </div>
 
           {/* Draws in Range */}
-          {drawsInRange?.draws && drawsInRange.draws.length > 0 && (
+          {drawsData?.draws && drawsData.draws.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Calendar className="w-5 h-5 text-gray-600" />
@@ -254,30 +292,40 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
                 <table className="min-w-full divide-y divide-gray-200 text-sm">
                   <thead className="bg-gray-50 sticky top-0">
                     <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Fecha</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Hora</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Estado</th>
                       <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Relevante</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {drawsInRange.draws.map((draw, idx) => (
-                      <tr key={idx} className={draw.isRelevant ? 'bg-green-50' : ''}>
-                        <td className="px-3 py-2">{formatDrawTime(draw)}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${
-                            draw.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :
-                            draw.status === 'DRAWN' ? 'bg-blue-100 text-blue-800' :
-                            draw.status === 'SCHEDULED' ? 'bg-gray-100 text-gray-800' :
-                            'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {draw.status}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2">
-                          {draw.isRelevant && <span className="text-green-600 font-medium">✓ Número ganó aquí</span>}
-                        </td>
-                      </tr>
-                    ))}
+                    {drawsData.draws.map((draw, idx) => {
+                      // Extraer fecha directamente del string ISO sin conversión de zona horaria
+                      const dateStr = draw.drawDate.split('T')[0]; // YYYY-MM-DD
+                      const [year, month, day] = dateStr.split('-');
+                      const months = ['ene.', 'feb.', 'mar.', 'abr.', 'may.', 'jun.', 'jul.', 'ago.', 'sep.', 'oct.', 'nov.', 'dic.'];
+                      const formattedDate = `${day}-${months[parseInt(month) - 1]}`;
+                      return (
+                        <tr key={idx} className={draw.isRelevant ? 'bg-green-50' : ''}>
+                          <td className="px-3 py-2 text-xs">{formattedDate}</td>
+                          <td className="px-3 py-2 font-medium">{formatDrawTime(draw)}</td>
+                          <td className="px-3 py-2">
+                            <span className={`px-2 py-0.5 rounded-full text-xs ${
+                              draw.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :
+                              draw.status === 'DRAWN' ? 'bg-blue-100 text-blue-800' :
+                              draw.status === 'SCHEDULED' ? 'bg-gray-100 text-gray-800' :
+                              'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {draw.status === 'PUBLISHED' ? 'Ejecutado' : 
+                               draw.status === 'SCHEDULED' ? 'Pendiente' : draw.status}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            {draw.isRelevant && <span className="text-green-600 font-medium text-xs">✓ Ganó</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -318,8 +366,8 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-gray-500" />
                 <div>
-                  <p className="text-xs text-gray-600">Expira</p>
-                  <p className="font-semibold text-gray-900">{formatDateTime(tripleta.expiresAt)}</p>
+                  <p className="text-xs text-gray-600">{tripleta.expiresAt ? 'Expira' : 'Último Sorteo'}</p>
+                  <p className="font-semibold text-gray-900">{getExpirationInfo()}</p>
                 </div>
               </div>
             </div>

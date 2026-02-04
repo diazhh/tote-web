@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import providerEntitiesService from './provider-entities.service.js';
+import srqTripletaService from './srq-tripleta.service.js';
 import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 
 /**
@@ -143,6 +144,13 @@ class ApiIntegrationService {
             );
           }
 
+          // Mapear sorteos de tripleta si el juego tiene configuración de tripleta
+          const tripletaMapped = await this.mapTripletaDraws(config, date, drawDate);
+          if (tripletaMapped > 0) {
+            logger.info(`  🎯 ${tripletaMapped} sorteos de tripleta mapeados`);
+            totalMapped += tripletaMapped;
+          }
+
         } catch (error) {
           logger.error(`Error procesando config ${config.name}:`, error.message);
         }
@@ -153,6 +161,111 @@ class ApiIntegrationService {
     } catch (error) {
       logger.error('❌ Error en syncSRQPlanning:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Mapear sorteos de tripleta de SRQ con sorteos locales (1:1 por orden)
+   * @param {Object} config - Configuración de API
+   * @param {Date} date - Fecha
+   * @param {Date} drawDate - Fecha del sorteo en formato UTC
+   * @returns {Promise<number>} Cantidad de sorteos mapeados
+   */
+  async mapTripletaDraws(config, date, drawDate) {
+    try {
+      // Verificar si el juego tiene configuración de tripleta
+      const salesConfig = await prisma.apiConfiguration.findFirst({
+        where: {
+          gameId: config.gameId,
+          type: 'SALES',
+          isActive: true,
+          tripletaUrl: { not: null },
+          tripletaToken: { not: null }
+        }
+      });
+
+      if (!salesConfig) {
+        return 0; // No hay configuración de tripleta
+      }
+
+      const dateStr = date.toISOString().split('T')[0];
+      
+      // Obtener sorteos de tripleta de SRQ usando el token de tripleta
+      const planningUrl = `https://api2.sistemasrq.com/externalapi/operator/loteries?date=${dateStr}`;
+      const response = await fetch(planningUrl, {
+        method: 'GET',
+        headers: {
+          'APIKEY': salesConfig.tripletaToken,
+          'Content-Type': 'application/json'
+        }
+      });
+      const loteries = await response.json();
+
+      // Filtrar solo sorteos de tripleta
+      const tripletaDraws = loteries.filter(l => 
+        l.descripcion && l.descripcion.toUpperCase().includes('TRIPLETA')
+      );
+
+      if (tripletaDraws.length === 0) {
+        return 0;
+      }
+
+      // Obtener sorteos locales del día ordenados por hora
+      const localDraws = await prisma.draw.findMany({
+        where: {
+          gameId: config.gameId,
+          drawDate: drawDate
+        },
+        orderBy: [{ drawTime: 'asc' }]
+      });
+
+      if (localDraws.length === 0) {
+        logger.warn(`  No hay sorteos locales para mapear tripletas`);
+        return 0;
+      }
+
+      let mapped = 0;
+
+      // Mapear 1:1 por orden (igual que sorteos normales)
+      const minLength = Math.min(tripletaDraws.length, localDraws.length);
+
+      for (let i = 0; i < minLength; i++) {
+        try {
+          const tripletaDraw = tripletaDraws[i];
+          const localDraw = localDraws[i];
+          const externalId = tripletaDraw.sorteoID.toString();
+
+          // Verificar si ya existe el mapping
+          const existingMapping = await prisma.apiDrawMapping.findFirst({
+            where: {
+              externalDrawId: externalId
+            }
+          });
+
+          if (existingMapping) {
+            continue; // Ya existe
+          }
+
+          // Crear mapping del sorteo de tripleta
+          await prisma.apiDrawMapping.create({
+            data: {
+              apiConfigId: salesConfig.id,
+              drawId: localDraw.id,
+              externalDrawId: externalId
+            }
+          });
+
+          logger.info(`  ✅ Tripleta mapeada: ${config.game.name} ${localDraw.drawTime} → SRQ ${externalId} (${tripletaDraw.descripcion})`);
+          mapped++;
+        } catch (error) {
+          logger.error(`  Error mapeando tripleta ${tripletaDraws[i].sorteoID}:`, error.message);
+        }
+      }
+
+      return mapped;
+    } catch (error) {
+      logger.error('Error en mapTripletaDraws:', error);
+      return 0;
     }
   }
 
@@ -263,7 +376,79 @@ class ApiIntegrationService {
       }
 
       logger.info(`✅ Tickets importados para draw ${drawId}: ${imported} tickets (${ticketsGrouped.reduce((sum, t) => sum + t.details.length, 0)} jugadas), ${skipped} saltados, ${deleted} eliminados`);
-      return { imported, skipped, deleted };
+      
+      // Importar tickets de tripleta si el juego tiene configuración de tripleta
+      let tripletaImported = 0;
+      let tripletaSkipped = 0;
+      try {
+        const game = await prisma.game.findUnique({
+          where: { id: mapping.apiConfig.gameId },
+          select: { config: true, name: true }
+        });
+        
+        if (game?.config?.tripleta?.enabled) {
+          logger.info(`🎯 Importando tickets de tripleta para ${game.name}...`);
+          
+          // Buscar el mapping del sorteo de tripleta para este draw
+          const tripletaMapping = await prisma.apiDrawMapping.findFirst({
+            where: {
+              drawId,
+              apiConfig: {
+                type: 'SALES',
+                tripletaUrl: { not: null },
+                tripletaToken: { not: null }
+              }
+            },
+            include: {
+              apiConfig: true
+            }
+          });
+
+          if (tripletaMapping) {
+            // Llamar a la API de tickets de tripleta
+            const tripletaUrl = `${tripletaMapping.apiConfig.tripletaUrl}${tripletaMapping.externalDrawId}`;
+            logger.debug(`Consultando tickets de tripleta: ${tripletaUrl}`);
+
+            const tripletaResponse = await fetch(tripletaUrl, {
+              method: 'GET',
+              headers: {
+                'APIKEY': tripletaMapping.apiConfig.tripletaToken,
+                'Content-Type': 'application/json'
+              }
+            });
+            const tripletaTickets = await tripletaResponse.json();
+
+            if (Array.isArray(tripletaTickets) && tripletaTickets.length > 0) {
+              logger.info(`  📦 ${tripletaTickets.length} tickets de tripleta encontrados`);
+              
+              // Procesar tickets de tripleta
+              const result = await srqTripletaService.processTripletaTicketsWithMapping(
+                tripletaTickets,
+                mapping.apiConfig.gameId,
+                tripletaMapping.externalDrawId
+              );
+              
+              tripletaImported = result;
+              tripletaSkipped = tripletaTickets.length - result;
+              logger.info(`  ✅ ${tripletaImported} tripletas importadas, ${tripletaSkipped} saltadas`);
+            } else {
+              logger.info(`  No hay tickets de tripleta para este sorteo`);
+            }
+          } else {
+            logger.debug(`  No hay mapping de tripleta para draw ${drawId}`);
+          }
+        }
+      } catch (tripletaError) {
+        logger.error(`⚠️ Error importando tripletas: ${tripletaError.message}`);
+      }
+      
+      return { 
+        imported, 
+        skipped, 
+        deleted,
+        tripletaImported,
+        tripletaSkipped
+      };
     } catch (error) {
       logger.error('❌ Error en importSRQTickets:', error);
       throw error;
@@ -294,10 +479,12 @@ class ApiIntegrationService {
 
       // Buscar el game_item por número
       const numero = ticket.numero?.toString() || ticket.number?.toString();
+      // Special case: '0' should stay '0', not become '00' (0=DELFIN, 00=BALLENA)
+      const paddedNumber = numero === '0' ? '0' : numero.padStart(2, '0');
       const gameItem = await prisma.gameItem.findFirst({
         where: {
           gameId,
-          number: numero.padStart(2, '0')
+          number: paddedNumber
         }
       });
 
@@ -421,7 +608,8 @@ class ApiIntegrationService {
         return;
       }
 
-      const winnerNumber = match[1].padStart(2, '0');
+      // Special case: '0' should stay '0', not become '00' (0=DELFIN, 00=BALLENA)
+      const winnerNumber = match[1] === '0' ? '0' : match[1].padStart(2, '0');
 
       // Buscar el GameItem correspondiente
       const gameItem = await prisma.gameItem.findFirst({

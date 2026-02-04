@@ -495,7 +495,9 @@ class SRQService {
   extractWinnerNumber(ganador) {
     if (!ganador) return null;
     const match = ganador.match(/^(\d+)/);
-    return match ? match[1].padStart(2, '0') : null;
+    if (!match) return null;
+    // Special case: '0' should stay '0', not become '00' (0=DELFIN, 00=BALLENA)
+    return match[1] === '0' ? '0' : match[1].padStart(2, '0');
   }
 
   /**

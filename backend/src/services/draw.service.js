@@ -57,6 +57,11 @@ export class DrawService {
             winnerItem: true,
             template: true,
             publications: true,
+            apiMappings: {
+              include: {
+                apiConfig: true,
+              },
+            },
           },
           orderBy: [
             { drawDate: filters.orderBy === 'asc' ? 'asc' : 'desc' },
@@ -360,14 +365,24 @@ export class DrawService {
         }
       }
 
-      // Verificar apuestas Tripleta activas
+      // Verificar apuestas Tripleta locales (TripleBet)
       try {
         const tripletaService = (await import('./tripleta.service.js')).default;
         const tripletaResult = await tripletaService.checkTripleBetsForDraw(updatedDraw.id);
-        logger.info(`Tripletas verificadas: ${tripletaResult.winners} ganadores, ${tripletaResult.expired} expiradas`);
+        logger.info(`Tripletas locales verificadas: ${tripletaResult.winners} ganadores, ${tripletaResult.expired} expiradas`);
       } catch (tripletaError) {
-        logger.error('Error verificando apuestas tripleta:', tripletaError);
+        logger.error('Error verificando apuestas tripleta locales:', tripletaError);
         // No detener el flujo si falla la verificación de tripletas
+      }
+
+      // Verificar tickets de tripleta externos (SRQ)
+      try {
+        const srqTripletaService = (await import('./srq-tripleta.service.js')).default;
+        const externalResult = await srqTripletaService.checkExternalTripletasForDraw(updatedDraw.id);
+        logger.info(`Tripletas externas verificadas: ${externalResult.winners} ganadores, ${externalResult.expired} expiradas`);
+      } catch (externalError) {
+        logger.error('Error verificando tripletas externas:', externalError);
+        // No detener el flujo si falla la verificación de tripletas externas
       }
       
       return updatedDraw;

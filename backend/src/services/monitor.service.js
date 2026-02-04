@@ -185,6 +185,26 @@ class MonitorService {
       const [hours, minutes] = draw.drawTime.split(':');
       drawDateTime.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
       
+      // Obtener sorteos anteriores ejecutados (para verificar números ganados)
+      // Esta consulta se hace una sola vez para todas las tripletas
+      const previousDraws = await prisma.draw.findMany({
+        where: {
+          gameId: draw.gameId,
+          OR: [
+            { drawDate: { lt: draw.drawDate } },
+            { drawDate: draw.drawDate, drawTime: { lt: draw.drawTime } }
+          ],
+          status: { in: ['DRAWN', 'PUBLISHED'] },
+          winnerItemId: { not: null }
+        },
+        orderBy: [{ drawDate: 'desc' }, { drawTime: 'desc' }],
+        take: 11,
+        select: { winnerItemId: true }
+      });
+      
+      const previousWinnerIds = previousDraws.map(d => d.winnerItemId);
+
+      // 1. Tripletas locales (TripleBet)
       const activeTripletas = await prisma.tripleBet.findMany({
         where: {
           gameId: draw.gameId,
@@ -193,13 +213,95 @@ class MonitorService {
         }
       });
 
-      // Contar tripletas por item
+      // Contar tripletas locales por item
+      // Solo contar tripletas que ganarían en ESTE sorteo específico (les falta solo 1 número)
       for (const tripleta of activeTripletas) {
         const itemIds = [tripleta.item1Id, tripleta.item2Id, tripleta.item3Id];
         const tripletaPrize = parseFloat(tripleta.amount) * parseFloat(tripleta.multiplier);
 
-        for (const itemId of itemIds) {
-          const item = itemMap.get(itemId);
+        const numbersAlreadyWon = itemIds.filter(id => previousWinnerIds.includes(id)).length;
+        
+        // Solo contar si le falta exactamente 1 número (2 ya ganaron)
+        if (numbersAlreadyWon === 2) {
+          // Encontrar qué número falta
+          const missingItemId = itemIds.find(id => !previousWinnerIds.includes(id));
+          
+          const item = itemMap.get(missingItemId);
+          if (item) {
+            item.tripletaCount += 1;
+            item.tripletaPrize += tripletaPrize;
+          }
+        }
+      }
+
+      // 2. Tripletas externas de SRQ (Ticket con source EXTERNAL_API y type TRIPLETA)
+      // Las tripletas de SRQ son válidas para 11 sorteos consecutivos desde el primer sorteo después de jugarse
+      // Necesitamos buscar tripletas de sorteos anteriores que aún estén dentro de su ventana de validez
+      
+      // Obtener los 11 sorteos anteriores (incluyendo el actual) para determinar qué tripletas están activas
+      const previousDrawsForSearch = await prisma.draw.findMany({
+        where: {
+          gameId: draw.gameId,
+          OR: [
+            { drawDate: { lt: draw.drawDate } },
+            { drawDate: draw.drawDate, drawTime: { lte: draw.drawTime } }
+          ]
+        },
+        orderBy: [
+          { drawDate: 'desc' },
+          { drawTime: 'desc' }
+        ],
+        take: 11,
+        select: { id: true, drawDate: true, drawTime: true }
+      });
+
+      const drawIdsToSearch = previousDrawsForSearch.map(d => d.id);
+
+      // Buscar tripletas asociadas a cualquiera de estos sorteos
+      // Filtrar solo ACTIVE porque las WON/LOST ya no participan
+      const externalTripletaTickets = await prisma.ticket.findMany({
+        where: {
+          source: 'EXTERNAL_API',
+          status: 'ACTIVE',
+          providerData: {
+            path: ['type'],
+            equals: 'TRIPLETA'
+          },
+          drawId: { in: drawIdsToSearch }
+        },
+        include: {
+          details: {
+            include: {
+              gameItem: true
+            }
+          },
+          draw: {
+            select: {
+              drawDate: true,
+              drawTime: true
+            }
+          }
+        }
+      });
+
+      // Contar tripletas externas por item
+      // Solo contar tripletas que ganarían en ESTE sorteo específico (les falta solo 1 número)
+      for (const ticket of externalTripletaTickets) {
+        // Cada ticket de tripleta tiene 3 detalles (los 3 números)
+        const tripletaPrize = parseFloat(ticket.totalAmount) * parseFloat(ticket.details[0]?.multiplier || 50); // multiplier default 50x
+        
+        // Obtener los 3 números de la tripleta
+        const tripletaItemIds = ticket.details.map(d => d.gameItemId);
+        
+        const numbersAlreadyWon = tripletaItemIds.filter(id => previousWinnerIds.includes(id)).length;
+        
+        // Solo contar si le falta exactamente 1 número (2 ya ganaron)
+        // Esto significa que si este sorteo gana uno de los números faltantes, la tripleta se completa
+        if (numbersAlreadyWon === 2) {
+          // Encontrar qué número falta
+          const missingItemId = tripletaItemIds.find(id => !previousWinnerIds.includes(id));
+          
+          const item = itemMap.get(missingItemId);
           if (item) {
             item.tripletaCount += 1;
             item.tripletaPrize += tripletaPrize;
@@ -492,6 +594,7 @@ class MonitorService {
       const [hours, minutes] = draw.drawTime.split(':');
       drawDateTime.setUTCHours(parseInt(hours), parseInt(minutes), 0, 0);
       
+      // 1. Tripletas locales (TripleBet)
       const tripletas = await prisma.tripleBet.findMany({
         where: {
           gameId: draw.gameId,
@@ -513,12 +616,64 @@ class MonitorService {
         }
       });
 
-      // Obtener los items de cada tripleta
+      // 2. Tripletas externas de SRQ (Ticket)
+      // Las tripletas de SRQ son válidas para 11 sorteos consecutivos
+      // Buscar en los últimos 11 sorteos
+      const previousDrawsForItem = await prisma.draw.findMany({
+        where: {
+          gameId: draw.gameId,
+          OR: [
+            { drawDate: { lt: draw.drawDate } },
+            { drawDate: draw.drawDate, drawTime: { lte: draw.drawTime } }
+          ]
+        },
+        orderBy: [
+          { drawDate: 'desc' },
+          { drawTime: 'desc' }
+        ],
+        take: 11,
+        select: { id: true }
+      });
+
+      const drawIdsForItem = previousDrawsForItem.map(d => d.id);
+
+      const externalTripletas = await prisma.ticket.findMany({
+        where: {
+          source: 'EXTERNAL_API',
+          status: 'ACTIVE',
+          providerData: {
+            path: ['type'],
+            equals: 'TRIPLETA'
+          },
+          drawId: { in: drawIdsForItem },
+          details: {
+            some: {
+              gameItemId: itemId
+            }
+          }
+        },
+        include: {
+          details: {
+            include: {
+              gameItem: true
+            }
+          }
+        }
+      });
+
+      // Obtener los items de cada tripleta local
       const itemIds = new Set();
       for (const t of tripletas) {
         itemIds.add(t.item1Id);
         itemIds.add(t.item2Id);
         itemIds.add(t.item3Id);
+      }
+
+      // Agregar items de tripletas externas
+      for (const ticket of externalTripletas) {
+        for (const detail of ticket.details) {
+          itemIds.add(detail.gameItemId);
+        }
       }
 
       const items = await prisma.gameItem.findMany({
@@ -527,7 +682,7 @@ class MonitorService {
 
       const itemMap = new Map(items.map(i => [i.id, i]));
 
-      // Verificar cuántos números ya salieron para cada tripleta
+      // Verificar cuántos números ya salieron para cada tripleta LOCAL
       const tripletasWithDetails = await Promise.all(tripletas.map(async (t) => {
         // Obtener sorteos ejecutados en el rango de la tripleta
         const startDraw = await prisma.draw.findUnique({
@@ -649,6 +804,120 @@ class MonitorService {
         };
       }));
 
+      // Procesar tripletas EXTERNAS de SRQ
+      const externalTripletasWithDetails = await Promise.all(externalTripletas.map(async (ticket) => {
+        const details = ticket.details;
+        const itemIds = details.map(d => d.gameItemId);
+        
+        // Obtener el sorteo inicial (donde está asociada la tripleta)
+        const startDraw = await prisma.draw.findUnique({
+          where: { id: ticket.drawId },
+          select: { drawDate: true, drawTime: true }
+        });
+
+        // Obtener los siguientes 11 sorteos desde el sorteo inicial
+        const allDrawsInRange = await prisma.draw.findMany({
+          where: {
+            gameId: draw.gameId,
+            OR: [
+              { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
+              { drawDate: { gt: startDraw.drawDate } }
+            ]
+          },
+          select: {
+            id: true,
+            drawDate: true,
+            drawTime: true,
+            status: true,
+            winnerItemId: true
+          },
+          orderBy: [
+            { drawDate: 'asc' },
+            { drawTime: 'asc' }
+          ],
+          take: 11
+        });
+
+        // Filtrar solo los sorteos ejecutados
+        const executedDraws = allDrawsInRange.filter(d => 
+          (d.status === 'DRAWN' || d.status === 'PUBLISHED') && d.winnerItemId
+        );
+
+        // Verificar cuántos números han ganado
+        const winnerItemIds = executedDraws.map(d => d.winnerItemId);
+        const itemsWonStatus = itemIds.map(itemId => {
+          const wonDraw = executedDraws.find(d => d.winnerItemId === itemId);
+          return {
+            itemId,
+            won: !!wonDraw,
+            wonInDraw: wonDraw ? { 
+              id: wonDraw.id, 
+              drawDate: wonDraw.drawDate, 
+              drawTime: wonDraw.drawTime 
+            } : null
+          };
+        });
+
+        const numbersWon = itemsWonStatus.filter(i => i.won).length;
+
+        // Calcular peligrosidad
+        let dangerLevel = 'low';
+        if (numbersWon === 2) {
+          dangerLevel = 'high'; // Solo falta 1 número - muy peligroso
+        } else if (numbersWon === 1) {
+          dangerLevel = 'medium'; // Faltan 2 números
+        }
+        
+        // Calcular estado de la tripleta
+        const pendingDraws = allDrawsInRange.filter(d => d.status === 'SCHEDULED').length;
+        let status = 'ACTIVE';
+        if (numbersWon === 3) {
+          status = 'WON';
+        } else if (pendingDraws === 0 && numbersWon < 3) {
+          status = 'LOST';
+        }
+        
+        return {
+          id: ticket.providerData?.ticketID || ticket.id, // Mostrar ticketID de SRQ en lugar del ID de DB
+          userId: null,
+          username: ticket.providerData?.taquillaID ? `Taquilla ${ticket.providerData.taquillaID}` : 'SRQ',
+          amount: parseFloat(ticket.totalAmount),
+          multiplier: parseFloat(details[0]?.multiplier || 50),
+          potentialPrize: parseFloat(ticket.totalAmount) * parseFloat(details[0]?.multiplier || 50),
+          drawsCount: 11, // Tripletas de SRQ son válidas por 11 sorteos
+          startDrawId: ticket.drawId,
+          expiresAt: null,
+          createdAt: ticket.createdAt,
+          status,
+          items: details.map((d, idx) => ({
+            ...itemMap.get(d.gameItemId),
+            won: itemsWonStatus[idx].won,
+            wonInDraw: itemsWonStatus[idx].wonInDraw
+          })),
+          numbersWon,
+          numbersRemaining: 3 - numbersWon,
+          dangerLevel,
+          source: 'EXTERNAL_API',
+          providerData: ticket.providerData,
+          drawsInRange: {
+            total: allDrawsInRange.length,
+            executed: executedDraws.length,
+            pending: pendingDraws,
+            draws: allDrawsInRange.map(d => ({
+              id: d.id,
+              drawDate: d.drawDate,
+              drawTime: d.drawTime,
+              status: d.status,
+              winnerItemId: d.winnerItemId,
+              isRelevant: itemIds.includes(d.winnerItemId)
+            }))
+          }
+        };
+      }));
+
+      // Combinar tripletas locales y externas
+      const allTripletas = [...tripletasWithDetails, ...externalTripletasWithDetails];
+
       return {
         drawId,
         itemId,
@@ -656,9 +925,9 @@ class MonitorService {
           number: itemMap.get(itemId).number,
           name: itemMap.get(itemId).name
         } : null,
-        tripletaCount: tripletasWithDetails.length,
-        totalPotentialPrize: tripletasWithDetails.reduce((sum, t) => sum + t.potentialPrize, 0),
-        tripletas: tripletasWithDetails.sort((a, b) => a.numbersRemaining - b.numbersRemaining)
+        tripletaCount: allTripletas.length,
+        totalPotentialPrize: allTripletas.reduce((sum, t) => sum + t.potentialPrize, 0),
+        tripletas: allTripletas.sort((a, b) => a.numbersRemaining - b.numbersRemaining)
       };
     } catch (error) {
       logger.error('Error obteniendo tripletas por item:', error);

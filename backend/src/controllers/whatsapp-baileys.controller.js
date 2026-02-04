@@ -325,12 +325,23 @@ class WhatsAppBaileysController {
   }
 
   /**
-   * Obtener grupos de una instancia
+   * Obtener grupos de una instancia de WhatsApp
    * GET /api/whatsapp/instances/:instanceId/groups
    */
   async getGroups(req, res) {
     try {
       const { instanceId } = req.params;
+
+      // Si es la instancia 'ws', usar el whatsapp-service en lugar de Baileys
+      if (instanceId === 'ws') {
+        const whatsappClient = (await import('../lib/whatsapp-client.js')).default;
+        const groups = await whatsappClient.getGroups();
+        return res.json({
+          success: true,
+          instanceId,
+          groups
+        });
+      }
 
       const result = await whatsappBaileysService.getGroups(instanceId);
 

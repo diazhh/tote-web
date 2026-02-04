@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import logger from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 import apiIntegrationService from '../services/api-integration.service.js';
@@ -40,9 +40,14 @@ class SyncApiTicketsJob {
    * Iniciar el job
    */
   start() {
-    this.task = cron.schedule(this.cronExpression, async () => {
+    this.task = new Cron(this.cronExpression, { 
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('Error en SyncApiTickets job:', error);
+      }
+    }, async () => {
       await this.execute();
-    }, { timezone: 'America/Caracas' });
+    });
 
     logger.info(`✅ Job SyncApiTickets iniciado (cada 5 minutos, sorteos próximos a cerrar, TZ: America/Caracas)`);
   }

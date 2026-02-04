@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
 import betSimulatorService from '../services/bet-simulator.service.js';
@@ -17,9 +17,14 @@ class SimulateBetsJob {
    * Iniciar el job
    */
   start() {
-    this.task = cron.schedule(this.cronExpression, async () => {
+    this.task = new Cron(this.cronExpression, { 
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('Error en SimulateBets job:', error);
+      }
+    }, async () => {
       await this.execute();
-    }, { timezone: 'America/Caracas' });
+    });
 
     logger.info('✅ Job SimulateBets iniciado (cada 30 minutos, TZ: America/Caracas)');
   }

@@ -139,6 +139,15 @@ const drawsAPI = {
   republish: async (id, channels = null) => {
     const response = await api.post(`/draws/${id}/republish`, { channels });
     return response.data;
+  },
+
+  /**
+   * Sincronizar IDs de sorteos desde SRQ
+   * @param {Object} data - { date: 'YYYY-MM-DD' }
+   */
+  syncDrawIds: async (data) => {
+    const response = await api.post('/draws/sync-ids', data);
+    return response.data;
   }
 };
 

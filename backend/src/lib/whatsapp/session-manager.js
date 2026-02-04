@@ -554,27 +554,74 @@ class WhatsAppSessionManager {
    */
   async getGroups(instanceId) {
     try {
-      const session = this.getSession(instanceId);
-      if (!session || session.status !== 'connected') {
-        throw new Error(`Instancia ${instanceId} no está conectada`);
+      const session = this.sessions.get(instanceId);
+      
+      if (!session || !session.socket) {
+        throw new Error('Sesión no encontrada o no conectada');
       }
 
-      // Obtener todos los chats
-      const chats = await session.socket.groupFetchAllParticipating();
+      // Caché de grupos (5 minutos)
+      if (session.groupsCache && session.groupsCacheTime) {
+        const cacheAge = Date.now() - session.groupsCacheTime;
+        if (cacheAge < 5 * 60 * 1000) {
+          whatsappLogger.info(`Usando caché de grupos para ${instanceId} (${Math.floor(cacheAge/1000)}s)`);
+          return session.groupsCache;
+        }
+      }
+
+      // Obtener todos los chats con timeout y retry
+      let chats;
+      let retries = 0;
+      const maxRetries = 2;
+      
+      while (retries <= maxRetries) {
+        try {
+          whatsappLogger.info(`Obteniendo grupos de ${instanceId} (intento ${retries + 1}/${maxRetries + 1})`);
+          chats = await Promise.race([
+            session.socket.groupFetchAllParticipating(),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Timeout al obtener grupos')), 15000)
+            )
+          ]);
+          break;
+        } catch (error) {
+          if (error.message?.includes('rate-overlimit') || error.message?.includes('Timeout')) {
+            retries++;
+            if (retries > maxRetries) {
+              // Devolver caché antigua si existe
+              if (session.groupsCache) {
+                whatsappLogger.warn(`Rate limit alcanzado, usando caché antigua para ${instanceId}`);
+                return session.groupsCache;
+              }
+              throw new Error('No se pueden obtener grupos en este momento. Intenta de nuevo en unos minutos.');
+            }
+            // Esperar antes de reintentar
+            const waitTime = retries * 3000;
+            whatsappLogger.warn(`Rate limit, esperando ${waitTime}ms antes de reintentar...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          } else {
+            throw error;
+          }
+        }
+      }
       
       // Convertir a array y filtrar solo grupos
       const groups = Object.values(chats).map(group => ({
         id: group.id,
         name: group.subject || 'Sin nombre',
-        participants: group.participants?.length || 0,
+        participantsCount: group.participants?.length || 0,
         createdAt: group.creation ? new Date(group.creation * 1000) : null,
         description: group.desc || null
       }));
 
-      logger.info(`Grupos obtenidos de ${instanceId}: ${groups.length}`);
+      // Guardar en caché
+      session.groupsCache = groups;
+      session.groupsCacheTime = Date.now();
+
+      whatsappLogger.info(`Grupos obtenidos de ${instanceId}: ${groups.length}`);
       return groups;
     } catch (error) {
-      logger.error(`Error al obtener grupos de ${instanceId}:`, error);
+      whatsappLogger.error(`Error al obtener grupos de ${instanceId}:`, error);
       throw error;
     }
   }

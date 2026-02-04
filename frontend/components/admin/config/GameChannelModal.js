@@ -12,6 +12,7 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
   const [loadingGroups, setLoadingGroups] = useState(false);
   const [whatsappInstances, setWhatsappInstances] = useState([]);
   const [whatsappGroups, setWhatsappGroups] = useState([]);
+  const [telegramInstances, setTelegramInstances] = useState([]);
   const [showVariables, setShowVariables] = useState(false);
   const [variables, setVariables] = useState([]);
   const [preview, setPreview] = useState('');
@@ -21,6 +22,7 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
     name: '',
     channelType: 'WHATSAPP',
     whatsappInstanceId: '',
+    telegramInstanceId: '',
     telegramChatId: '',
     messageTemplate: '',
     recipients: [],
@@ -37,6 +39,7 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
         name: channel.name || '',
         channelType: channel.channelType || 'WHATSAPP',
         whatsappInstanceId: channel.whatsappInstanceId || '',
+        telegramInstanceId: channel.telegramInstanceId || '',
         telegramChatId: channel.telegramChatId || '',
         messageTemplate: channel.messageTemplate || '',
         recipients: channel.recipients || [],
@@ -51,6 +54,8 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
   useEffect(() => {
     if (formData.channelType === 'WHATSAPP') {
       loadWhatsAppInstances();
+    } else if (formData.channelType === 'TELEGRAM') {
+      loadTelegramInstances();
     }
   }, [formData.channelType]);
 
@@ -85,6 +90,20 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
       toast.error('Error al cargar grupos. Asegúrate de que la instancia esté conectada.');
     } finally {
       setLoadingGroups(false);
+    }
+  };
+
+  const loadTelegramInstances = async () => {
+    setLoadingInstances(true);
+    try {
+      const telegramAPI = (await import('@/lib/api/telegram')).default;
+      const response = await telegramAPI.listInstances();
+      setTelegramInstances(response.instances || []);
+    } catch (error) {
+      console.error('Error loading Telegram instances:', error);
+      toast.error('Error al cargar instancias de Telegram');
+    } finally {
+      setLoadingInstances(false);
     }
   };
 
@@ -225,6 +244,7 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
         channelType: formData.channelType,
         name: formData.name,
         whatsappInstanceId: formData.channelType === 'WHATSAPP' ? formData.whatsappInstanceId : null,
+        telegramInstanceId: formData.channelType === 'TELEGRAM' ? formData.telegramInstanceId : null,
         telegramChatId: formData.channelType === 'TELEGRAM' ? formData.telegramChatId : null,
         messageTemplate: formData.messageTemplate,
         recipients: formData.recipients,
@@ -476,22 +496,58 @@ export default function GameChannelModal({ channel, gameId, onClose }) {
           )}
 
           {formData.channelType === 'TELEGRAM' && (
-            <div>
-              <label htmlFor="telegramChatId" className="block text-sm font-medium text-gray-700 mb-2">
-                Chat ID de Telegram *
-              </label>
-              <input
-                id="telegramChatId"
-                name="telegramChatId"
-                type="text"
-                value={formData.telegramChatId}
-                onChange={handleChange}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                required
-                disabled={loading}
-                placeholder="-1001234567890"
-              />
-            </div>
+            <>
+              {/* Instancia de Telegram */}
+              <div>
+                <label htmlFor="telegramInstanceId" className="block text-sm font-medium text-gray-700 mb-2">
+                  Instancia de Telegram *
+                </label>
+                {loadingInstances ? (
+                  <div className="text-sm text-gray-500">Cargando instancias...</div>
+                ) : (
+                  <select
+                    id="telegramInstanceId"
+                    name="telegramInstanceId"
+                    value={formData.telegramInstanceId}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    required
+                    disabled={loading}
+                  >
+                    <option value="">Selecciona una instancia</option>
+                    {telegramInstances.map((instance) => (
+                      <option key={instance.instanceId} value={instance.instanceId}>
+                        {instance.name} ({instance.instanceId}) - {instance.status === 'CONNECTED' ? '✓ Conectado' : '✗ Desconectado'}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="text-xs text-gray-500 mt-1">
+                  Selecciona la instancia de Telegram que se usará para enviar mensajes
+                </p>
+              </div>
+
+              {/* Chat ID de Telegram */}
+              <div>
+                <label htmlFor="telegramChatId" className="block text-sm font-medium text-gray-700 mb-2">
+                  Chat ID de Telegram *
+                </label>
+                <input
+                  id="telegramChatId"
+                  name="telegramChatId"
+                  type="text"
+                  value={formData.telegramChatId}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                  required
+                  disabled={loading}
+                  placeholder="-1001234567890"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  ID del canal o grupo de Telegram donde se enviarán los resultados
+                </p>
+              </div>
+            </>
           )}
 
           {/* Plantilla de Mensaje */}

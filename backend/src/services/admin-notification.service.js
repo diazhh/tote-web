@@ -61,7 +61,8 @@ class AdminNotificationService {
       maxPayout,
       potentialPayout,
       salesByItem,
-      pdfPath
+      pdfPath,
+      tripletaRiskTop5
     } = data;
 
     try {
@@ -74,7 +75,8 @@ class AdminNotificationService {
         totalSales,
         maxPayout,
         potentialPayout,
-        salesByItem
+        salesByItem,
+        tripletaRiskTop5
       });
 
       // Usar el nuevo servicio de bots de administración (con PDF si está disponible)
@@ -101,7 +103,8 @@ class AdminNotificationService {
       totalSales,
       maxPayout,
       potentialPayout,
-      salesByItem
+      salesByItem,
+      tripletaRiskTop5
     } = data;
 
     const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
@@ -128,6 +131,17 @@ class AdminNotificationService {
       });
     }
 
+    // Top 5 riesgo de tripletas
+    let tripletaRiskStr = '';
+    if (tripletaRiskTop5 && tripletaRiskTop5.length > 0) {
+      tripletaRiskStr = '\n\n🎲 <b>Top 5 Riesgo Tripletas:</b>\n';
+      tripletaRiskTop5.forEach((item, i) => {
+        const emoji = i === 0 ? '🔴' : i === 1 ? '🟠' : i === 2 ? '🟡' : '▪️';
+        const riskEmoji = item.tripletaCount >= 5 ? '⚠️' : item.tripletaCount >= 3 ? '⚡' : '📍';
+        tripletaRiskStr += `${emoji} ${item.number} (${item.name}): ${item.tripletaCount} tripletas - $${item.tripletaPrize.toFixed(2)} ${riskEmoji}\n`;
+      });
+    }
+
     const message = `
 🎯 <b>PRE-GANADOR SELECCIONADO</b>
 
@@ -147,7 +161,7 @@ class AdminNotificationService {
 • Máximo a pagar (${game.config?.percentageToDistribute || 70}%): <b>$${maxPayout.toFixed(2)}</b>
 • Pago potencial: <b>$${potentialPayout.toFixed(2)}</b>
 • Multiplicador: <b>x${prewinnerItem.multiplier}</b>
-${topItemsStr}
+${topItemsStr}${tripletaRiskStr}
 ━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ <i>Este es un número pre-seleccionado. El resultado final puede cambiar.</i>

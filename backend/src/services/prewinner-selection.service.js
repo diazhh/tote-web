@@ -133,6 +133,9 @@ class PrewinnerSelectionService {
         }
       }
 
+      // Calcular top 5 de riesgo de tripletas
+      const tripletaRiskTop5 = await this.calculateTripletaRiskTop5(draw.gameId, drawId);
+
       // Preparar datos de análisis para el PDF
       const analysisData = result.analysis || {};
       const tripletaRiskData = {
@@ -180,6 +183,7 @@ class PrewinnerSelectionService {
           potentialPayout,
           salesByItem: salesByItemForNotification,
           pdfPath,
+          tripletaRiskTop5,
           optimizerMethod: result.method,
           optimizerAnalysis: analysisData
         });
@@ -323,6 +327,98 @@ class PrewinnerSelectionService {
 
     const randomIndex = Math.floor(Math.random() * items.length);
     return items[randomIndex];
+  }
+
+  /**
+   * Calcular top 5 de números con mayor riesgo de tripletas
+   * @param {string} gameId - ID del juego
+   * @param {string} drawId - ID del sorteo actual
+   * @returns {Promise<Array>} - Top 5 números con mayor riesgo
+   */
+  async calculateTripletaRiskTop5(gameId, drawId) {
+    try {
+      // Obtener el sorteo actual
+      const currentDraw = await prisma.draw.findUnique({
+        where: { id: drawId },
+        select: { drawDate: true, drawTime: true }
+      });
+
+      if (!currentDraw) return [];
+
+      // Obtener sorteos ejecutados del mismo día
+      const executedDraws = await prisma.draw.findMany({
+        where: {
+          gameId,
+          drawDate: currentDraw.drawDate,
+          drawTime: { lt: currentDraw.drawTime },
+          status: { in: ['DRAWN', 'PUBLISHED'] },
+          winnerItemId: { not: null }
+        },
+        select: { winnerItemId: true }
+      });
+
+      const previousWinnerIds = executedDraws.map(d => d.winnerItemId);
+
+      // Obtener todas las tripletas activas
+      const activeTripletas = await prisma.ticket.findMany({
+        where: {
+          source: 'EXTERNAL_API',
+          status: 'ACTIVE',
+          providerData: {
+            path: ['type'],
+            equals: 'TRIPLETA'
+          }
+        },
+        include: {
+          details: {
+            include: {
+              gameItem: true
+            }
+          }
+        }
+      });
+
+      // Calcular riesgo por número
+      const riskByItem = new Map();
+
+      for (const tripleta of activeTripletas) {
+        const itemIds = tripleta.details.map(d => d.gameItemId);
+        const numbersAlreadyWon = itemIds.filter(id => previousWinnerIds.includes(id)).length;
+
+        // Solo contar tripletas que les falta 1 número (alto riesgo)
+        if (numbersAlreadyWon === 2) {
+          const missingItemId = itemIds.find(id => !previousWinnerIds.includes(id));
+          const missingItem = tripleta.details.find(d => d.gameItemId === missingItemId);
+          
+          if (missingItem) {
+            const existing = riskByItem.get(missingItemId) || {
+              number: missingItem.gameItem.number,
+              name: missingItem.gameItem.name,
+              tripletaCount: 0,
+              tripletaPrize: 0
+            };
+
+            const tripletaPrize = parseFloat(tripleta.totalAmount) * parseFloat(tripleta.providerData.multiplicador || 50);
+            
+            riskByItem.set(missingItemId, {
+              ...existing,
+              tripletaCount: existing.tripletaCount + 1,
+              tripletaPrize: existing.tripletaPrize + tripletaPrize
+            });
+          }
+        }
+      }
+
+      // Convertir a array y ordenar por premio potencial
+      const riskArray = Array.from(riskByItem.values())
+        .sort((a, b) => b.tripletaPrize - a.tripletaPrize)
+        .slice(0, 5);
+
+      return riskArray;
+    } catch (error) {
+      logger.error('Error calculando top 5 de riesgo de tripletas:', error);
+      return [];
+    }
   }
 
   /**

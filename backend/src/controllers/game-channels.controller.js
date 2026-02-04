@@ -98,6 +98,7 @@ export const createGameChannel = async (req, res) => {
       channelType,
       name,
       whatsappInstanceId,
+      telegramInstanceId,
       telegramChatId,
       messageTemplate,
       recipients,
@@ -147,6 +148,7 @@ export const createGameChannel = async (req, res) => {
         channelType,
         name,
         whatsappInstanceId,
+        telegramInstanceId,
         telegramChatId,
         messageTemplate: messageTemplate || messageTemplateService.getDefaultTemplate(channelType),
         recipients: recipients || [],
@@ -196,6 +198,7 @@ export const updateGameChannel = async (req, res) => {
     const {
       name,
       whatsappInstanceId,
+      telegramInstanceId,
       telegramChatId,
       messageTemplate,
       recipients,
@@ -232,6 +235,7 @@ export const updateGameChannel = async (req, res) => {
       data: {
         ...(name && { name }),
         ...(whatsappInstanceId !== undefined && { whatsappInstanceId }),
+        ...(telegramInstanceId !== undefined && { telegramInstanceId }),
         ...(telegramChatId !== undefined && { telegramChatId }),
         ...(messageTemplate && { messageTemplate }),
         ...(recipients && { recipients }),

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import drawsAPI from '@/lib/api/draws';
 import publicAPI from '@/lib/api/public';
 import { toast } from 'sonner';
-import { Calendar, Filter, RefreshCw, Plus, Edit2, Trash2, Eye, Play, Image, Send } from 'lucide-react';
+import { Calendar, Filter, RefreshCw, Plus, Edit2, Trash2, Eye, Play, Image, Send, CheckCircle, XCircle, RefreshCcw } from 'lucide-react';
 import ResponsiveTable from '@/components/common/ResponsiveTable';
 import ChangeWinnerModal from '@/components/admin/ChangeWinnerModal';
 import DrawDetailModal from '@/components/admin/DrawDetailModal';
@@ -179,6 +179,42 @@ export default function SorteosPage() {
     }
   };
 
+  // Sincronizar IDs de sorteos desde SRQ
+  const handleSyncDrawIds = async () => {
+    if (!filters.date) {
+      toast.error('Selecciona una fecha para sincronizar');
+      return;
+    }
+
+    if (!confirm(`¿Sincronizar IDs de sorteos desde SRQ para ${filters.date}?`)) return;
+    
+    try {
+      toast.loading('Sincronizando IDs desde SRQ...');
+      const response = await drawsAPI.syncDrawIds({ date: filters.date });
+      toast.dismiss();
+      if (response.success) {
+        toast.success(response.message || 'IDs sincronizados exitosamente');
+        loadDraws();
+      } else {
+        toast.error(response.error || 'Error al sincronizar');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.response?.data?.error || 'Error al sincronizar IDs');
+    }
+  };
+
+  // Verificar si un sorteo está sincronizado con SRQ
+  const isSynced = (draw) => {
+    return draw.apiMappings && draw.apiMappings.length > 0;
+  };
+
+  // Obtener el ID externo de SRQ
+  const getExternalDrawId = (draw) => {
+    if (!draw.apiMappings || draw.apiMappings.length === 0) return null;
+    return draw.apiMappings[0].externalDrawId;
+  };
+
   const getStatusBadge = (status) => {
     const styles = {
       SCHEDULED: 'bg-blue-100 text-blue-800',
@@ -214,13 +250,22 @@ export default function SorteosPage() {
             <h1 className="text-2xl font-bold text-gray-900">Gestión de Sorteos</h1>
             <p className="text-gray-600 mt-1">Administra los sorteos del sistema</p>
           </div>
-          <button
-            onClick={handleGenerateDaily}
-            className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Generar Sorteos del Día
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleSyncDrawIds}
+              className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+            >
+              <RefreshCcw className="w-4 h-4 mr-2" />
+              Sincronizar IDs SRQ
+            </button>
+            <button
+              onClick={handleGenerateDaily}
+              className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Generar Sorteos del Día
+            </button>
+          </div>
         </div>
         <RefreshControl onRefresh={loadDraws} autoRefreshIntervals={[5, 10, 30, 60]} />
       </div>
@@ -332,6 +377,21 @@ export default function SorteosPage() {
                     </div>
                   )}
                   
+                  <div className="mb-3">
+                    <p className="text-xs text-gray-500 mb-1">Estado SRQ</p>
+                    {isSynced(draw) ? (
+                      <div className="flex items-center space-x-2">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-sm text-green-600">ID: {getExternalDrawId(draw)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        <span className="text-sm text-red-600">No sincronizado</span>
+                      </div>
+                    )}
+                  </div>
+                  
                   <button
                     onClick={() => handleViewDetail(draw)}
                     className="w-full flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -388,6 +448,21 @@ export default function SorteosPage() {
                         {draw.preselectedItem.number} (Pre)
                       </div>
                     ) : <span className="text-sm text-gray-400">-</span>
+                  },
+                  {
+                    key: 'syncStatus',
+                    label: 'SRQ',
+                    render: (draw) => isSynced(draw) ? (
+                      <div className="flex items-center space-x-1">
+                        <CheckCircle className="w-4 h-4 text-green-600" />
+                        <span className="text-xs text-green-600">{getExternalDrawId(draw)}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-1">
+                        <XCircle className="w-4 h-4 text-red-600" />
+                        <span className="text-xs text-red-600">No sync</span>
+                      </div>
+                    )
                   }
                 ]}
                 actions={(draw) => (

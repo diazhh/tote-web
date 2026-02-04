@@ -49,6 +49,16 @@ async function startServer() {
       logger.info('Service ready to accept connections');
     });
     
+    // Auto-inicializar el cliente de WhatsApp
+    setTimeout(async () => {
+      try {
+        logger.info('Auto-initializing WhatsApp client...');
+        await whatsappService.initialize();
+      } catch (error) {
+        logger.error('Error auto-initializing WhatsApp client:', error);
+      }
+    }, 5000); // Esperar 5 segundos para que el servidor esté completamente listo
+    
   } catch (error) {
     logger.error('Error starting server:', error);
     process.exit(1);

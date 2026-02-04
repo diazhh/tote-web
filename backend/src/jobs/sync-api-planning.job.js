@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import logger from '../lib/logger.js';
 import apiIntegrationService from '../services/api-integration.service.js';
 
@@ -16,9 +16,14 @@ class SyncApiPlanningJob {
    * Iniciar el job
    */
   start() {
-    this.task = cron.schedule(this.cronExpression, async () => {
+    this.task = new Cron(this.cronExpression, { 
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('Error en SyncApiPlanning job:', error);
+      }
+    }, async () => {
       await this.execute();
-    }, { timezone: 'America/Caracas' });
+    });
 
     logger.info('✅ Job SyncApiPlanning iniciado (6:00 AM diario, TZ: America/Caracas)');
   }

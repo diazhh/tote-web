@@ -336,6 +336,56 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
     }
   };
 
+  const handleChangeDrawnWinner = async () => {
+    if (!selectedItemId) {
+      toast.error('Por favor selecciona un número');
+      return;
+    }
+    
+    if (!confirm('¿Estás seguro de cambiar el resultado de este sorteo? Esto actualizará el ganador pero NO totalizará automáticamente.')) {
+      return;
+    }
+    
+    setPreselecting(true);
+    try {
+      const response = await drawsAPI.changeWinner(draw.id, selectedItemId);
+      if (response.success) {
+        toast.success('Resultado actualizado. Ahora puedes totalizar si deseas.');
+        setSelectedItemId(null);
+        await loadDrawDetails();
+        if (onUpdate) onUpdate();
+      }
+    } catch (error) {
+      console.error('Error changing winner:', error);
+      toast.error('Error al cambiar el resultado');
+    } finally {
+      setPreselecting(false);
+    }
+  };
+
+  const handleTotalizeAfterChange = async () => {
+    if (!confirm(`¿Totalizar el sorteo con el nuevo resultado?`)) return;
+    
+    setLoading(true);
+    try {
+      toast.loading('Totalizando sorteo...');
+      const response = await drawsAPI.forceTotalize(drawData.id);
+      toast.dismiss();
+      if (response.success) {
+        toast.success('Sorteo totalizado exitosamente');
+        await loadDrawDetails();
+        if (onUpdate) onUpdate();
+      } else {
+        toast.error(response.error || 'Error al totalizar');
+      }
+    } catch (error) {
+      toast.dismiss();
+      toast.error(error.response?.data?.error || 'Error al totalizar sorteo');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getPublicationStatus = (status) => {
     switch (status) {
       case 'SENT':
@@ -352,6 +402,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
   const isNotTotalized = drawData.status !== 'DRAWN' && drawData.status !== 'PUBLISHED';
   const canPreselect = isNotTotalized;
   const canChangePreselected = isNotTotalized && drawData.preselectedItemId;
+  const canChangeDrawnWinner = drawData.status === 'DRAWN' && drawData.winnerItemId;
 
   if (!drawData) return null;
 
@@ -522,6 +573,59 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
                   <Edit className={`w-4 h-4 mr-2 ${preselecting ? 'animate-pulse' : ''}`} />
                   {preselecting ? 'Cambiando...' : 'Cambiar Preselección'}
                 </button>
+              </div>
+            </div>
+          )}
+
+          {/* Change Winner for DRAWN status */}
+          {canChangeDrawnWinner && drawData.game?.items && (
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 sm:p-4">
+              <h3 className="text-sm font-medium text-purple-900 mb-3 flex items-center">
+                <Edit className="w-4 h-4 mr-2 flex-shrink-0" />
+                Cambiar Resultado del Sorteo
+              </h3>
+              
+              <div className="space-y-3">
+                <div className="text-sm text-purple-700 mb-2">
+                  Actual: <span className="font-semibold">{drawData.winnerItem?.number} - {drawData.winnerItem?.name}</span>
+                </div>
+                
+                <select
+                  value={selectedItemId || ''}
+                  onChange={(e) => setSelectedItemId(e.target.value)}
+                  className="w-full px-3 sm:px-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
+                >
+                  <option value="">Seleccionar nuevo resultado...</option>
+                  {drawData.game.items.map(item => (
+                    <option key={item.id} value={item.id}>
+                      {item.number} - {item.name}
+                    </option>
+                  ))}
+                </select>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={handleChangeDrawnWinner}
+                    disabled={preselecting || !selectedItemId}
+                    className="flex items-center justify-center px-4 py-2.5 bg-purple-600 text-white text-sm sm:text-base rounded-lg hover:bg-purple-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Edit className={`w-4 h-4 mr-2 ${preselecting ? 'animate-pulse' : ''}`} />
+                    {preselecting ? 'Cambiando...' : 'Cambiar Resultado'}
+                  </button>
+                  
+                  <button
+                    onClick={handleTotalizeAfterChange}
+                    disabled={loading}
+                    className="flex items-center justify-center px-4 py-2.5 bg-green-600 text-white text-sm sm:text-base rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Play className={`w-4 h-4 mr-2 ${loading ? 'animate-pulse' : ''}`} />
+                    {loading ? 'Totalizando...' : 'Totalizar Ahora'}
+                  </button>
+                </div>
+                
+                <p className="text-xs text-purple-600 mt-2">
+                  💡 Cambia el resultado y luego totaliza para calcular premios con el nuevo ganador
+                </p>
               </div>
             </div>
           )}

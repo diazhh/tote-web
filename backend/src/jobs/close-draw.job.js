@@ -1,4 +1,4 @@
-import cron from 'node-cron';
+import { Cron } from 'croner';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
@@ -25,9 +25,14 @@ class CloseDrawJob {
    * Iniciar el job
    */
   start() {
-    this.task = cron.schedule(this.cronExpression, async () => {
+    this.task = new Cron(this.cronExpression, { 
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('Error en CloseDraws job:', error);
+      }
+    }, async () => {
       await this.execute();
-    }, { timezone: 'America/Caracas' });
+    });
 
     logger.info('✅ Job CloseDraws iniciado (cada minuto, TZ: America/Caracas)');
   }
@@ -59,6 +64,9 @@ class CloseDrawJob {
       
       // Calcular hora + 5 minutos (para cerrar sorteos 5 min antes)
       const targetDrawTime = addMinutesToTime(venezuelaTime, 5);
+
+      // Log cada ejecución para monitoreo
+      logger.info(`[CloseDraws] Ejecutando - VE Time: ${venezuelaTime}, VE Date: ${venezuelaDate.toISOString()}, Target: ${targetDrawTime}`);
 
       // Buscar sorteos que deben cerrarse (5 minutos antes)
       // Usar drawDate y drawTime (hora Venezuela directa)
@@ -253,6 +261,14 @@ class CloseDrawJob {
             logger.warn(`⚠️ Error generando PDF:`, pdfError.message);
           }
 
+          // Calcular top 5 de riesgo de tripletas
+          let tripletaRiskTop5 = [];
+          try {
+            tripletaRiskTop5 = await prewinnerSelectionService.calculateTripletaRiskTop5(draw.gameId, draw.id);
+          } catch (tripletaError) {
+            logger.warn(`⚠️ Error calculando riesgo de tripletas:`, tripletaError.message);
+          }
+
           // Enviar notificación a administradores por Telegram con PDF
           try {
             await adminNotificationService.notifyPrewinnerSelected({
@@ -265,7 +281,8 @@ class CloseDrawJob {
               maxPayout: 0,
               potentialPayout: 0,
               salesByItem: null,
-              pdfPath
+              pdfPath,
+              tripletaRiskTop5
             });
           } catch (notifyError) {
             logger.warn(`⚠️ Error al notificar cierre de sorteo:`, notifyError.message);

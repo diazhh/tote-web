@@ -58,4 +58,7 @@ router.post('/:id/regenerate-image', drawController.regenerateImage.bind(drawCon
 // POST /api/draws/:id/republish - Republicar en canales
 router.post('/:id/republish', drawController.republish.bind(drawController));
 
+// POST /api/draws/sync-ids - Sincronizar IDs desde SRQ
+router.post('/sync-ids', drawController.syncDrawIds.bind(drawController));
+
 export default router;
