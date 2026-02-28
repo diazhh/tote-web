@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import playerMovementService from './player-movement.service.js';
 import playerNotificationService from './player-notification.service.js';
+import emailService from './email.service.js';
 
 class DepositService {
   async create(userId, data) {
@@ -127,6 +128,7 @@ class DepositService {
                 id: true,
                 username: true,
                 email: true,
+                emailVerified: true,
                 phone: true,
                 balance: true
               }
@@ -160,6 +162,17 @@ class DepositService {
 
         // Notificar al jugador por WhatsApp (fire-and-forget)
         playerNotificationService.notifyDepositApproved(updatedDeposit);
+
+        // Notificar al jugador por email (fire-and-forget)
+        if (updatedDeposit.user?.email && updatedDeposit.user?.emailVerified !== false) {
+          const newBalance = parseFloat(updatedDeposit.user.balance) + parseFloat(deposit.amount);
+          emailService.sendDepositApproved(
+            updatedDeposit.user.email,
+            updatedDeposit.user.username,
+            deposit.amount,
+            newBalance
+          ).catch(err => logger.warn('Email deposit notification failed:', err.message));
+        }
 
         return updatedDeposit;
       });

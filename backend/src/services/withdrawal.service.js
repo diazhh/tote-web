@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import playerMovementService from './player-movement.service.js';
 import playerNotificationService from './player-notification.service.js';
+import emailService from './email.service.js';
 
 class WithdrawalService {
   async create(userId, data) {
@@ -72,11 +73,21 @@ class WithdrawalService {
           }
         });
 
-        logger.info('Withdrawal created', { 
-          id: withdrawal.id, 
-          userId, 
-          amount: withdrawal.amount 
+        logger.info('Withdrawal created', {
+          id: withdrawal.id,
+          userId,
+          amount: withdrawal.amount
         });
+
+        // Notificar al jugador por email (fire-and-forget)
+        if (withdrawal.user?.email) {
+          emailService.sendWithdrawalRequest(
+            withdrawal.user.email,
+            withdrawal.user.username,
+            withdrawal.amount,
+            withdrawal.createdAt
+          ).catch(err => logger.warn('Email withdrawal notification failed:', err.message));
+        }
 
         return withdrawal;
       });

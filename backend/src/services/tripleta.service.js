@@ -473,22 +473,23 @@ export class TripletaService {
     try {
       const tripleta = await prisma.tripleBet.findUnique({
         where: { id: tripletaId },
-        include: {
-          game: true,
-          item1: true,
-          item2: true,
-          item3: true,
-        },
       });
 
       if (!tripleta) {
         throw new Error('Tripleta no encontrada');
       }
 
-      // Obtener el sorteo de inicio para saber desde cuándo contar
-      const startDraw = await prisma.draw.findUnique({
-        where: { id: tripleta.startDrawId },
-      });
+      // Fetch items and game separately (no direct relations in schema)
+      const [itemsArr, startDraw] = await Promise.all([
+        prisma.gameItem.findMany({
+          where: { id: { in: [tripleta.item1Id, tripleta.item2Id, tripleta.item3Id] } },
+          select: { id: true, number: true, name: true },
+        }),
+        prisma.draw.findUnique({
+          where: { id: tripleta.startDrawId },
+        }),
+      ]);
+      const itemsMap = Object.fromEntries(itemsArr.map(i => [i.id, i]));
 
       if (!startDraw) {
         throw new Error('Sorteo de inicio no encontrado');
@@ -554,9 +555,9 @@ export class TripletaService {
         matchedCount: matchedItems.size,
         draws: drawsWithRelevance,
         tripletaItems: [
-          { id: tripleta.item1Id, number: tripleta.item1?.number, name: tripleta.item1?.name, matched: matchedItems.has(tripleta.item1Id) },
-          { id: tripleta.item2Id, number: tripleta.item2?.number, name: tripleta.item2?.name, matched: matchedItems.has(tripleta.item2Id) },
-          { id: tripleta.item3Id, number: tripleta.item3?.number, name: tripleta.item3?.name, matched: matchedItems.has(tripleta.item3Id) },
+          { id: tripleta.item1Id, number: itemsMap[tripleta.item1Id]?.number, name: itemsMap[tripleta.item1Id]?.name, matched: matchedItems.has(tripleta.item1Id) },
+          { id: tripleta.item2Id, number: itemsMap[tripleta.item2Id]?.number, name: itemsMap[tripleta.item2Id]?.name, matched: matchedItems.has(tripleta.item2Id) },
+          { id: tripleta.item3Id, number: itemsMap[tripleta.item3Id]?.number, name: itemsMap[tripleta.item3Id]?.name, matched: matchedItems.has(tripleta.item3Id) },
         ],
       };
     } catch (error) {

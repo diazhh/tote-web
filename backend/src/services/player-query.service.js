@@ -198,8 +198,11 @@ class PlayerQueryService {
             id: ticket.draw.id,
             gameName: ticket.draw.game.name,
             drawDate: ticket.draw.drawDate,
+            drawTime: ticket.draw.drawTime,
             status: ticket.draw.status,
-            winnerNumber: ticket.draw.winnerItem?.number || null
+            winnerNumber: ticket.draw.winnerItem?.number || null,
+            game: ticket.draw.game,
+            winnerItem: ticket.draw.winnerItem || null
           },
           details: ticket.details.map(detail => ({
             number: detail.gameItem.number,
@@ -268,8 +271,11 @@ class PlayerQueryService {
             id: ticket.draw.id,
             gameName: ticket.draw.game.name,
             drawDate: ticket.draw.drawDate,
+            drawTime: ticket.draw.drawTime,
             status: ticket.draw.status,
-            winnerNumber: ticket.draw.winnerItem?.number || null
+            winnerNumber: ticket.draw.winnerItem?.number || null,
+            game: ticket.draw.game,
+            winnerItem: ticket.draw.winnerItem || null
           },
           details: ticket.details.map(detail => ({
             id: detail.id,

@@ -318,6 +318,7 @@ model User {
   // Campos para jugadores (PLAYER role)
   phone                  String?   @unique
   phoneVerified          Boolean   @default(false)
+  emailVerified          Boolean   @default(false)
   whatsappVerified       Boolean   @default(false)
   whatsappNotifications  Boolean   @default(false)
   balance                Decimal   @default(0) @db.Decimal(12, 2)
@@ -328,6 +329,8 @@ model User {
   games           UserGame[]  // Juegos asociados al usuario
   telegramLinkCode TelegramLinkCode? // Código de vinculación temporal
   whatsappOtpCode  WhatsAppOtpCode?  // Código OTP de WhatsApp
+  emailVerificationCode EmailVerificationCode? // Código de verificación de email
+  passwordResetTokens   PasswordResetToken[]   // Tokens de recuperación de contraseña
   tickets         Ticket[]
   deposits        Deposit[]
   withdrawals     Withdrawal[]
@@ -730,6 +733,39 @@ model WhatsAppOtpCode {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([code])
+  @@index([expiresAt])
+}
+
+// ============================================
+// VERIFICACIÓN DE EMAIL Y RECUPERACIÓN DE CONTRASEÑA
+// ============================================
+
+model EmailVerificationCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  email     String
+  code      String   // Código de 6 dígitos
+  expiresAt DateTime
+  attempts  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, code])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
   @@index([expiresAt])
 }
 

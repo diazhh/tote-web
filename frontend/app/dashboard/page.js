@@ -7,6 +7,7 @@ import BalanceCard from '@/components/player/BalanceCard';
 import StatisticsCard from '@/components/player/StatisticsCard';
 import RecentTickets from '@/components/player/RecentTickets';
 import WhatsAppVerification from '@/components/player/WhatsAppVerification';
+import EmailVerificationBanner from '@/components/player/EmailVerificationBanner';
 import { toast } from 'sonner';
 
 export default function DashboardPage() {
@@ -107,6 +108,9 @@ export default function DashboardPage() {
         <div className="mb-8">
           <BalanceCard balance={balance} onRefresh={loadDashboardData} />
         </div>
+
+        {/* Email Verification Banner */}
+        <EmailVerificationBanner />
 
         {/* WhatsApp Verification */}
         <div className="mb-8">

@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import emailVerificationService from './email-verification.service.js';
 
 class AuthService {
   /**
@@ -341,6 +342,11 @@ class AuthService {
       });
 
       logger.info(`Jugador registrado: ${username}`);
+
+      // Enviar email de verificación (no bloqueante)
+      emailVerificationService.sendCode(user.id).catch(err => {
+        logger.warn('Could not send verification email on register:', err.message);
+      });
 
       // Generar token JWT
       const token = this.generateToken(user);
