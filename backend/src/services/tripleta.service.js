@@ -275,28 +275,33 @@ export class TripletaService {
       const tripleBet = await prisma.tripleBet.findUnique({
         where: { id },
         include: {
-          user: {
-            select: {
-              id: true,
-              username: true,
-            },
-          },
-          item1: { select: { id: true, number: true, name: true } },
-          item2: { select: { id: true, number: true, name: true } },
-          item3: { select: { id: true, number: true, name: true } },
-          game: { select: { id: true, name: true } },
+          user: { select: { id: true, username: true } },
         },
       });
 
       if (!tripleBet) return null;
 
+      // Fetch items and game separately (no relations in schema)
+      const [itemsArr, game] = await Promise.all([
+        prisma.gameItem.findMany({
+          where: { id: { in: [tripleBet.item1Id, tripleBet.item2Id, tripleBet.item3Id] } },
+          select: { id: true, number: true, name: true },
+        }),
+        prisma.game.findUnique({ where: { id: tripleBet.gameId }, select: { id: true, name: true } }),
+      ]);
+      const itemsMap = Object.fromEntries(itemsArr.map(i => [i.id, i]));
+      tripleBet.game = game;
+      const tb1 = itemsMap[tripleBet.item1Id] || { id: tripleBet.item1Id, number: '?', name: '?' };
+      const tb2 = itemsMap[tripleBet.item2Id] || { id: tripleBet.item2Id, number: '?', name: '?' };
+      const tb3 = itemsMap[tripleBet.item3Id] || { id: tripleBet.item3Id, number: '?', name: '?' };
+
       // Enrich with draws info
       try {
         const drawsInfo = await this.getDrawsForTripleta(id);
         const items = [
-          { ...tripleBet.item1, won: drawsInfo.tripletaItems[0]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item1Id) },
-          { ...tripleBet.item2, won: drawsInfo.tripletaItems[1]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item2Id) },
-          { ...tripleBet.item3, won: drawsInfo.tripletaItems[2]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item3Id) },
+          { ...tb1, won: drawsInfo.tripletaItems[0]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item1Id) },
+          { ...tb2, won: drawsInfo.tripletaItems[1]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item2Id) },
+          { ...tb3, won: drawsInfo.tripletaItems[2]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item3Id) },
         ];
         const numbersWon = items.filter(i => i.won).length;
 
@@ -316,9 +321,9 @@ export class TripletaService {
         return {
           ...tripleBet,
           items: [
-            { ...tripleBet.item1, won: false },
-            { ...tripleBet.item2, won: false },
-            { ...tripleBet.item3, won: false },
+            { ...tb1, won: false },
+            { ...tb2, won: false },
+            { ...tb3, won: false },
           ],
           numbersWon: 0,
           drawsInRange: null,

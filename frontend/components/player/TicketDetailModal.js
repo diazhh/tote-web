@@ -36,13 +36,21 @@ export default function TicketDetailModal({ ticket, onClose }) {
 
   const groupedDetails = groupDetailsByDraw();
 
-  const formatDrawDateTime = (draw) => {
+  const formatDrawDateTimeLocal = (draw) => {
     if (!draw) return 'N/A';
-    if (draw.drawDate) {
-      const date = new Date(draw.drawDate);
-      const dateStr = date.toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' });
-      const time = draw.drawTime ? draw.drawTime.substring(0, 5) : date.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
-      return `${dateStr} - ${time}`;
+    // Usar drawDate + drawTime directamente sin conversión UTC para evitar desfase horario
+    if (draw.drawDate && draw.drawTime) {
+      const datePart = typeof draw.drawDate === 'string'
+        ? draw.drawDate.substring(0, 10)  // "2026-02-28"
+        : new Date(draw.drawDate).toISOString().substring(0, 10);
+      const [y, m, d] = datePart.split('-');
+      const dateStr = `${d} ${['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'][parseInt(m)-1]}. ${y}`;
+      const time = draw.drawTime.substring(0, 5);  // "10:00"
+      const [h, min] = time.split(':');
+      const hNum = parseInt(h);
+      const ampm = hNum >= 12 ? 'p. m.' : 'a. m.';
+      const h12 = hNum % 12 || 12;
+      return `${dateStr} - ${h12}:${min} ${ampm}`;
     }
     return 'N/A';
   };
@@ -156,7 +164,7 @@ export default function TicketDetailModal({ ticket, onClose }) {
                 <div>
                   <p className="text-xs text-gray-600">Fecha del Sorteo</p>
                   <p className="font-semibold text-gray-900">
-                    {formatDrawDateTime(ticket.draw)}
+                    {formatDrawDateTimeLocal(ticket.draw)}
                   </p>
                 </div>
               </div>
@@ -194,7 +202,7 @@ export default function TicketDetailModal({ ticket, onClose }) {
                         {group.draw?.game?.name || 'Juego'}
                       </p>
                       <p className="text-xs text-blue-700">
-                        {formatDrawDateTime(group.draw) || 'Hora no disponible'}
+                        {formatDrawDateTimeLocal(group.draw) || 'Hora no disponible'}
                       </p>
                     </div>
                     {group.draw?.winnerItem && (
