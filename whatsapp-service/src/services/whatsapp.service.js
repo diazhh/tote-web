@@ -60,6 +60,10 @@ class WhatsAppService {
             '--no-zygote',
             '--disable-gpu'
           ]
+        },
+        webVersionCache: {
+          type: 'remote',
+          remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
         }
       });
 
@@ -77,6 +81,8 @@ class WhatsAppService {
   setupEventHandlers() {
     this.client.on('qr', async (qr) => {
       logger.info('QR Code received');
+      this.isReady = false;
+      this.isInitializing = false;
       this.connectionStatus = 'qr_ready';
       try {
         this.qrCode = await qrcode.toDataURL(qr);
@@ -103,15 +109,15 @@ class WhatsAppService {
       this.reconnectAttempts = 0;
 
       // Cuando hay sesión guardada, el evento 'ready' puede no dispararse
-      // Configurar timeout para forzar el estado ready si no se dispara en 60s
+      // Configurar timeout para forzar el estado ready si no se dispara en 10s
       setTimeout(() => {
         if (!this.isReady && this.connectionStatus === 'authenticated') {
-          logger.warn('Ready event not fired after 60s, forcing ready state...');
+          logger.warn('Ready event not fired after 10s, forcing ready state...');
           this.isReady = true;
           this.connectionStatus = 'connected';
           logger.info('WhatsApp client forced to ready state');
         }
-      }, 60000);
+      }, 10000);
     });
 
     this.client.on('auth_failure', (msg) => {

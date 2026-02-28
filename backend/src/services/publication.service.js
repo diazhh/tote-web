@@ -191,19 +191,7 @@ class PublicationService {
     try {
       const recipients = channel.recipients || [];
 
-      // Verificar estado del servicio WhatsApp
-      const status = await whatsappClient.getStatus();
-      
-      if (!status.isReady) {
-        logger.warn('WhatsApp service not ready, skipping publication');
-        return {
-          success: false,
-          skipped: true,
-          message: 'Servicio WhatsApp no está listo'
-        };
-      }
-
-      // Crear o actualizar registro de publicación
+      // Crear o actualizar registro de publicación PRIMERO
       const publication = await prisma.drawPublication.upsert({
         where: {
           drawId_channel: {
@@ -222,6 +210,28 @@ class PublicationService {
           retries: { increment: 1 }
         }
       });
+
+      // Verificar estado del servicio WhatsApp
+      const status = await whatsappClient.getStatus();
+      
+      if (!status.isReady) {
+        logger.warn('WhatsApp service not ready, marking as failed');
+        
+        // Marcar como fallido en la base de datos
+        await prisma.drawPublication.update({
+          where: { id: publication.id },
+          data: {
+            status: 'FAILED',
+            error: 'Servicio WhatsApp no está listo'
+          }
+        });
+        
+        return {
+          success: false,
+          skipped: true,
+          message: 'Servicio WhatsApp no está listo'
+        };
+      }
 
       if (!recipients || recipients.length === 0) {
         throw new Error('No hay destinatarios configurados para este canal');

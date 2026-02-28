@@ -30,16 +30,10 @@ class PrizeProcessorService {
         // Obtener SOLO los detalles de tickets que pertenecen a este sorteo
         // Un ticket puede tener detalles de múltiples sorteos
         // EXCLUIR tickets de tripleta externa (se verifican con lógica especial)
-        const ticketDetails = await tx.ticketDetail.findMany({
+        const allTicketDetails = await tx.ticketDetail.findMany({
           where: {
             ticket: {
-              drawId,
-              NOT: {
-                AND: [
-                  { source: 'EXTERNAL_API' },
-                  { providerData: { path: ['type'], equals: 'TRIPLETA' } }
-                ]
-              }
+              drawId
             },
             status: 'ACTIVE'
           },
@@ -51,6 +45,18 @@ class PrizeProcessorService {
               }
             }
           }
+        });
+
+        // Filtrar en código: excluir solo tripletas externas
+        const ticketDetails = allTicketDetails.filter(detail => {
+          const ticket = detail.ticket;
+          // Excluir solo si es EXTERNAL_API Y tiene type='TRIPLETA'
+          if (ticket.source === 'EXTERNAL_API' && 
+              ticket.providerData && 
+              ticket.providerData.type === 'TRIPLETA') {
+            return false;
+          }
+          return true;
         });
 
         logger.info('Found ticket details to process', { 

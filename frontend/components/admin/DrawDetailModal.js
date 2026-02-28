@@ -630,7 +630,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
             </div>
           )}
 
-          {/* Administrative Actions */}
+          {/* Administrative Actions - Siempre visible cuando hay ganador */}
           {drawData.winnerItemId && (
             <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-3 sm:p-4">
               <h3 className="text-sm font-medium text-gray-900 mb-3 flex items-center">
@@ -638,7 +638,11 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
                 Acciones Administrativas
               </h3>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <p className="text-xs text-gray-600 mb-3">
+                Reenvía el resultado a todos los canales activos (WhatsApp, Telegram, etc.)
+              </p>
+              
+              <div className="grid grid-cols-1 gap-3">
                 {/* Reenviar a todos los canales */}
                 <button
                   onClick={handleRepublishAll}
@@ -646,7 +650,9 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
                   className="flex items-center justify-center px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <SendHorizontal className={`w-4 h-4 mr-2 ${loading ? 'animate-pulse' : ''}`} />
-                  <span className="text-sm font-medium">Reenviar a Todos los Canales</span>
+                  <span className="text-sm font-medium">
+                    {loading ? 'Reenviando...' : 'Reenviar a Todos los Canales'}
+                  </span>
                 </button>
               </div>
             </div>

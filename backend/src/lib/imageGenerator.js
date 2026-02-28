@@ -138,8 +138,13 @@ export async function generateRouletteImage(drawData) {
   const basePath = path.join(BASES_PATH, '1');
   const layers = [];
   
+  // Normalize result to string: '0' stays '0', numbers 1-36 get padded
+  // Special case: 0 = DELFIN (0.png), 00 = BALLENA (00.png)
+  const resultStr = String(result);
+  const normalizedResult = resultStr === '0' ? '0' : resultStr.padStart(2, '0');
+  
   // 1. Background (color)
-  const background = getRouletteBackground(result);
+  const background = getRouletteBackground(normalizedResult);
   layers.push({
     input: path.join(basePath, background),
     top: 0,
@@ -164,7 +169,7 @@ export async function generateRouletteImage(drawData) {
   
   // 3. Number image
   layers.push({
-    input: path.join(basePath, `${result}.png`),
+    input: path.join(basePath, `${normalizedResult}.png`),
     top: 0,
     left: 0
   });
@@ -227,8 +232,9 @@ export async function generateAnimalitosImage(drawData) {
   
   // 2. Animal image
   // Special case: 0 = DELFIN (0.png), not BALLENA (00.png)
-  // Only pad numbers 1-9 with leading zero
-  const animalNumber = result === 0 ? '0' : String(result).padStart(2, '0');
+  // Normalize result to string first, then apply padding logic
+  const resultStr = String(result);
+  const animalNumber = resultStr === '0' ? '0' : resultStr.padStart(2, '0');
   layers.push({
     input: path.join(basePath, `${animalNumber}.png`),
     top: 0,

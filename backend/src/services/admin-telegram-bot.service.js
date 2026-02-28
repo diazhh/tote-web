@@ -316,7 +316,9 @@ Para volver a vincular, genera un nuevo código desde el panel de administració
 
     // Comando 'cambiar XX' para LOTTOPANTERA
     bot.onText(/^cambiar\s+(\d{1,2})$/i, async (msg, match) => {
-      await this.handleChangeResult(bot, msg, 'lottopantera', match[1].padStart(2, '0'));
+      // Special case: '0' = DELFIN, '00' = BALLENA
+      const number = match[1] === '0' ? '0' : match[1].padStart(2, '0');
+      await this.handleChangeResult(bot, msg, 'lottopantera', number);
     });
 
     // Comando 'triple XXX' para TRIPLE PANTERA
@@ -326,7 +328,9 @@ Para volver a vincular, genera un nuevo código desde el panel de administració
 
     // Comando 'panda XX' para LOTOANIMALITO
     bot.onText(/^panda\s+(\d{1,2})$/i, async (msg, match) => {
-      await this.handleChangeResult(bot, msg, 'lotoanimalito', match[1].padStart(2, '0'));
+      // Special case: '0' = DELFIN, '00' = BALLENA
+      const number = match[1] === '0' ? '0' : match[1].padStart(2, '0');
+      await this.handleChangeResult(bot, msg, 'lotoanimalito', number);
     });
 
     // Comando /ayuda para mostrar comandos de cambio

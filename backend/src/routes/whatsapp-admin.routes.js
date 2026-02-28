@@ -18,6 +18,7 @@ router.get('/groups', authenticate, getWhatsAppGroups);
 router.post('/initialize', authenticate, initializeWhatsApp);
 router.post('/logout', authenticate, logoutWhatsApp);
 router.post('/destroy', authenticate, destroyWhatsApp);
+router.post('/test', authenticate, sendTestMessage);
 router.post('/send-test', authenticate, sendTestMessage);
 
 export default router;

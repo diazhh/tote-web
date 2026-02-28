@@ -192,7 +192,7 @@ app.use('/api/system', systemConfigRoutes);
 
 // Rutas de plataformas de canales
 app.use('/api/whatsapp', whatsappBaileysRoutes);
-app.use('/api/whatsapp-admin', whatsappAdminRoutes);
+app.use('/api/admin/whatsapp', whatsappAdminRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/facebook', facebookRoutes);
@@ -294,21 +294,49 @@ async function startServer() {
       logger.info(`🔗 API: http://localhost:${PORT}/api`);
     });
 
-    // Restaurar sesiones de WhatsApp
-    try {
-      await whatsappBaileysService.restoreSessions();
-      logger.info('✅ Sesiones de WhatsApp restauradas');
-    } catch (error) {
-      logger.error('⚠️  Error al restaurar sesiones de WhatsApp:', error);
-    }
+    // Restaurar sesiones de WhatsApp (no bloqueante con timeout)
+    const restoreWhatsAppSessions = async () => {
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout restaurando sesiones de WhatsApp')), 10000)
+        );
+        
+        await Promise.race([
+          whatsappBaileysService.restoreSessions(),
+          timeoutPromise
+        ]);
+        
+        logger.info('✅ Sesiones de WhatsApp restauradas');
+      } catch (error) {
+        logger.error('⚠️  Error al restaurar sesiones de WhatsApp:', error.message);
+        logger.info('ℹ️  El servidor continuará funcionando sin WhatsApp Baileys');
+      }
+    };
+    
+    // Inicializar en segundo plano sin bloquear el servidor
+    restoreWhatsAppSessions();
 
-    // Inicializar bots de administración de Telegram
-    try {
-      await adminTelegramBotService.initialize();
-      logger.info('✅ Bots de administración de Telegram inicializados');
-    } catch (error) {
-      logger.error('⚠️  Error al inicializar bots de Telegram:', error);
-    }
+    // Inicializar bots de administración de Telegram (no bloqueante con timeout)
+    const initializeTelegramBots = async () => {
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Timeout inicializando bots de Telegram')), 10000)
+        );
+        
+        await Promise.race([
+          adminTelegramBotService.initialize(),
+          timeoutPromise
+        ]);
+        
+        logger.info('✅ Bots de administración de Telegram inicializados');
+      } catch (error) {
+        logger.error('⚠️  Error al inicializar bots de Telegram:', error.message);
+        logger.info('ℹ️  El servidor continuará funcionando sin notificaciones de Telegram');
+      }
+    };
+    
+    // Inicializar en segundo plano sin bloquear el servidor
+    initializeTelegramBots();
 
     // Iniciar sistema de Jobs
     if (process.env.ENABLE_JOBS !== 'false') {

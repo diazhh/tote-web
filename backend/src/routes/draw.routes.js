@@ -58,6 +58,9 @@ router.post('/:id/regenerate-image', drawController.regenerateImage.bind(drawCon
 // POST /api/draws/:id/republish - Republicar en canales
 router.post('/:id/republish', drawController.republish.bind(drawController));
 
+// POST /api/draws/:id/republish/:channel - Republicar en un canal específico
+router.post('/:id/republish/:channel', drawController.republishToChannel.bind(drawController));
+
 // POST /api/draws/sync-ids - Sincronizar IDs desde SRQ
 router.post('/sync-ids', drawController.syncDrawIds.bind(drawController));
 

@@ -511,6 +511,51 @@ export class DrawController {
   }
 
   /**
+   * POST /api/draws/:id/republish/:channel
+   * Reenvía el sorteo a un canal específico (desde parámetro de URL)
+   */
+  async republishToChannel(req, res, next) {
+    try {
+      const { id, channel } = req.params;
+
+      // Obtener el sorteo
+      const draw = await drawService.getDrawById(id);
+      if (!draw) {
+        return res.status(404).json({
+          success: false,
+          error: 'Sorteo no encontrado',
+        });
+      }
+
+      // Validar que tenga ganador
+      if (!draw.winnerItemId) {
+        return res.status(400).json({
+          success: false,
+          error: 'El sorteo debe tener un ganador para republicar',
+        });
+      }
+
+      // Republicar en el canal específico
+      try {
+        const result = await publicationService.republishToChannel(id, channel);
+        
+        res.json({
+          success: true,
+          data: result,
+          message: `Sorteo republicado en ${channel}`,
+        });
+      } catch (error) {
+        res.status(500).json({
+          success: false,
+          error: error.message,
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
    * POST /api/draws/sync-ids
    * Sincronizar IDs de sorteos desde SRQ
    */
