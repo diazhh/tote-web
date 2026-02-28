@@ -180,29 +180,37 @@ export class TripletaService {
       const [tripleBets, total] = await Promise.all([
         prisma.tripleBet.findMany({
           where,
-          orderBy: {
-            createdAt: 'desc',
-          },
+          orderBy: { createdAt: 'desc' },
           take: filters.limit || 50,
           skip: filters.offset || 0,
-          include: {
-            item1: { select: { id: true, number: true, name: true } },
-            item2: { select: { id: true, number: true, name: true } },
-            item3: { select: { id: true, number: true, name: true } },
-            game: { select: { id: true, name: true } },
-          },
         }),
         prisma.tripleBet.count({ where }),
       ]);
 
+      // Recolectar todos los IDs únicos de items y juegos para fetch en batch
+      const allItemIds = [...new Set(tripleBets.flatMap(b => [b.item1Id, b.item2Id, b.item3Id]))];
+      const allGameIds = [...new Set(tripleBets.map(b => b.gameId))];
+
+      const [gameItemsArr, gamesArr] = await Promise.all([
+        prisma.gameItem.findMany({ where: { id: { in: allItemIds } }, select: { id: true, number: true, name: true } }),
+        prisma.game.findMany({ where: { id: { in: allGameIds } }, select: { id: true, name: true } }),
+      ]);
+
+      const itemsMap = Object.fromEntries(gameItemsArr.map(i => [i.id, i]));
+      const gamesMap = Object.fromEntries(gamesArr.map(g => [g.id, g]));
+
       // Enrich each tripleta with items array and numbersWon
       const enriched = await Promise.all(tripleBets.map(async (bet) => {
+        const betItem1 = itemsMap[bet.item1Id] || { id: bet.item1Id, number: '?', name: '?' };
+        const betItem2 = itemsMap[bet.item2Id] || { id: bet.item2Id, number: '?', name: '?' };
+        const betItem3 = itemsMap[bet.item3Id] || { id: bet.item3Id, number: '?', name: '?' };
+        bet.game = gamesMap[bet.gameId] || null;
         try {
           const drawsInfo = await this.getDrawsForTripleta(bet.id);
           const items = [
-            { ...bet.item1, won: drawsInfo.tripletaItems[0]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item1Id) },
-            { ...bet.item2, won: drawsInfo.tripletaItems[1]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item2Id) },
-            { ...bet.item3, won: drawsInfo.tripletaItems[2]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item3Id) },
+            { ...betItem1, won: drawsInfo.tripletaItems[0]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item1Id) },
+            { ...betItem2, won: drawsInfo.tripletaItems[1]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item2Id) },
+            { ...betItem3, won: drawsInfo.tripletaItems[2]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item3Id) },
           ];
           const numbersWon = items.filter(i => i.won).length;
 
@@ -222,9 +230,9 @@ export class TripletaService {
           return {
             ...bet,
             items: [
-              { ...bet.item1, won: false },
-              { ...bet.item2, won: false },
-              { ...bet.item3, won: false },
+              { ...betItem1, won: false },
+              { ...betItem2, won: false },
+              { ...betItem3, won: false },
             ],
             numbersWon: 0,
             drawsInRange: null,

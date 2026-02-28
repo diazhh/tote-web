@@ -110,10 +110,21 @@ export default function CuentasPage() {
       setSubmitting(true);
       let response;
 
+      // Mapear campos del form a lo que espera el backend
+      const [bankCode, ...bankNameParts] = formData.bank.split(' - ');
+      const payload = {
+        bankCode: bankCode.trim(),
+        bankName: bankNameParts.join(' - ').trim(),
+        phone: formData.phone,
+        cedula: formData.idNumber,
+        holderName: formData.holderName,
+        isDefault: formData.isDefault || false,
+      };
+
       if (editingAccount) {
-        response = await pagoMovilApi.updateAccount(editingAccount.id, formData);
+        response = await pagoMovilApi.updateAccount(editingAccount.id, payload);
       } else {
-        response = await pagoMovilApi.createAccount(formData);
+        response = await pagoMovilApi.createAccount(payload);
       }
 
       if (response.success) {

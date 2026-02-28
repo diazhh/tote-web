@@ -307,12 +307,16 @@ export default function BalanceHistoricoPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
                           <p className="font-semibold text-gray-900">
-                            {getTransactionLabel(movement.type)}
+                            {movement.metadata?.gameName || getTransactionLabel(movement.type)}
                           </p>
-                          {movement.referenceType && (
-                            <span className="text-xs text-gray-500 flex items-center gap-1">
-                              {getReferenceIcon(movement.referenceType)}
-                              <span>{movement.referenceType}</span>
+                          {movement.referenceType === 'TRIPLETA' && (
+                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
+                              TRIPLETA
+                            </span>
+                          )}
+                          {movement.referenceType === 'TICKET' && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
+                              NORMAL
                             </span>
                           )}
                           {isClickable(movement) && (
@@ -321,9 +325,14 @@ export default function BalanceHistoricoPage() {
                         </div>
                         <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
                           <Calendar className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">{formatDateTime(movement.createdAt)}</span>
+                          <span className="truncate">
+                            {formatDateTime(movement.createdAt)}
+                            {movement.metadata?.drawTime && (
+                              <span className="ml-2 text-gray-400">· sorteo {movement.metadata.drawTime.slice(0,5)}</span>
+                            )}
+                          </span>
                         </div>
-                        {movement.description && (
+                        {movement.description && movement.description !== 'Jugada en sorteo' && (
                           <p className="text-sm text-gray-600 mt-1 break-words">{movement.description}</p>
                         )}
                       </div>
