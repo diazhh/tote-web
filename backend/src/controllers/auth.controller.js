@@ -185,8 +185,8 @@ class AuthController {
    */
   async updateProfile(req, res) {
     try {
-      const { email } = req.body;
-      const user = await authService.updateUser(req.user.id, { email });
+      const { username, email, phone } = req.body;
+      const user = await authService.updateProfile(req.user.id, { username, email, phone });
 
       res.json({
         success: true,
@@ -198,6 +198,16 @@ class AuthController {
         success: false,
         error: error.message
       });
+    }
+  }
+
+  async checkUsername(req, res) {
+    try {
+      const { username } = req.params;
+      const available = await authService.checkUsername(username, req.user.id);
+      res.json({ success: true, available });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 

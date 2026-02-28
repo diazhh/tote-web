@@ -12,6 +12,7 @@ router.post('/register-player', authController.registerPlayer.bind(authControlle
 router.get('/me', authenticate, authController.me.bind(authController));
 router.post('/change-password', authenticate, authController.changePassword.bind(authController));
 router.patch('/profile', authenticate, authController.updateProfile.bind(authController));
+router.get('/check-username/:username', authenticate, authController.checkUsername.bind(authController));
 
 // Rutas de administración
 router.post('/register', authenticate, authorize('ADMIN'), authController.register.bind(authController));

@@ -263,6 +263,90 @@ class AuthService {
   }
 
   /**
+   * Actualizar perfil del jugador (self-service)
+   */
+  async updateProfile(userId, data) {
+    try {
+      const currentUser = await prisma.user.findUnique({ where: { id: userId } });
+      if (!currentUser) throw new Error('Usuario no encontrado');
+
+      const updateData = {};
+
+      // Username
+      if (data.username && data.username !== currentUser.username) {
+        const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+        if (!usernameRegex.test(data.username)) {
+          throw new Error('Username debe tener 3-20 caracteres alfanuméricos');
+        }
+        const existing = await prisma.user.findFirst({
+          where: { username: data.username, id: { not: userId } }
+        });
+        if (existing) throw new Error('El nombre de usuario ya está en uso');
+        updateData.username = data.username;
+      }
+
+      // Email
+      if (data.email && data.email !== currentUser.email) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(data.email)) throw new Error('Formato de email inválido');
+        const existing = await prisma.user.findFirst({
+          where: { email: data.email, id: { not: userId } }
+        });
+        if (existing) throw new Error('El email ya está registrado');
+        updateData.email = data.email;
+        updateData.emailVerified = false;
+      }
+
+      // Phone
+      if (data.phone !== undefined && data.phone !== currentUser.phone) {
+        if (data.phone) {
+          const phoneRegex = /^(\+58|0)?4\d{9}$/;
+          if (!phoneRegex.test(data.phone.replace(/\s|-/g, ''))) {
+            throw new Error('Formato de teléfono inválido');
+          }
+          const existing = await prisma.user.findFirst({
+            where: { phone: data.phone, id: { not: userId } }
+          });
+          if (existing) throw new Error('El teléfono ya está registrado');
+        }
+        updateData.phone = data.phone || null;
+        updateData.whatsappVerified = false;
+        updateData.whatsappNotifications = false;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        throw new Error('No hay cambios para guardar');
+      }
+
+      const updated = await prisma.user.update({
+        where: { id: userId },
+        data: updateData,
+        select: {
+          id: true, username: true, email: true, phone: true, role: true,
+          emailVerified: true, whatsappVerified: true, whatsappNotifications: true,
+          balance: true, blockedBalance: true, createdAt: true
+        }
+      });
+
+      logger.info(`Perfil actualizado: ${updated.username}`, { changes: Object.keys(updateData) });
+      return updated;
+    } catch (error) {
+      logger.error('Error al actualizar perfil:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Verificar disponibilidad de username
+   */
+  async checkUsername(username, excludeUserId) {
+    const existing = await prisma.user.findFirst({
+      where: { username, id: { not: excludeUserId } }
+    });
+    return !existing;
+  }
+
+  /**
    * Registrar un nuevo jugador (público)
    */
   async registerPlayer({ username, email, password, phone }) {

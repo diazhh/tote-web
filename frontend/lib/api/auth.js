@@ -69,6 +69,14 @@ const authAPI = {
   registerPlayer: async (userData) => {
     const response = await api.post('/auth/register-player', userData);
     return response.data;
+  },
+
+  /**
+   * Verificar disponibilidad de username
+   */
+  checkUsername: async (username) => {
+    const response = await api.get(`/auth/check-username/${username}`);
+    return response.data;
   }
 };
 

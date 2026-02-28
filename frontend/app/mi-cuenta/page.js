@@ -1,17 +1,25 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, User, Mail, Phone, CheckCircle, XCircle, CreditCard, Plus, Trash2, Star, Edit2, X, Building2, Calendar } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, CheckCircle, XCircle, CreditCard, Plus, Trash2, Star, Edit2, X, Building2, Calendar, Save, Loader2, AlertTriangle, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import playerApi from '@/lib/api/player';
 import pagoMovilApi from '@/lib/api/pago-movil';
+import authAPI from '@/lib/api/auth';
 import WhatsAppVerification from '@/components/player/WhatsAppVerification';
 
 export default function MiCuentaPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState(null);
+
+  // Profile editing
+  const [editingField, setEditingField] = useState(null); // 'username' | 'email' | 'phone'
+  const [editValues, setEditValues] = useState({});
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [usernameStatus, setUsernameStatus] = useState(null); // null | 'checking' | 'available' | 'taken'
+  const [usernameTimer, setUsernameTimer] = useState(null);
 
   // Bank accounts
   const [myAccounts, setMyAccounts] = useState([]);
@@ -82,6 +90,77 @@ export default function MiCuentaPage() {
       toast.error('Error al cargar datos');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Profile editing handlers
+  const startEditing = (field) => {
+    setEditingField(field);
+    setEditValues({ ...editValues, [field]: profile?.[field] || '' });
+    setUsernameStatus(null);
+  };
+
+  const cancelEditing = () => {
+    setEditingField(null);
+    setUsernameStatus(null);
+    if (usernameTimer) clearTimeout(usernameTimer);
+  };
+
+  const handleEditChange = (field, value) => {
+    setEditValues({ ...editValues, [field]: value });
+    if (field === 'username') {
+      setUsernameStatus(null);
+      if (usernameTimer) clearTimeout(usernameTimer);
+      if (value && value !== profile?.username && value.length >= 3) {
+        const timer = setTimeout(async () => {
+          setUsernameStatus('checking');
+          try {
+            const res = await authAPI.checkUsername(value);
+            setUsernameStatus(res.available ? 'available' : 'taken');
+          } catch {
+            setUsernameStatus(null);
+          }
+        }, 500);
+        setUsernameTimer(timer);
+      }
+    }
+  };
+
+  const saveField = async (field) => {
+    const value = editValues[field];
+    if (value === profile?.[field]) {
+      cancelEditing();
+      return;
+    }
+    if (field === 'username' && usernameStatus === 'taken') {
+      toast.error('Ese nombre de usuario ya esta en uso');
+      return;
+    }
+    try {
+      setSavingProfile(true);
+      const res = await authAPI.updateProfile({ [field]: value });
+      if (res.success) {
+        setProfile(res.data);
+        // Update localStorage
+        const stored = JSON.parse(localStorage.getItem('user') || '{}');
+        if (field === 'username') stored.username = value;
+        if (field === 'email') stored.email = value;
+        if (field === 'phone') stored.phone = value;
+        localStorage.setItem('user', JSON.stringify(stored));
+
+        toast.success('Datos actualizados');
+        if (field === 'email' && value !== profile?.email) {
+          toast.info('Debes verificar tu nuevo correo electronico', { duration: 5000 });
+        }
+        if (field === 'phone' && value !== profile?.phone) {
+          toast.info('Debes verificar tu nuevo WhatsApp', { duration: 5000 });
+        }
+        cancelEditing();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.error || 'Error al guardar');
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -210,37 +289,157 @@ export default function MiCuentaPage() {
             <h2 className="text-lg font-bold text-gray-900">Datos Personales</h2>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">Usuario</p>
-              <p className="font-semibold text-gray-900">{profile?.username}</p>
-            </div>
+          <div className="space-y-4">
+            {/* Username */}
             <div className="p-4 bg-gray-50 rounded-lg">
               <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs text-gray-500 mb-1">Correo Electronico</p>
-                  <p className="font-semibold text-gray-900">{profile?.email || 'No registrado'}</p>
-                </div>
-                {profile?.email && (
-                  profile?.emailVerified ? (
-                    <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-1 rounded-full">
-                      <CheckCircle className="w-3 h-3" /> Verificado
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => router.push('/verify-email')}
-                      className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded-full hover:bg-amber-100 transition"
-                    >
-                      <XCircle className="w-3 h-3" /> Verificar
-                    </button>
-                  )
+                <p className="text-xs text-gray-500 mb-1">Usuario</p>
+                {editingField !== 'username' && (
+                  <button onClick={() => startEditing('username')} className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
                 )}
               </div>
+              {editingField === 'username' ? (
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={editValues.username || ''}
+                      onChange={(e) => handleEditChange('username', e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Nombre de usuario"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => saveField('username')}
+                      disabled={savingProfile || usernameStatus === 'taken' || usernameStatus === 'checking'}
+                      className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
+                    >
+                      {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    </button>
+                    <button onClick={cancelEditing} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {usernameStatus === 'checking' && (
+                    <p className="text-xs text-gray-500 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Verificando disponibilidad...</p>
+                  )}
+                  {usernameStatus === 'available' && (
+                    <p className="text-xs text-green-600 flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Disponible</p>
+                  )}
+                  {usernameStatus === 'taken' && (
+                    <p className="text-xs text-red-600 flex items-center gap-1"><XCircle className="w-3 h-3" /> Ya esta en uso</p>
+                  )}
+                </div>
+              ) : (
+                <p className="font-semibold text-gray-900">{profile?.username}</p>
+              )}
             </div>
+
+            {/* Email */}
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-xs text-gray-500 mb-1">Telefono</p>
-              <p className="font-semibold text-gray-900">{profile?.phone || 'No registrado'}</p>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-gray-500">Correo Electronico</p>
+                  {profile?.email && editingField !== 'email' && (
+                    profile?.emailVerified ? (
+                      <span className="flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2 py-0.5 rounded-full">
+                        <CheckCircle className="w-3 h-3" /> Verificado
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => router.push('/verify-email')}
+                        className="flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full hover:bg-amber-100 transition"
+                      >
+                        <XCircle className="w-3 h-3" /> Verificar
+                      </button>
+                    )
+                  )}
+                </div>
+                {editingField !== 'email' && (
+                  <button onClick={() => startEditing('email')} className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {editingField === 'email' ? (
+                <div className="space-y-2 mt-1">
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={editValues.email || ''}
+                      onChange={(e) => handleEditChange('email', e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="correo@ejemplo.com"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => saveField('email')}
+                      disabled={savingProfile}
+                      className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
+                    >
+                      {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    </button>
+                    <button onClick={cancelEditing} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {editValues.email !== profile?.email && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Deberas verificar tu nuevo correo
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="font-semibold text-gray-900 mt-1">{profile?.email || 'No registrado'}</p>
+              )}
             </div>
+
+            {/* Phone */}
+            <div className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">Telefono</p>
+                {editingField !== 'phone' && (
+                  <button onClick={() => startEditing('phone')} className="p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition">
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+              {editingField === 'phone' ? (
+                <div className="space-y-2 mt-1">
+                  <div className="flex gap-2">
+                    <input
+                      type="tel"
+                      value={editValues.phone || ''}
+                      onChange={(e) => handleEditChange('phone', e.target.value)}
+                      className="flex-1 px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="04141234567"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => saveField('phone')}
+                      disabled={savingProfile}
+                      className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition disabled:opacity-50"
+                    >
+                      {savingProfile ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                    </button>
+                    <button onClick={cancelEditing} className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  {editValues.phone !== profile?.phone && editValues.phone && (
+                    <p className="text-xs text-amber-600 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Deberas verificar tu WhatsApp de nuevo
+                    </p>
+                  )}
+                </div>
+              ) : (
+                <p className="font-semibold text-gray-900 mt-1">{profile?.phone || 'No registrado'}</p>
+              )}
+            </div>
+
+            {/* Member since (read-only) */}
             <div className="p-4 bg-gray-50 rounded-lg">
               <p className="text-xs text-gray-500 mb-1">Miembro desde</p>
               <p className="font-semibold text-gray-900">
