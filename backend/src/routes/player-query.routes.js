@@ -6,6 +6,7 @@ const router = express.Router();
 
 router.use(authenticate);
 
+router.get('/profile', playerQueryController.getProfile.bind(playerQueryController));
 router.get('/balance', playerQueryController.getBalance.bind(playerQueryController));
 router.get('/transactions', playerQueryController.getTransactions.bind(playerQueryController));
 router.get('/statistics', playerQueryController.getStatistics.bind(playerQueryController));

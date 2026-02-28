@@ -1,6 +1,11 @@
 import api from './axios';
 
 export const playerApi = {
+  getProfile: async () => {
+    const response = await api.get('/player/profile');
+    return response.data;
+  },
+
   getBalance: async () => {
     const response = await api.get('/player/balance');
     return response.data;

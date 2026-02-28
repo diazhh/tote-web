@@ -2,6 +2,40 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 
 class PlayerQueryService {
+  async getPlayerProfile(userId) {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          id: true,
+          username: true,
+          email: true,
+          emailVerified: true,
+          phone: true,
+          whatsappVerified: true,
+          whatsappNotifications: true,
+          balance: true,
+          blockedBalance: true,
+          createdAt: true
+        }
+      });
+
+      if (!user) {
+        throw new Error('Usuario no encontrado');
+      }
+
+      return {
+        ...user,
+        balance: parseFloat(user.balance),
+        blockedBalance: parseFloat(user.blockedBalance),
+        availableBalance: parseFloat(user.balance) - parseFloat(user.blockedBalance)
+      };
+    } catch (error) {
+      logger.error('Error getting player profile:', error);
+      throw error;
+    }
+  }
+
   async getPlayerBalance(userId) {
     try {
       const user = await prisma.user.findUnique({

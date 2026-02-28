@@ -6,8 +6,6 @@ import playerApi from '@/lib/api/player';
 import BalanceCard from '@/components/player/BalanceCard';
 import StatisticsCard from '@/components/player/StatisticsCard';
 import RecentTickets from '@/components/player/RecentTickets';
-import WhatsAppVerification from '@/components/player/WhatsAppVerification';
-import EmailVerificationBanner from '@/components/player/EmailVerificationBanner';
 import { toast } from 'sonner';
 
 export default function DashboardPage() {
@@ -92,6 +90,12 @@ export default function DashboardPage() {
                 Jugar
               </button>
               <button
+                onClick={() => router.push('/mi-cuenta')}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                Mi Cuenta
+              </button>
+              <button
                 onClick={handleLogout}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
               >
@@ -109,16 +113,20 @@ export default function DashboardPage() {
           <BalanceCard balance={balance} onRefresh={loadDashboardData} />
         </div>
 
-        {/* Email Verification Banner */}
-        <EmailVerificationBanner />
-
-        {/* WhatsApp Verification */}
-        <div className="mb-8">
-          <WhatsAppVerification
-            user={{ ...user, ...balance }}
-            onUpdate={loadDashboardData}
-          />
-        </div>
+        {/* Verification Reminder */}
+        {balance && (!balance.whatsappVerified || !user?.emailVerified) && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4 flex items-center justify-between">
+            <p className="text-sm text-blue-800">
+              Tienes verificaciones pendientes. Configura tu cuenta para mayor seguridad.
+            </p>
+            <button
+              onClick={() => router.push('/mi-cuenta')}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap ml-4"
+            >
+              Ir a Mi Cuenta
+            </button>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
@@ -142,13 +150,13 @@ export default function DashboardPage() {
             <span className="text-3xl font-bold">BALANCE / HISTÓRICO</span>
           </button>
           <button
-            onClick={() => router.push('/cuentas')}
+            onClick={() => router.push('/mi-cuenta')}
             className="bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center gap-3"
           >
             <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
             </svg>
-            <span className="text-3xl font-bold">MIS CUENTAS</span>
+            <span className="text-3xl font-bold">MI CUENTA</span>
           </button>
         </div>
 

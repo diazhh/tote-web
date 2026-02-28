@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, TrendingUp, TrendingDown, DollarSign, Calendar, Hash, Trophy, CreditCard, ChevronLeft, ChevronRight, Filter, Loader2, Layers, RefreshCw, Eye } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, DollarSign, Calendar, Hash, Trophy, CreditCard, ChevronLeft, ChevronRight, Filter, Loader2, Layers, RefreshCw, Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
 import playerApi from '@/lib/api/player';
 import tripletaAPI from '@/lib/api/tripleta';
@@ -180,6 +180,37 @@ export default function BalanceHistoricoPage() {
     });
   };
 
+  const getStatusBadge = (status) => {
+    const styles = {
+      ACTIVE: 'bg-blue-100 text-blue-700',
+      WON: 'bg-green-100 text-green-700',
+      LOST: 'bg-red-100 text-red-700',
+      CANCELLED: 'bg-gray-100 text-gray-700',
+      EXPIRED: 'bg-gray-100 text-gray-700'
+    };
+    const labels = {
+      ACTIVE: 'Activo',
+      WON: 'Ganador',
+      LOST: 'Perdedor',
+      CANCELLED: 'Cancelado',
+      EXPIRED: 'Expirado'
+    };
+    return (
+      <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${styles[status] || styles.ACTIVE}`}>
+        {labels[status] || status}
+      </span>
+    );
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'WON': return <Trophy className="w-5 h-5 text-green-600" />;
+      case 'LOST': return <X className="w-5 h-5 text-red-600" />;
+      case 'ACTIVE': return <TrendingUp className="w-5 h-5 text-blue-600" />;
+      default: return <Hash className="w-5 h-5 text-gray-600" />;
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil((pagination.total || 0) / ITEMS_PER_PAGE));
   const isClickable = (m) => m.referenceId && (m.referenceType === 'TICKET' || m.referenceType === 'TRIPLETA');
 
@@ -291,70 +322,229 @@ export default function BalanceHistoricoPage() {
             </div>
           ) : (
             <div className="space-y-3">
-              {movements.map((movement, index) => (
-                <div
-                  key={movement.id || index}
-                  className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
-                    isClickable(movement) ? 'cursor-pointer' : ''
-                  }`}
-                  onClick={() => isClickable(movement) && handleMovementClick(movement)}
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <div className="flex items-start gap-3 flex-1 min-w-0">
-                      <div className="bg-gray-100 p-3 rounded-lg flex-shrink-0">
-                        {getTransactionIcon(movement.type)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                          <p className="font-semibold text-gray-900">
-                            {movement.metadata?.gameName || getTransactionLabel(movement.type)}
+              {movements.map((movement, index) => {
+                // Enriched ticket card
+                if (movement.ticket) {
+                  const ticket = movement.ticket;
+                  return (
+                    <div
+                      key={movement.id || index}
+                      className="border rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => handleMovementClick(movement)}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-gray-100 p-2 rounded-lg">
+                            {getStatusIcon(ticket.status)}
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-gray-900">
+                                {movement.type === 'PRIZE' ? 'PREMIO' : 'TICKET'}
+                              </p>
+                              {getStatusBadge(ticket.status)}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
+                              <Hash className="w-4 h-4" />
+                              <span>{ticket.ticketNumber}</span>
+                              {ticket.draw?.gameName && (
+                                <>
+                                  <span className="text-gray-300">|</span>
+                                  <span>{ticket.draw.gameName}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-lg font-bold ${getTransactionColor(movement.type)}`}>
+                            {parseFloat(movement.amount) >= 0 ? '+' : ''}
+                            Bs. {Math.abs(parseFloat(movement.amount || 0)).toLocaleString('es-VE', {
+                              minimumFractionDigits: 2, maximumFractionDigits: 2
+                            })}
                           </p>
-                          {movement.referenceType === 'TRIPLETA' && (
-                            <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium">
-                              TRIPLETA
-                            </span>
-                          )}
-                          {movement.referenceType === 'TICKET' && (
-                            <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">
-                              NORMAL
-                            </span>
-                          )}
-                          {isClickable(movement) && (
-                            <Eye className="w-3 h-3 text-blue-400" />
-                          )}
+                          <p className="text-xs text-gray-400">
+                            Balance: Bs. {parseFloat(movement.balanceAfter || 0).toLocaleString('es-VE', {
+                              minimumFractionDigits: 2, maximumFractionDigits: 2
+                            })}
+                          </p>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                          <Calendar className="w-4 h-4 flex-shrink-0" />
-                          <span className="truncate">
-                            {formatDateTime(movement.createdAt)}
-                            {movement.metadata?.drawTime && (
-                              <span className="ml-2 text-gray-400">· sorteo {movement.metadata.drawTime.slice(0,5)}</span>
-                            )}
-                          </span>
+                      </div>
+
+                      {ticket.details && ticket.details.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {ticket.details.map((detail, idx) => (
+                            <div
+                              key={idx}
+                              className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                detail.status === 'WON'
+                                  ? 'bg-green-100 text-green-700 border-2 border-green-300'
+                                  : detail.status === 'LOST'
+                                  ? 'bg-gray-100 text-gray-500'
+                                  : 'bg-blue-100 text-blue-700'
+                              }`}
+                            >
+                              {detail.number}
+                              {detail.status === 'WON' && (
+                                <span className="ml-1">(+Bs. {parseFloat(detail.prize || 0).toFixed(2)})</span>
+                              )}
+                            </div>
+                          ))}
                         </div>
-                        {movement.description && movement.description !== 'Jugada en sorteo' && (
-                          <p className="text-sm text-gray-600 mt-1 break-words">{movement.description}</p>
-                        )}
+                      )}
+
+                      <div className="flex justify-between items-center pt-3 border-t">
+                        <div className="flex items-center gap-2 text-sm text-gray-500">
+                          <Calendar className="w-4 h-4" />
+                          <span>{formatDateTime(movement.createdAt)}</span>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleMovementClick(movement); }}
+                          className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                        >
+                          <Eye className="w-4 h-4" />
+                          Ver Detalle
+                        </button>
                       </div>
                     </div>
-                    <div className="text-right sm:text-right flex-shrink-0 sm:ml-4 pl-0 sm:pl-4 border-t sm:border-t-0 sm:border-l pt-3 sm:pt-0">
-                      <p className={`text-xl sm:text-2xl font-bold ${getTransactionColor(movement.type)} whitespace-nowrap`}>
-                        {parseFloat(movement.amount) >= 0 ? '+' : ''}
-                        Bs. {Math.abs(parseFloat(movement.amount || 0)).toLocaleString('es-VE', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        })}
-                      </p>
-                      <p className="text-xs sm:text-sm text-gray-500 mt-1 whitespace-nowrap">
-                        Balance: Bs. {parseFloat(movement.balanceAfter || 0).toLocaleString('es-VE', {
-                          minimumFractionDigits: 2,
-                          maximumFractionDigits: 2
-                        })}
-                      </p>
+                  );
+                }
+
+                // Enriched tripleta card
+                if (movement.tripleta) {
+                  const tripleta = movement.tripleta;
+                  return (
+                    <div
+                      key={movement.id || index}
+                      className="border-2 border-purple-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer bg-purple-50"
+                      onClick={() => handleMovementClick(movement)}
+                    >
+                      <div className="flex justify-between items-start mb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-purple-100 p-2 rounded-lg">
+                            <Layers className="w-5 h-5 text-purple-600" />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="font-semibold text-purple-900">
+                                {movement.type === 'PRIZE' ? 'PREMIO TRIPLETA' : 'TRIPLETA'}
+                              </p>
+                              {getStatusBadge(tripleta.status)}
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 text-sm text-purple-600">
+                              <span>{tripleta.numbersWon || 0}/3 numeros</span>
+                              <span className="text-purple-400">|</span>
+                              <span>{tripleta.drawsCount} sorteos</span>
+                              {tripleta.gameName && (
+                                <>
+                                  <span className="text-purple-400">|</span>
+                                  <span>{tripleta.gameName}</span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-lg font-bold ${getTransactionColor(movement.type)}`}>
+                            {parseFloat(movement.amount) >= 0 ? '+' : ''}
+                            Bs. {Math.abs(parseFloat(movement.amount || 0)).toLocaleString('es-VE', {
+                              minimumFractionDigits: 2, maximumFractionDigits: 2
+                            })}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            Balance: Bs. {parseFloat(movement.balanceAfter || 0).toLocaleString('es-VE', {
+                              minimumFractionDigits: 2, maximumFractionDigits: 2
+                            })}
+                          </p>
+                        </div>
+                      </div>
+
+                      {tripleta.items && tripleta.items.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {tripleta.items.map((gi, idx) => (
+                            <div
+                              key={idx}
+                              className={`px-3 py-1 rounded-lg text-sm font-semibold ${
+                                gi.won
+                                  ? 'bg-green-100 text-green-700 border-2 border-green-300'
+                                  : 'bg-purple-100 text-purple-800 border border-purple-300'
+                              }`}
+                            >
+                              {gi.number} - {gi.name}
+                              {gi.won && <span className="ml-1">✓</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex justify-between items-center pt-3 border-t border-purple-200">
+                        <div className="flex items-center gap-2 text-sm text-purple-600">
+                          <Calendar className="w-4 h-4" />
+                          <span>{formatDateTime(movement.createdAt)}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-purple-500">
+                            x{parseFloat(tripleta.multiplier || 0).toFixed(0)}
+                          </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleMovementClick(movement); }}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg hover:bg-purple-200 transition-colors text-sm font-medium"
+                          >
+                            <Eye className="w-4 h-4" />
+                            Ver Detalle
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                // Generic movement card (DEPOSIT, WITHDRAWAL, REFUND, ADJUSTMENT)
+                return (
+                  <div
+                    key={movement.id || index}
+                    className={`border rounded-lg p-4 hover:shadow-md transition-shadow ${
+                      isClickable(movement) ? 'cursor-pointer' : ''
+                    }`}
+                    onClick={() => isClickable(movement) && handleMovementClick(movement)}
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                      <div className="flex items-start gap-3 flex-1 min-w-0">
+                        <div className="bg-gray-100 p-3 rounded-lg flex-shrink-0">
+                          {getTransactionIcon(movement.type)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 mb-1">
+                            <p className="font-semibold text-gray-900">
+                              {getTransactionLabel(movement.type)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
+                            <Calendar className="w-4 h-4 flex-shrink-0" />
+                            <span className="truncate">{formatDateTime(movement.createdAt)}</span>
+                          </div>
+                          {movement.description && (
+                            <p className="text-sm text-gray-600 mt-1 break-words">{movement.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right sm:text-right flex-shrink-0 sm:ml-4 pl-0 sm:pl-4 border-t sm:border-t-0 sm:border-l pt-3 sm:pt-0">
+                        <p className={`text-xl sm:text-2xl font-bold ${getTransactionColor(movement.type)} whitespace-nowrap`}>
+                          {parseFloat(movement.amount) >= 0 ? '+' : ''}
+                          Bs. {Math.abs(parseFloat(movement.amount || 0)).toLocaleString('es-VE', {
+                            minimumFractionDigits: 2, maximumFractionDigits: 2
+                          })}
+                        </p>
+                        <p className="text-xs sm:text-sm text-gray-500 mt-1 whitespace-nowrap">
+                          Balance: Bs. {parseFloat(movement.balanceAfter || 0).toLocaleString('es-VE', {
+                            minimumFractionDigits: 2, maximumFractionDigits: 2
+                          })}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

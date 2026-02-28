@@ -3,6 +3,24 @@ import playerMovementService from '../services/player-movement.service.js';
 import logger from '../lib/logger.js';
 
 class PlayerQueryController {
+  async getProfile(req, res) {
+    try {
+      const userId = req.user.id;
+      const profile = await playerQueryService.getPlayerProfile(userId);
+
+      res.json({
+        success: true,
+        data: profile
+      });
+    } catch (error) {
+      logger.error('Error in getProfile:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error al obtener perfil'
+      });
+    }
+  }
+
   async getBalance(req, res) {
     try {
       const userId = req.user.id;

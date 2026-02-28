@@ -97,17 +97,6 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
     );
   };
 
-  const getDangerBadge = (numbersRemaining) => {
-    if (numbersRemaining === 0) {
-      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">🏆 Completa</span>;
-    } else if (numbersRemaining === 1) {
-      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">⚠️ Alto riesgo</span>;
-    } else if (numbersRemaining === 2) {
-      return <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">Riesgo medio</span>;
-    }
-    return <span className="px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">Bajo riesgo</span>;
-  };
-
   // Calculate numbers won/remaining
   const numbersWon = tripleta.numbersWon || (tripleta.items?.filter(i => i.won).length) || 0;
   const numbersRemaining = 3 - numbersWon;
@@ -220,12 +209,6 @@ export default function TripletaDetailModal({ tripleta, onClose }) {
           <div className="bg-gray-50 rounded-lg p-4">
             <p className="text-xs text-gray-600 mb-1">Multiplicador</p>
             <p className="text-xl font-bold text-purple-700">x{parseFloat(tripleta.multiplier || 0).toFixed(0)}</p>
-          </div>
-
-          {/* Risk Badge */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-            <span className="text-sm font-medium text-gray-700">Nivel de Riesgo:</span>
-            {getDangerBadge(numbersRemaining)}
           </div>
 
           {/* Numbers Selected */}

@@ -185,6 +185,7 @@ class PlayerMovementService {
 
   /**
    * Obtener historial de movimientos de un jugador
+   * Enriquece movimientos BET/PRIZE con datos del ticket o tripleta
    */
   async getPlayerMovements(userId, options = {}) {
     const { limit = 50, offset = 0, type, dateFrom, dateTo } = options;
@@ -211,7 +212,120 @@ class PlayerMovementService {
       prisma.playerMovement.count({ where })
     ]);
 
-    return { movements, total };
+    // Enriquecer movimientos con datos de ticket/tripleta
+    const enriched = await this._enrichMovements(movements);
+
+    return { movements: enriched, total };
+  }
+
+  /**
+   * Enriquecer movimientos con datos del ticket o tripleta referenciado
+   */
+  async _enrichMovements(movements) {
+    // Separar IDs por tipo de referencia
+    const ticketIds = [];
+    const tripletaIds = [];
+
+    for (const m of movements) {
+      if (m.referenceId) {
+        if (m.referenceType === 'TICKET') ticketIds.push(m.referenceId);
+        else if (m.referenceType === 'TRIPLETA') tripletaIds.push(m.referenceId);
+      }
+    }
+
+    // Fetch en batch para evitar N+1
+    const [tickets, tripletas] = await Promise.all([
+      ticketIds.length > 0
+        ? prisma.ticket.findMany({
+            where: { id: { in: [...new Set(ticketIds)] } },
+            include: {
+              draw: { include: { game: true, winnerItem: true } },
+              details: { include: { gameItem: true } }
+            }
+          })
+        : [],
+      tripletaIds.length > 0
+        ? prisma.tripleBet.findMany({
+            where: { id: { in: [...new Set(tripletaIds)] } },
+            include: {
+              game: true,
+              items: { include: { gameItem: true } },
+              draws: {
+                include: {
+                  draw: { include: { winnerItem: true } }
+                },
+                orderBy: { draw: { drawDate: 'asc' } }
+              }
+            }
+          })
+        : []
+    ]);
+
+    // Indexar por ID
+    const ticketMap = new Map(tickets.map(t => [t.id, t]));
+    const tripletaMap = new Map(tripletas.map(t => [t.id, t]));
+
+    // Enriquecer cada movimiento
+    return movements.map(m => {
+      const enriched = { ...m };
+
+      if (m.referenceType === 'TICKET' && m.referenceId) {
+        const ticket = ticketMap.get(m.referenceId);
+        if (ticket) {
+          enriched.ticket = {
+            id: ticket.id,
+            ticketNumber: ticket.ticketNumber,
+            status: ticket.status,
+            totalAmount: parseFloat(ticket.totalAmount),
+            totalPrize: parseFloat(ticket.totalPrize || 0),
+            draw: {
+              id: ticket.draw.id,
+              gameName: ticket.draw.game.name,
+              drawDate: ticket.draw.drawDate,
+              drawTime: ticket.draw.drawTime,
+              status: ticket.draw.status,
+              winnerNumber: ticket.draw.winnerItem?.number || null
+            },
+            details: ticket.details.map(d => ({
+              number: d.gameItem.number,
+              amount: parseFloat(d.amount),
+              multiplier: parseFloat(d.multiplier),
+              prize: parseFloat(d.prize || 0),
+              status: d.status
+            }))
+          };
+        }
+      } else if (m.referenceType === 'TRIPLETA' && m.referenceId) {
+        const tripleta = tripletaMap.get(m.referenceId);
+        if (tripleta) {
+          const numbersWon = tripleta.items.filter(i => i.won).length;
+          enriched.tripleta = {
+            id: tripleta.id,
+            status: tripleta.status,
+            amount: parseFloat(tripleta.amount),
+            prize: parseFloat(tripleta.prize || 0),
+            multiplier: parseFloat(tripleta.multiplier),
+            numbersWon,
+            drawsCount: tripleta.drawsCount,
+            gameName: tripleta.game?.name || null,
+            items: tripleta.items.map(i => ({
+              number: i.gameItem.number,
+              name: i.gameItem.name,
+              won: i.won
+            })),
+            draws: tripleta.draws.map(d => ({
+              drawDate: d.draw.drawDate,
+              drawTime: d.draw.drawTime,
+              status: d.draw.status,
+              winnerNumber: d.draw.winnerItem?.number || null,
+              matched: d.matched
+            }))
+          };
+        }
+      }
+
+      return enriched;
+    });
   }
 
   /**
