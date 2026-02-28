@@ -2,100 +2,212 @@
 
 ## Contexto
 
-El sistema actual tiene una jerarquia de proveedores (Comercial -> Banca -> Grupo -> Taquilla) que se usa solo para mapear datos de proveedores externos (SRQ) y para la taquilla web interna. Se necesita convertir esto en un sistema completo de taquillas fisicas con gestion multi-nivel, comisiones, cupos y un POS (punto de venta) optimizado.
+El sistema actual tiene una jerarquia de 4 niveles (Comercial -> Banca -> Grupo -> Taquilla) usada para mapear datos de proveedores externos (SRQ) y la taquilla web interna. Se necesita:
+
+1. Agregar un **nuevo nivel "Agencia"** entre Grupo y Taquilla (5 niveles total)
+2. Sistema completo de gestion multi-nivel con roles y permisos por entidad
+3. Cada entidad tiene administradores que gestionan hacia abajo
+4. Comisiones configurables (ventas, ganancias, compartidas)
+5. Cupos/limites con herencia y Redis para rendimiento
+6. Dashboards y reportes contables por entidad
+7. Interfaz POS para taquillas fisicas
+
+### Jerarquia Nueva (5 niveles)
+
+```
+Comercializador -> Banca -> Grupo -> Agencia -> Taquilla
+```
+
+- **Comercializador**: Entidad comercial de nivel superior (empresa)
+- **Banca**: Sucursal o banco dentro del comercializador
+- **Grupo**: Agrupacion logica de agencias dentro de una banca
+- **Agencia**: Establecimiento fisico que contiene taquillas (NIVEL NUEVO)
+- **Taquilla**: Punto de venta individual dentro de una agencia
+
+> La jerarquia existente (Comercial -> Banca -> Grupo -> Taquilla) de 4 niveles se mantiene para SRQ. Para taquillas fisicas se usa la nueva de 5 niveles con Agencia intercalada.
 
 ---
 
-## Fase 1: Modelo de Datos y Migracion de Esquema
+## Fase 1: Modelo de Datos y Migracion
 
-### 1.1 Renombrar entidades en el esquema Prisma
-
-La jerarquia actual `ProviderComercial -> ProviderBanca -> ProviderGrupo -> ProviderTaquilla` se renombra conceptualmente:
-
-- **Comercializador** (era ProviderComercial) - Entidad comercial de nivel superior
-- **Banca** (era ProviderBanca) - Banco/sucursal
-- **Agencia** (era ProviderGrupo) - Agencia que agrupa taquillas
-- **Taquilla** (era ProviderTaquilla) - Punto de venta fisico
-
-> **Decision**: No renombrar las tablas en la DB para no romper lo existente. En su lugar, agregar campos nuevos a los modelos existentes y crear modelos nuevos para comisiones/cupos. Las relaciones con SRQ siguen funcionando igual.
-
-### 1.2 Nuevos campos en modelos existentes (schema.prisma)
+### 1.1 Nuevo modelo: ProviderAgencia
 
 ```prisma
-// Agregar a ProviderComercial, ProviderBanca, ProviderGrupo, ProviderTaquilla:
-model ProviderComercial {
-  // ... campos existentes ...
-  type          EntityType    @default(EXTERNAL)  // EXTERNAL (SRQ), PHYSICAL, INTERNAL (web)
-  adminUserId   String?       // Usuario administrador de esta entidad
-  adminUser     User?         @relation("ComercialAdmin", fields: [adminUserId], references: [id])
-  config        Json?         // Configuracion general de la entidad
-}
+model ProviderAgencia {
+  id          String    @id @default(uuid())
+  externalId  Int?
+  grupoId     String
+  name        String    @default("Agencia")
+  isActive    Boolean   @default(true)
+  type        EntityType @default(PHYSICAL)
+  config      Json?     // Configuraciones generales
+  address     String?   // Direccion fisica
+  phone       String?   // Telefono de contacto
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-// Similar para Banca, Grupo, Taquilla
-model ProviderTaquilla {
-  // ... campos existentes ...
-  type          EntityType    @default(EXTERNAL)
-  operatorUserId String?      // Taquillero asignado
-  operatorUser  User?         @relation("TaquillaOperator", fields: [operatorUserId], references: [id])
-  config        Json?
-  isPhysical    Boolean       @default(false)
+  grupo       ProviderGrupo     @relation(fields: [grupoId], references: [id])
+  taquillas   ProviderTaquilla[]
+
+  @@unique([grupoId, externalId])
+  @@index([grupoId])
 }
 ```
 
-### 1.3 Nuevos modelos
+### 1.2 Modificacion a ProviderTaquilla
+
+Agregar relacion opcional a Agencia (para taquillas fisicas):
 
 ```prisma
-// ===== COMISIONES =====
+model ProviderTaquilla {
+  // ... campos existentes ...
+  agenciaId     String?       // null para taquillas SRQ/online, set para fisicas
+  isPhysical    Boolean       @default(false)
+  type          EntityType    @default(EXTERNAL)
+  config        Json?
+
+  agencia       ProviderAgencia? @relation(fields: [agenciaId], references: [id])
+}
+```
+
+### 1.3 Campos adicionales en modelos existentes
+
+Agregar a ProviderComercial, ProviderBanca, ProviderGrupo:
+
+```prisma
+// En cada modelo:
+  type        EntityType  @default(EXTERNAL)  // EXTERNAL, PHYSICAL, INTERNAL
+  config      Json?       // Configuraciones de la entidad
+```
+
+### 1.4 Enum EntityType
+
+```prisma
+enum EntityType {
+  EXTERNAL    // Proveedor externo (SRQ)
+  PHYSICAL    // Taquilla fisica
+  INTERNAL    // Taquilla web interna
+}
+```
+
+### 1.5 Modelo UserEntity (relacion usuario-entidad)
+
+```prisma
+model UserEntity {
+  id          String      @id @default(uuid())
+  userId      String
+  entityType  EntityLevel // COMERCIAL, BANCA, GRUPO, AGENCIA, TAQUILLA
+  entityId    String
+  role        EntityRole  // ADMIN, OPERATOR, VIEWER
+  isActive    Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id])
+
+  @@unique([userId, entityType, entityId])
+  @@index([entityType, entityId])
+  @@index([userId])
+}
+
+enum EntityLevel {
+  COMERCIAL
+  BANCA
+  GRUPO
+  AGENCIA
+  TAQUILLA
+}
+
+enum EntityRole {
+  ADMIN       // Gestiona la entidad y crea sub-entidades y usuarios
+  OPERATOR    // Opera (vende en taquilla, procesa pagos)
+  VIEWER      // Solo ve reportes
+}
+```
+
+### 1.6 Nuevos roles de usuario
+
+```prisma
+enum UserRole {
+  ADMIN               // Admin del sistema (existente)
+  OPERATOR            // Operador de sorteos (existente)
+  VIEWER              // Solo lectura (existente)
+  PLAYER              // Jugador online (existente)
+  TAQUILLA_ADMIN      // Admin taquilla online (existente)
+  COMERCIALIZADOR     // NUEVO - admin de comercializadora
+  BANCA_ADMIN         // NUEVO - admin de banca
+  GRUPO_ADMIN         // NUEVO - admin de grupo
+  AGENCIA_ADMIN       // NUEVO - admin de agencia
+  TAQUILLERO          // NUEVO - operador de taquilla fisica
+}
+```
+
+### 1.7 Modelo EntityCommission (comisiones)
+
+```prisma
 model EntityCommission {
-  id              String    @id @default(uuid())
-  entityType      EntityLevel   // COMERCIAL, BANCA, GRUPO, TAQUILLA
-  entityId        String
-  gameId          String?       // null = aplica a todos los juegos
-  commissionType  CommissionType // SALES, PROFIT, BOTH
-  salesPercent    Decimal   @default(0) @db.Decimal(5, 2)  // % de ventas
-  profitPercent   Decimal   @default(0) @db.Decimal(5, 2)  // % de ganancias
-  shareLosses     Boolean   @default(false) // Si es PROFIT y hay perdidas, comparte?
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  game            Game?     @relation(fields: [gameId], references: [id])
-
-  @@unique([entityType, entityId, gameId])
-}
-
-enum CommissionType {
-  SALES       // Solo de las ventas (siempre gana)
-  PROFIT      // Solo de las ganancias (si pierde, no pierde)
-  SHARED      // Ganancias compartidas (si pierde, ambos pierden proporcionalmente)
-}
-
-// ===== CUPOS / LIMITES =====
-model EntityQuota {
-  id              String    @id @default(uuid())
+  id              String          @id @default(uuid())
   entityType      EntityLevel
   entityId        String
-  gameId          String?       // null = todos los juegos
-  gameItemId      String?       // null = todos los numeros
-  scope           QuotaScope    // GLOBAL, PER_DRAW, PER_NUMBER
-  maxAmount       Decimal   @db.Decimal(12, 2)  // Monto maximo
-  isActive        Boolean   @default(true)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  gameId          String?         // null = todos los juegos
+  commissionType  CommissionType
+  salesPercent    Decimal         @default(0) @db.Decimal(5, 2)
+  profitPercent   Decimal         @default(0) @db.Decimal(5, 2)
+  shareLosses     Boolean         @default(false)
+  isActive        Boolean         @default(true)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  game            Game?     @relation(fields: [gameId], references: [id])
-  gameItem        GameItem? @relation(fields: [gameItemId], references: [id])
+  game            Game?           @relation(fields: [gameId], references: [id])
 
+  @@unique([entityType, entityId, gameId])
   @@index([entityType, entityId])
 }
 
-enum QuotaScope {
-  GLOBAL          // Limite global para la entidad (sin importar numero)
-  PER_DRAW        // Limite por sorteo
-  PER_NUMBER      // Limite por numero por sorteo
+enum CommissionType {
+  SALES       // % de ventas brutas (siempre gana, haya perdida o no)
+  PROFIT      // % de ganancias netas (si hay perdida, no pierde)
+  SHARED      // % de ganancias compartidas (si hay perdida, pierde proporcionalmente)
+}
+```
+
+### 1.8 Modelo EntityQuota (cupos/limites)
+
+```prisma
+model EntityQuota {
+  id              String      @id @default(uuid())
+  entityType      EntityLevel
+  entityId        String
+  gameId          String?     // null = todos los juegos
+  gameItemId      String?     // null = todos los numeros
+  scope           QuotaScope
+  maxAmount       Decimal     @db.Decimal(12, 2)
+  isInherited     Boolean     @default(false) // Si fue heredado de entidad padre
+  parentQuotaId   String?     // Referencia al cupo padre si es heredado
+  isActive        Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  game            Game?       @relation(fields: [gameId], references: [id])
+  gameItem        GameItem?   @relation(fields: [gameItemId], references: [id])
+  usage           QuotaUsage[]
+
+  @@index([entityType, entityId])
+  @@index([gameId])
+  @@index([parentQuotaId])
 }
 
-// ===== USO DE CUPOS EN TIEMPO REAL (respaldado por Redis) =====
+enum QuotaScope {
+  GLOBAL          // Limite total de la entidad (todas las ventas)
+  PER_DRAW        // Limite por sorteo
+  PER_NUMBER      // Limite por numero por sorteo
+  PER_GAME        // Limite por juego
+}
+```
+
+### 1.9 Modelo QuotaUsage (uso en tiempo real)
+
+```prisma
 model QuotaUsage {
   id          String    @id @default(uuid())
   quotaId     String
@@ -109,56 +221,87 @@ model QuotaUsage {
 
   @@unique([quotaId, drawId, gameItemId])
 }
+```
 
-// ===== CONTABILIDAD POR ENTIDAD =====
+### 1.10 Modelo EntityLedger (contabilidad)
+
+```prisma
 model EntityLedger {
-  id              String    @id @default(uuid())
-  entityType      EntityLevel
-  entityId        String
-  drawId          String
-  gameId          String
-  totalSales      Decimal   @default(0) @db.Decimal(12, 2)
-  totalPrizes     Decimal   @default(0) @db.Decimal(12, 2)
-  grossProfit     Decimal   @default(0) @db.Decimal(12, 2)
-  commissionSales Decimal   @default(0) @db.Decimal(12, 2)
-  commissionProfit Decimal  @default(0) @db.Decimal(12, 2)
-  netResult       Decimal   @default(0) @db.Decimal(12, 2)
-  ticketCount     Int       @default(0)
-  status          LedgerStatus @default(PENDING)
-  calculatedAt    DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                String        @id @default(uuid())
+  entityType        EntityLevel
+  entityId          String
+  drawId            String
+  gameId            String
 
-  draw            Draw      @relation(fields: [drawId], references: [id])
+  // Ventas
+  totalSales        Decimal       @default(0) @db.Decimal(12, 2)
+  ticketCount       Int           @default(0)
+  detailCount       Int           @default(0)
+
+  // Premios
+  totalPrizes       Decimal       @default(0) @db.Decimal(12, 2)
+  winnerCount       Int           @default(0)
+
+  // Ganancias brutas
+  grossProfit       Decimal       @default(0) @db.Decimal(12, 2)
+
+  // Comisiones calculadas
+  commissionSales   Decimal       @default(0) @db.Decimal(12, 2)
+  commissionProfit  Decimal       @default(0) @db.Decimal(12, 2)
+  totalCommission   Decimal       @default(0) @db.Decimal(12, 2)
+
+  // Resultado neto (ganancia bruta - comisiones)
+  netResult         Decimal       @default(0) @db.Decimal(12, 2)
+
+  status            LedgerStatus  @default(PENDING)
+  calculatedAt      DateTime?
+  settledAt         DateTime?
+  settledByUserId   String?
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  draw              Draw          @relation(fields: [drawId], references: [id])
 
   @@unique([entityType, entityId, drawId, gameId])
   @@index([entityType, entityId])
   @@index([drawId])
+  @@index([status])
 }
 
 enum LedgerStatus {
-  PENDING       // Sorteo no ha ocurrido
-  CALCULATED    // Comisiones calculadas
+  PENDING       // Sorteo no ejecutado aun
+  CALCULATED    // Comisiones calculadas post-sorteo
   SETTLED       // Liquidado/pagado
+  DISPUTED      // En disputa
 }
+```
 
-// ===== VENTAS EN TAQUILLA FISICA =====
+### 1.11 Modelo PhysicalSale (ventas fisicas)
+
+```prisma
 model PhysicalSale {
-  id              String    @id @default(uuid())
-  taquillaId      String    // ProviderTaquilla.id
-  ticketId        String    // Ticket generado
-  clientName      String?   // Nombre del cliente (opcional)
-  clientPhone     String?   // Telefono del cliente (opcional)
+  id              String        @id @default(uuid())
+  taquillaId      String
+  ticketId        String
+  operatorUserId  String        // Taquillero que realizo la venta
+  clientName      String?
+  clientPhone     String?
   paymentMethod   PaymentMethod @default(CASH)
-  amountReceived  Decimal   @db.Decimal(12, 2)
-  changeGiven     Decimal   @default(0) @db.Decimal(12, 2)
-  createdAt       DateTime  @default(now())
+  amountReceived  Decimal       @db.Decimal(12, 2)
+  changeGiven     Decimal       @default(0) @db.Decimal(12, 2)
+  isCancelled     Boolean       @default(false)
+  cancelledAt     DateTime?
+  cancelledByUserId String?
+  createdAt       DateTime      @default(now())
 
   taquilla        ProviderTaquilla @relation(fields: [taquillaId], references: [id])
-  ticket          Ticket    @relation(fields: [ticketId], references: [id])
+  ticket          Ticket           @relation(fields: [ticketId], references: [id])
+  operator        User             @relation("SaleOperator", fields: [operatorUserId], references: [id])
 
   @@index([taquillaId])
-  @@index([ticketId])
+  @@index([operatorUserId])
+  @@index([createdAt])
 }
 
 enum PaymentMethod {
@@ -168,57 +311,10 @@ enum PaymentMethod {
 }
 ```
 
-### 1.4 Nuevos roles de usuario
-
-```prisma
-enum UserRole {
-  ADMIN               // Existente - admin del sistema
-  OPERATOR            // Existente - operador de sorteos
-  VIEWER              // Existente
-  PLAYER              // Existente - jugador online
-  TAQUILLA_ADMIN      // Existente - admin taquilla online
-  COMERCIALIZADOR     // NUEVO - admin de comercializadora
-  BANCA_ADMIN         // NUEVO - admin de banca
-  AGENCIA_ADMIN       // NUEVO - admin de agencia
-  TAQUILLERO          // NUEVO - operador de taquilla fisica
-}
-```
-
-### 1.5 Relacion Usuario-Entidad
-
-```prisma
-model UserEntity {
-  id          String      @id @default(uuid())
-  userId      String
-  entityType  EntityLevel
-  entityId    String
-  role        EntityRole  // ADMIN, OPERATOR, VIEWER
-  isActive    Boolean     @default(true)
-  createdAt   DateTime    @default(now())
-
-  user        User        @relation(fields: [userId], references: [id])
-
-  @@unique([userId, entityType, entityId])
-  @@index([entityType, entityId])
-}
-
-enum EntityRole {
-  ADMIN       // Puede gestionar la entidad y crear sub-entidades
-  OPERATOR    // Puede operar (vender en taquilla)
-  VIEWER      // Solo puede ver reportes
-}
-
-enum EntityLevel {
-  COMERCIAL
-  BANCA
-  GRUPO       // Agencia
-  TAQUILLA
-}
-```
-
-### Archivos a modificar:
-- `backend/prisma/schema.prisma` - Agregar todos los modelos y enums nuevos
+### Archivos a modificar en Fase 1:
+- `backend/prisma/schema.prisma` - Todos los modelos y enums nuevos
 - Crear migracion Prisma
+- `backend/prisma/seed-taquilla-web.js` - Actualizar seed si necesario
 
 ---
 
@@ -228,99 +324,296 @@ enum EntityLevel {
 
 **Archivo nuevo**: `backend/src/services/entity-management.service.js`
 
-Funcionalidad:
-- CRUD completo para cada nivel de la jerarquia
-- Validacion de permisos: un usuario solo puede gestionar entidades dentro de su scope
-- `createComercializador(data, createdByUserId)` - Solo ADMIN del sistema
-- `createBanca(comercialId, data, createdByUserId)` - ADMIN o COMERCIALIZADOR
-- `createAgencia(bancaId, data, createdByUserId)` - ADMIN, COMERCIALIZADOR o BANCA_ADMIN
-- `createTaquilla(grupoId, data, createdByUserId)` - ADMIN, COMERCIALIZADOR, BANCA_ADMIN o AGENCIA_ADMIN
-- `getEntityTree(entityType, entityId)` - Arbol completo de sub-entidades
-- `getEntityAncestors(entityType, entityId)` - Cadena de entidades padre
-- `assignUserToEntity(userId, entityType, entityId, role)` - Asignar usuario a entidad
-- `getUserEntities(userId)` - Todas las entidades que puede gestionar un usuario
+#### CRUD por nivel:
+
+```javascript
+// Comercializador (solo ADMIN del sistema puede crear)
+createComercializador(data)           // Crea entidad + opcionalmente usuario admin
+getComercializadores(filters)         // Lista con paginacion
+getComercializadorById(id)            // Detalle con conteo de sub-entidades
+updateComercializador(id, data)       // Actualizar nombre, config, estado
+deactivateComercializador(id)         // Desactivar (soft delete)
+
+// Banca (ADMIN o admin del comercializador padre)
+createBanca(comercialId, data)
+getBancas(comercialId, filters)
+getBancaById(id)
+updateBanca(id, data)
+deactivateBanca(id)
+
+// Grupo (ADMIN, admin comercializador, o admin de banca)
+createGrupo(bancaId, data)
+getGrupos(bancaId, filters)
+getGrupoById(id)
+updateGrupo(id, data)
+deactivateGrupo(id)
+
+// Agencia (ADMIN, admin comercializador, admin banca, o admin grupo)
+createAgencia(grupoId, data)
+getAgencias(grupoId, filters)
+getAgenciaById(id)
+updateAgencia(id, data)
+deactivateAgencia(id)
+
+// Taquilla (cualquier admin de nivel superior o admin agencia)
+createTaquilla(agenciaId, data)
+getTaquillas(agenciaId, filters)
+getTaquillaById(id)
+updateTaquilla(id, data)
+deactivateTaquilla(id)
+```
+
+#### Gestion de arbol:
+
+```javascript
+// Arbol completo filtrado por permisos del usuario
+getEntityTree(userId)
+
+// Arbol desde una entidad especifica hacia abajo
+getSubTree(entityType, entityId)
+
+// Cadena de ancestros de una entidad (para breadcrumbs)
+getAncestors(entityType, entityId)
+
+// Contadores de sub-entidades
+getEntityCounts(entityType, entityId)
+// Retorna: { bancas: 5, grupos: 12, agencias: 34, taquillas: 128 }
+```
+
+#### Gestion de usuarios por entidad:
+
+```javascript
+// Crear usuario y asignarlo a una entidad
+createEntityUser(entityType, entityId, userData, role)
+// - Crea el User con el UserRole correspondiente
+// - Crea el UserEntity con el EntityRole
+// - Genera credenciales y las retorna
+
+// Asignar usuario existente a una entidad
+assignUserToEntity(userId, entityType, entityId, role)
+
+// Listar usuarios de una entidad
+getEntityUsers(entityType, entityId)
+// Retorna: [{ user, role, assignedAt }]
+
+// Cambiar rol de un usuario en una entidad
+updateUserEntityRole(userId, entityType, entityId, newRole)
+
+// Remover usuario de una entidad
+removeUserFromEntity(userId, entityType, entityId)
+
+// Obtener todas las entidades de un usuario
+getUserEntities(userId)
+// Retorna: [{ entityType, entityId, entityName, role, parentChain }]
+```
 
 ### 2.2 Servicio de Comisiones (`commission.service.js`)
 
 **Archivo nuevo**: `backend/src/services/commission.service.js`
 
-Funcionalidad:
-- `setCommission(entityType, entityId, config)` - Configurar comision
-- `getCommission(entityType, entityId, gameId?)` - Obtener configuracion
-- `calculateCommissions(drawId)` - Calcular comisiones post-sorteo para todas las entidades
-- Logica:
-  - **SALES**: comision = totalVentas * salesPercent / 100 (siempre positivo)
-  - **PROFIT**: comision = max(0, ganancia * profitPercent / 100) (nunca pierde)
-  - **SHARED**: comision = ganancia * profitPercent / 100 (puede ser negativo si hay perdida)
-- Se calcula de abajo hacia arriba (Taquilla -> Agencia -> Banca -> Comercializador)
-- Cada nivel puede tener su propia configuracion
+```javascript
+// Configurar comision de una entidad
+setCommission(entityType, entityId, config)
+// config: { commissionType, salesPercent, profitPercent, shareLosses, gameId? }
+
+// Obtener comision configurada
+getCommission(entityType, entityId, gameId?)
+
+// Obtener comisiones de toda la cadena (para vista en cascada)
+getCommissionChain(entityType, entityId, gameId?)
+// Retorna: [
+//   { level: 'COMERCIAL', name: 'Comercial X', salesPercent: 5, profitPercent: 10, type: 'SHARED' },
+//   { level: 'BANCA', name: 'Banca Y', salesPercent: 3, profitPercent: 8, type: 'PROFIT' },
+//   { level: 'GRUPO', name: 'Grupo Z', salesPercent: 2, profitPercent: 0, type: 'SALES' },
+//   { level: 'AGENCIA', name: 'Agencia W', salesPercent: 1, profitPercent: 5, type: 'SHARED' },
+//   { level: 'TAQUILLA', name: 'Taq #12', salesPercent: 0, profitPercent: 0, type: 'SALES' },
+// ]
+// + totalSalesPercent, totalProfitPercent, warning si > 100%
+
+// Calcular comisiones para un sorteo (post-sorteo)
+calculateCommissions(drawId)
+// 1. Obtener todos los tickets del sorteo con providerData
+// 2. Agrupar ventas y premios por cada entidad en cada nivel
+// 3. Para cada entidad, aplicar su configuracion de comision:
+//    - SALES: comision = totalVentas * salesPercent / 100
+//    - PROFIT: comision = max(0, ganancia * profitPercent / 100)
+//    - SHARED: comision = ganancia * profitPercent / 100 (puede ser negativo)
+// 4. Crear/actualizar EntityLedger por cada entidad
+// 5. Calcular de abajo (taquilla) hacia arriba (comercializador)
+
+// Vista previa: que pasaria con un sorteo hipotetico
+simulateCommissions(entityType, entityId, salesAmount, prizeAmount)
+```
 
 ### 2.3 Servicio de Cupos (`quota.service.js`)
 
 **Archivo nuevo**: `backend/src/services/quota.service.js`
 
-Funcionalidad:
-- `setQuota(entityType, entityId, config)` - Configurar cupo
-- `checkQuota(taquillaId, drawId, gameItemId, amount)` - Verificar si una apuesta cabe dentro del cupo
-- `getAvailableQuota(entityType, entityId, drawId, gameItemId?)` - Cupo disponible
-- `updateQuotaUsage(taquillaId, drawId, gameItemId, amount)` - Registrar uso
+```javascript
+// Configurar cupo
+setQuota(entityType, entityId, config)
+// config: { scope, maxAmount, gameId?, gameItemId? }
 
-**Logica de herencia de cupos:**
-1. Un cupo en nivel GRUPO limita a TODAS las taquillas del grupo combinadas
-2. Un cupo en nivel BANCA limita a TODOS los grupos de esa banca combinados
-3. Al verificar cupo de una taquilla, se revisa toda la cadena hacia arriba
-4. El cupo efectivo es el MINIMO disponible en toda la cadena
+// Obtener cupos de una entidad
+getQuotas(entityType, entityId)
 
-### 2.4 Integracion con Redis (`quota-cache.service.js`)
+// Obtener cupos en cascada (toda la cadena)
+getQuotaChain(entityType, entityId, drawId, gameItemId?)
+// Retorna para cada nivel: cupo configurado, cupo usado, cupo disponible
+// Ejemplo:
+// [
+//   { level: 'BANCA', name: 'Banca Y', maxAmount: 10000, used: 3500, available: 6500 },
+//   { level: 'GRUPO', name: 'Grupo Z', maxAmount: 5000, used: 2000, available: 3000 },
+//   { level: 'AGENCIA', name: 'Agencia W', maxAmount: 2000, used: 800, available: 1200 },
+//   { level: 'TAQUILLA', name: 'Taq #12', maxAmount: 500, used: 150, available: 350 },
+// ]
+// effectiveAvailable: min(6500, 3000, 1200, 350) = 350
+
+// Verificar si una venta cabe en el cupo
+checkQuota(taquillaId, drawId, gameItemId, amount)
+// 1. Buscar cupos de la taquilla y todos sus ancestros
+// 2. Para cada cupo, obtener uso actual (Redis primero, luego DB)
+// 3. Verificar que ninguno se exceda
+// Retorna: { allowed: true/false, effectiveAvailable: number, details: [...] }
+
+// Registrar uso de cupo
+consumeQuota(taquillaId, drawId, gameItemId, amount)
+// Actualiza uso en Redis y encola sync a DB
+
+// Liberar cupo (cuando se anula una venta)
+releaseQuota(taquillaId, drawId, gameItemId, amount)
+
+// Vista de cupos de un sorteo para una entidad y todos sus hijos
+getQuotaUsageMatrix(entityType, entityId, drawId)
+// Retorna una tabla/matriz:
+// Filas: numeros (gameItems)
+// Columnas: entidades hijas
+// Valores: monto usado / cupo maximo
+```
+
+### 2.4 Cache Redis para Cupos (`quota-cache.service.js`)
 
 **Archivo nuevo**: `backend/src/services/quota-cache.service.js`
 
-- Redis como cache de cupos en tiempo real
-- Keys: `quota:{drawId}:{entityType}:{entityId}:{gameItemId}` -> monto usado
-- Operaciones atomicas con INCRBY para evitar race conditions
-- TTL basado en el cierre del sorteo
-- Fallback a PostgreSQL si Redis no esta disponible
-- Sync periodico Redis -> QuotaUsage (cada 30s o al cerrar sorteo)
+```javascript
+// Keys en Redis:
+// quota:usage:{drawId}:{entityType}:{entityId}:{gameItemId} -> monto usado (string numerico)
+// quota:limit:{entityType}:{entityId}:{scope}:{gameItemId?} -> limite maximo
+
+// Operaciones atomicas:
+incrementUsage(drawId, entityType, entityId, gameItemId, amount)
+// Usa INCRBYFLOAT para atomicidad
+
+decrementUsage(drawId, entityType, entityId, gameItemId, amount)
+
+getUsage(drawId, entityType, entityId, gameItemId)
+
+// Bulk: obtener uso de toda una cadena de entidades
+getChainUsage(drawId, entityChain, gameItemId)
+
+// Sync Redis -> PostgreSQL
+syncToDatabase()  // Cron cada 30 segundos
+syncOnDrawClose(drawId)  // Al cerrar sorteo
+
+// TTL: keys expiran 2 horas despues del cierre del sorteo
+```
 
 **Archivo nuevo**: `backend/src/config/redis.js`
-- Configuracion de conexion Redis
-- Retry logic
-- Health check
 
 ### 2.5 Servicio de Contabilidad (`entity-ledger.service.js`)
 
 **Archivo nuevo**: `backend/src/services/entity-ledger.service.js`
 
-- `calculateLedger(drawId)` - Despues de ejecutar el sorteo, calcula la contabilidad por entidad
-- `getLedgerByEntity(entityType, entityId, filters)` - Reporte de contabilidad
-- `getLedgerSummary(entityType, entityId, dateRange)` - Resumen financiero
-- `settleLedger(ledgerId)` - Marcar como liquidado
-- Llamado automaticamente despues de `prize-processor.service.js`
+```javascript
+// Calcular contabilidad post-sorteo (llamado por prize-processor)
+calculateLedger(drawId)
+
+// Obtener contabilidad de una entidad
+getLedgerByEntity(entityType, entityId, filters)
+// filters: { dateFrom, dateTo, gameId, status, page, limit }
+// Retorna: registros paginados + totales
+
+// Resumen financiero de una entidad
+getLedgerSummary(entityType, entityId, dateRange)
+// Retorna:
+// {
+//   totalSales, totalPrizes, grossProfit,
+//   totalCommissionSales, totalCommissionProfit,
+//   netResult,
+//   drawCount, ticketCount,
+//   avgSalesPerDraw, avgProfitPerDraw,
+//   profitMargin,
+//   bestDay: { date, profit }, worstDay: { date, profit },
+//   dailyBreakdown: [{ date, sales, prizes, profit, commission, net }],
+//   gameBreakdown: [{ game, sales, prizes, profit }]
+//   statusBreakdown: { pending, calculated, settled, disputed }
+// }
+
+// Resumen en cascada (una entidad y todas sus hijas)
+getLedgerCascade(entityType, entityId, drawId)
+// Retorna el desglose de cada sub-entidad con sus numeros
+
+// Marcar como liquidado
+settleLedger(ledgerId, userId, notes?)
+
+// Liquidacion masiva
+settleMultiple(ledgerIds, userId, notes?)
+
+// Reporte de liquidaciones pendientes
+getPendingSettlements(entityType?, entityId?)
+```
 
 ### 2.6 Servicio de Venta Fisica (`physical-sale.service.js`)
 
 **Archivo nuevo**: `backend/src/services/physical-sale.service.js`
 
-- `createSale(taquillaId, ticketData, paymentInfo)` - Crear venta en taquilla fisica
-  1. Verifica cupos (via quota.service)
-  2. Crea el Ticket con source=TAQUILLA_FISICA
-  3. Registra la PhysicalSale
-  4. Actualiza cupos en Redis
-  5. Retorna ticket creado
-- `cancelSale(saleId, taquillaId)` - Anular venta
-- `getSalesReport(taquillaId, dateRange)` - Reporte de ventas
-- `getDailyCashReport(taquillaId, date)` - Corte de caja
+```javascript
+// Realizar venta
+createSale(taquillaId, operatorUserId, ticketData, paymentInfo)
+// 1. Verificar que el operador pertenece a la taquilla
+// 2. Verificar cupos (quota.service.checkQuota)
+// 3. Crear Ticket con source=TAQUILLA_FISICA, providerData con toda la cadena
+// 4. Crear PhysicalSale
+// 5. Consumir cupos (quota.service.consumeQuota) en toda la cadena
+// 6. Retornar ticket y recibo
 
-### Archivos a modificar:
-- `backend/src/services/ticket.service.js` - Agregar soporte para source TAQUILLA_FISICA
-- `backend/src/services/prize-processor.service.js` - Disparar calculo de ledger y comisiones post-sorteo
-- `backend/src/services/draw-stats.service.js` - Incluir estadisticas de taquillas fisicas
+// Anular venta
+cancelSale(saleId, operatorUserId)
+// 1. Verificar que la venta pertenece a la taquilla del operador
+// 2. Verificar que el sorteo no se ha ejecutado
+// 3. Marcar PhysicalSale.isCancelled
+// 4. Cancelar el Ticket
+// 5. Liberar cupos
+
+// Historial de ventas del dia
+getDailySales(taquillaId, date)
+
+// Corte de caja
+getCashReport(taquillaId, date)
+// Retorna:
+// {
+//   totalSales, totalCancelled, netSales,
+//   byPaymentMethod: { CASH: X, TRANSFER: Y, PAGO_MOVIL: Z },
+//   ticketCount, cancelledCount,
+//   totalReceived, totalChange,
+//   sales: [{ time, ticketId, amount, method, status }]
+// }
+
+// Verificar ultimo resultado
+getLastResults(taquillaId, limit)
+```
+
+### Archivos a modificar en Fase 2:
+- `backend/src/services/ticket.service.js` - Source TAQUILLA_FISICA
+- `backend/src/services/prize-processor.service.js` - Trigger calculateLedger y calculateCommissions
+- `backend/src/services/draw-stats.service.js` - Stats de taquillas fisicas
+- `backend/package.json` - Agregar `ioredis`
 
 ---
 
-## Fase 3: Backend - Middleware de Permisos Multi-Nivel
+## Fase 3: Middleware de Permisos Multi-Nivel
 
-### 3.1 Middleware de autorizacion por entidad (`entity-auth.middleware.js`)
+### 3.1 Middleware de autorizacion por entidad
 
 **Archivo nuevo**: `backend/src/middlewares/entity-auth.middleware.js`
 
@@ -329,223 +622,657 @@ Funcionalidad:
 function authorizeEntity(entityType, entityIdParam, requiredRole = 'ADMIN') {
   return async (req, res, next) => {
     const entityId = req.params[entityIdParam];
-    // 1. ADMIN del sistema siempre tiene acceso
-    // 2. Verificar UserEntity del usuario para esta entidad
-    // 3. Verificar si tiene acceso por herencia (admin de entidad padre)
+    const user = req.user;
+
+    // 1. ADMIN del sistema siempre tiene acceso total
+    if (user.role === 'ADMIN') return next();
+
+    // 2. Buscar UserEntity directo
+    const directAccess = await prisma.userEntity.findUnique({
+      where: { userId_entityType_entityId: { userId: user.id, entityType, entityId } }
+    });
+
+    if (directAccess && hasRequiredRole(directAccess.role, requiredRole)) {
+      req.entityAccess = directAccess;
+      return next();
+    }
+
+    // 3. Verificar acceso por herencia (admin de entidad ancestro)
+    const ancestors = await getAncestors(entityType, entityId);
+    for (const ancestor of ancestors) {
+      const ancestorAccess = await prisma.userEntity.findUnique({
+        where: { userId_entityType_entityId: {
+          userId: user.id,
+          entityType: ancestor.type,
+          entityId: ancestor.id
+        }}
+      });
+      if (ancestorAccess && ancestorAccess.role === 'ADMIN') {
+        req.entityAccess = { ...ancestorAccess, inherited: true };
+        return next();
+      }
+    }
+
+    return res.status(403).json({ error: 'No tienes permiso sobre esta entidad' });
   }
 }
 
-// Ejemplo de uso:
-router.put('/bancas/:bancaId',
-  authenticate,
-  authorizeEntity('BANCA', 'bancaId', 'ADMIN'),
-  controller.updateBanca
-);
+// Filtra resultados para mostrar solo entidades dentro del scope del usuario
+function scopeToUserEntities(entityType) {
+  return async (req, res, next) => {
+    // Agrega req.entityScope con los IDs a los que el usuario tiene acceso
+    // Los servicios usan este scope para filtrar queries
+  }
+}
 ```
 
-### 3.2 Permisos heredados
+### 3.2 Tabla de permisos por rol
 
-- Un COMERCIALIZADOR tiene acceso a su comercializadora y TODAS las entidades hijas
-- Un BANCA_ADMIN tiene acceso a su banca y TODAS las agencias y taquillas debajo
-- Un AGENCIA_ADMIN tiene acceso a su agencia y TODAS las taquillas
-- Un TAQUILLERO solo tiene acceso a su taquilla
+| Accion | ADMIN Sistema | Admin Comercializador | Admin Banca | Admin Grupo | Admin Agencia | Taquillero |
+|--------|:---:|:---:|:---:|:---:|:---:|:---:|
+| Crear Comercializador | Si | - | - | - | - | - |
+| Crear Banca | Si | Si (dentro de su comercializadora) | - | - | - | - |
+| Crear Grupo | Si | Si | Si (dentro de su banca) | - | - | - |
+| Crear Agencia | Si | Si | Si | Si (dentro de su grupo) | - | - |
+| Crear Taquilla | Si | Si | Si | Si | Si (dentro de su agencia) | - |
+| Crear usuarios | Si | Si (para su scope) | Si (para su scope) | Si (para su scope) | Si (para su scope) | - |
+| Configurar comisiones | Si | Si (su scope) | Si (su scope) | Si (su scope) | Si (su scope) | - |
+| Configurar cupos | Si | Si (su scope) | Si (su scope) | Si (su scope) | Si (su scope) | - |
+| Ver reportes | Si (todo) | Si (su scope) | Si (su scope) | Si (su scope) | Si (su scope) | Si (su taquilla) |
+| Liquidar | Si | Si (su scope) | Si (su scope) | - | - | - |
+| Vender en taquilla | - | - | - | - | - | Si |
+| Ver dashboard | Si (global) | Si (su scope) | Si (su scope) | Si (su scope) | Si (su scope) | Si (su taquilla) |
 
 ### Archivos a modificar:
-- `backend/src/middlewares/auth.middleware.js` - Agregar los nuevos roles al sistema existente
+- `backend/src/middlewares/auth.middleware.js` - Agregar nuevos roles a authorize()
 
 ---
 
-## Fase 4: Backend - Rutas y Controladores
+## Fase 4: Rutas y Controladores
 
-### 4.1 Rutas de gestion de entidades (`entity.routes.js`)
+### 4.1 Rutas de Entidades (`entity.routes.js`)
 
 **Archivo nuevo**: `backend/src/routes/entity.routes.js`
 
 ```
-GET    /api/entities/tree                    - Arbol completo (filtrado por permisos del usuario)
-GET    /api/entities/my-entities             - Entidades del usuario actual
+# Arbol y navegacion
+GET    /api/entities/tree                         - Arbol filtrado por permisos del usuario
+GET    /api/entities/my-entities                  - Entidades del usuario logueado
+GET    /api/entities/:type/:id/ancestors          - Cadena de ancestros (breadcrumbs)
+GET    /api/entities/:type/:id/counts             - Contadores de sub-entidades
+GET    /api/entities/:type/:id/subtree            - Sub-arbol desde una entidad
 
-POST   /api/entities/comercializadores       - Crear comercializador (ADMIN)
-GET    /api/entities/comercializadores       - Listar comercializadores
-GET    /api/entities/comercializadores/:id   - Detalle
-PUT    /api/entities/comercializadores/:id   - Actualizar
-DELETE /api/entities/comercializadores/:id   - Desactivar
+# CRUD Comercializadores
+POST   /api/entities/comercializadores            - Crear (ADMIN)
+GET    /api/entities/comercializadores            - Listar (filtrado por scope)
+GET    /api/entities/comercializadores/:id        - Detalle
+PUT    /api/entities/comercializadores/:id        - Actualizar
+DELETE /api/entities/comercializadores/:id        - Desactivar
 
-POST   /api/entities/bancas                  - Crear banca
-GET    /api/entities/bancas                  - Listar bancas (filtrado por scope)
-GET    /api/entities/bancas/:id              - Detalle
-PUT    /api/entities/bancas/:id              - Actualizar
-DELETE /api/entities/bancas/:id              - Desactivar
+# CRUD Bancas
+POST   /api/entities/bancas                       - Crear
+GET    /api/entities/bancas                       - Listar
+GET    /api/entities/bancas/:id                   - Detalle
+PUT    /api/entities/bancas/:id                   - Actualizar
+DELETE /api/entities/bancas/:id                   - Desactivar
 
-POST   /api/entities/agencias               - Crear agencia
-GET    /api/entities/agencias               - Listar agencias
-GET    /api/entities/agencias/:id           - Detalle
-PUT    /api/entities/agencias/:id           - Actualizar
-DELETE /api/entities/agencias/:id           - Desactivar
+# CRUD Grupos
+POST   /api/entities/grupos                       - Crear
+GET    /api/entities/grupos                       - Listar
+GET    /api/entities/grupos/:id                   - Detalle
+PUT    /api/entities/grupos/:id                   - Actualizar
+DELETE /api/entities/grupos/:id                   - Desactivar
 
-POST   /api/entities/taquillas              - Crear taquilla
-GET    /api/entities/taquillas              - Listar taquillas
-GET    /api/entities/taquillas/:id          - Detalle
-PUT    /api/entities/taquillas/:id          - Actualizar
-DELETE /api/entities/taquillas/:id          - Desactivar
+# CRUD Agencias
+POST   /api/entities/agencias                     - Crear
+GET    /api/entities/agencias                     - Listar
+GET    /api/entities/agencias/:id                 - Detalle
+PUT    /api/entities/agencias/:id                 - Actualizar
+DELETE /api/entities/agencias/:id                 - Desactivar
 
-POST   /api/entities/:type/:id/users        - Asignar usuario a entidad
-GET    /api/entities/:type/:id/users        - Usuarios de una entidad
-DELETE /api/entities/:type/:id/users/:userId - Remover usuario
+# CRUD Taquillas
+POST   /api/entities/taquillas                    - Crear
+GET    /api/entities/taquillas                    - Listar
+GET    /api/entities/taquillas/:id                - Detalle
+PUT    /api/entities/taquillas/:id                - Actualizar
+DELETE /api/entities/taquillas/:id                - Desactivar
+
+# Gestion de usuarios por entidad
+POST   /api/entities/:type/:id/users              - Crear usuario y asignar
+GET    /api/entities/:type/:id/users              - Listar usuarios de la entidad
+PUT    /api/entities/:type/:id/users/:userId      - Cambiar rol del usuario
+DELETE /api/entities/:type/:id/users/:userId      - Remover usuario
 ```
 
-### 4.2 Rutas de comisiones (`commission.routes.js`)
-
-**Archivo nuevo**: `backend/src/routes/commission.routes.js`
+### 4.2 Rutas de Comisiones (`commission.routes.js`)
 
 ```
-GET    /api/commissions/:entityType/:entityId           - Obtener comision
-POST   /api/commissions/:entityType/:entityId           - Configurar comision
-GET    /api/commissions/:entityType/:entityId/calculate  - Vista previa del calculo
+GET    /api/commissions/:entityType/:entityId              - Config de comision
+POST   /api/commissions/:entityType/:entityId              - Crear/actualizar comision
+GET    /api/commissions/:entityType/:entityId/chain         - Cadena completa de comisiones
+GET    /api/commissions/:entityType/:entityId/simulate      - Simulador de comisiones
 ```
 
-### 4.3 Rutas de cupos (`quota.routes.js`)
-
-**Archivo nuevo**: `backend/src/routes/quota.routes.js`
+### 4.3 Rutas de Cupos (`quota.routes.js`)
 
 ```
-GET    /api/quotas/:entityType/:entityId            - Obtener cupos
-POST   /api/quotas/:entityType/:entityId            - Configurar cupo
-GET    /api/quotas/:entityType/:entityId/usage/:drawId  - Uso de cupos por sorteo
-GET    /api/quotas/check                            - Verificar disponibilidad antes de venta
+GET    /api/quotas/:entityType/:entityId                    - Cupos configurados
+POST   /api/quotas/:entityType/:entityId                    - Crear/actualizar cupo
+DELETE /api/quotas/:quotaId                                 - Eliminar cupo
+GET    /api/quotas/:entityType/:entityId/chain/:drawId      - Cadena de cupos con uso
+GET    /api/quotas/:entityType/:entityId/matrix/:drawId     - Matriz de uso por numero y sub-entidad
+GET    /api/quotas/check                                    - Verificar disponibilidad
 ```
 
-### 4.4 Rutas de taquilla POS (`pos.routes.js`)
-
-**Archivo nuevo**: `backend/src/routes/pos.routes.js`
+### 4.4 Rutas de Contabilidad (`ledger.routes.js`)
 
 ```
-POST   /api/pos/sell                    - Realizar venta (crea ticket)
-POST   /api/pos/cancel/:ticketId        - Anular venta
-GET    /api/pos/draws                   - Sorteos disponibles para venta
-GET    /api/pos/games                   - Juegos disponibles
-GET    /api/pos/items/:gameId           - Numeros del juego
-GET    /api/pos/my-sales                - Mis ventas del dia
-GET    /api/pos/daily-report            - Corte de caja
-GET    /api/pos/last-results            - Ultimos resultados
-GET    /api/pos/quota-check/:drawId/:gameItemId  - Cupo disponible para un numero
+GET    /api/ledger/:entityType/:entityId                    - Contabilidad paginada
+GET    /api/ledger/:entityType/:entityId/summary            - Resumen financiero
+GET    /api/ledger/:entityType/:entityId/cascade/:drawId    - Vista en cascada por sorteo
+GET    /api/ledger/:entityType/:entityId/daily              - Reporte diario
+GET    /api/ledger/pending                                  - Liquidaciones pendientes
+POST   /api/ledger/:id/settle                               - Liquidar
+POST   /api/ledger/settle-multiple                          - Liquidar multiples
 ```
 
-### 4.5 Rutas de contabilidad (`ledger.routes.js`)
-
-**Archivo nuevo**: `backend/src/routes/ledger.routes.js`
+### 4.5 Rutas POS (`pos.routes.js`)
 
 ```
-GET    /api/ledger/:entityType/:entityId           - Contabilidad de una entidad
-GET    /api/ledger/:entityType/:entityId/summary    - Resumen por rango de fechas
-GET    /api/ledger/draw/:drawId                     - Contabilidad por sorteo
-POST   /api/ledger/:id/settle                       - Marcar como liquidado
+POST   /api/pos/sell                           - Realizar venta
+POST   /api/pos/cancel/:saleId                 - Anular venta
+GET    /api/pos/draws                          - Sorteos disponibles
+GET    /api/pos/games                          - Juegos disponibles
+GET    /api/pos/items/:gameId                  - Numeros del juego
+GET    /api/pos/my-sales                       - Ventas del dia
+GET    /api/pos/cash-report                    - Corte de caja
+GET    /api/pos/last-results                   - Ultimos resultados
+GET    /api/pos/quota/:drawId/:gameItemId      - Cupo disponible para un numero
+GET    /api/pos/my-taquilla                    - Info de la taquilla del operador
 ```
 
 ### Archivos a modificar:
-- `backend/src/routes/index.js` o `backend/src/app.js` - Registrar las nuevas rutas
+- `backend/src/app.js` o `backend/src/routes/index.js` - Registrar nuevas rutas
 
 ---
 
-## Fase 5: Frontend - Gestion de Entidades (Admin)
+## Fase 5: Frontend - Dashboards y Gestion por Rol
 
-### 5.1 API clients
+### 5.1 API Clients (frontend/lib/api/)
 
 **Archivos nuevos**:
-- `frontend/lib/api/entities.js` - API client para entidades
-- `frontend/lib/api/commissions.js` - API client para comisiones
-- `frontend/lib/api/quotas.js` - API client para cupos
-- `frontend/lib/api/pos.js` - API client para POS
-- `frontend/lib/api/ledger.js` - API client para contabilidad
+- `entities.js` - CRUD entidades, arbol, usuarios
+- `commissions.js` - Config y consulta de comisiones
+- `quotas.js` - Config y consulta de cupos
+- `ledger.js` - Contabilidad y liquidaciones
+- `pos.js` - POS API
 
-### 5.2 Store de entidades
+### 5.2 Store de Entidades
 
 **Archivo nuevo**: `frontend/lib/stores/entityStore.js`
 
-- Estado del arbol de entidades
-- Entidad seleccionada
-- Breadcrumb de navegacion en la jerarquia
+```javascript
+{
+  // Estado
+  tree: null,               // Arbol completo de entidades
+  selectedEntity: null,      // Entidad seleccionada actualmente
+  breadcrumb: [],            // Cadena de ancestros
+  myEntities: [],            // Entidades del usuario logueado
 
-### 5.3 Paginas de admin para gestion de entidades
-
-**Archivos nuevos**:
-
-```
-frontend/app/admin/entidades/
-  page.js                     - Vista principal con arbol de entidades
-  [entityType]/
-    [id]/
-      page.js                 - Detalle de entidad con tabs:
-                                 - Info general
-                                 - Sub-entidades
-                                 - Usuarios asignados
-                                 - Comisiones
-                                 - Cupos
-                                 - Contabilidad/Reportes
+  // Acciones
+  loadTree(),
+  selectEntity(type, id),
+  loadMyEntities(),
+  refreshEntity(type, id),
+}
 ```
 
-**Componentes nuevos**:
+### 5.3 Dashboard del ADMIN del sistema (`/admin` existente - modificar)
+
+Agregar al dashboard existente una seccion de resumen de entidades:
+
 ```
-frontend/components/entities/
-  EntityTree.js               - Arbol navegable de entidades (acordeon expandible)
-  EntityForm.js               - Formulario crear/editar entidad
-  EntityDetail.js             - Vista detalle de entidad
-  CommissionConfig.js         - Configurador de comisiones
-  QuotaConfig.js              - Configurador de cupos
-  UserAssignment.js           - Asignar/gestionar usuarios de una entidad
-  LedgerTable.js              - Tabla de contabilidad
-  LedgerSummary.js            - Resumen financiero con graficas simples
++----------------------------------------------------------+
+| PANEL ADMIN SISTEMA                                      |
++----------------------------------------------------------+
+| [Stats actuales: Sorteos, Juegos, etc.]                  |
+|                                                          |
+| --- ENTIDADES FISICAS ---                                |
+| Comercializadores: 3  |  Bancas: 12  |  Grupos: 45     |
+| Agencias: 128          |  Taquillas: 512                |
+| Ventas Hoy (fisicas): $45,230  | Comisiones: $3,800     |
+| Liquidaciones Pendientes: 28                             |
+|                                                          |
+| [Ver Entidades] [Ver Liquidaciones Pendientes]           |
++----------------------------------------------------------+
 ```
 
-### 5.4 Navegacion adaptativa por rol
+### 5.4 Pagina de Gestion de Entidades (`/admin/entidades`)
+
+**Archivos nuevos**: `frontend/app/admin/entidades/page.js`
+
+Layout con 2 paneles:
+- **Panel izquierdo**: Arbol navegable de entidades (tipo explorador de archivos)
+- **Panel derecho**: Detalle de la entidad seleccionada
+
+```
++----------------------------------+----------------------------------------+
+| ARBOL DE ENTIDADES               | DETALLE: Banca Norte                   |
+|                                  |                                        |
+| v Comercializadora ABC           | [Info] [Usuarios] [Comisiones] [Cupos] |
+|   v Banca Norte  <-- selected    | [Contabilidad] [Sub-entidades]         |
+|     v Grupo Centro               |                                        |
+|       v Agencia Mall Plaza       | Nombre: Banca Norte                    |
+|         Taquilla #1              | Estado: Activa                         |
+|         Taquilla #2              | Padre: Comercializadora ABC            |
+|       Agencia Centro Comercial   | Creada: 15/01/2026                     |
+|     Grupo Sur                    |                                        |
+|   v Banca Sur                    | Sub-entidades:                         |
+|     Grupo Unico                  | Grupos: 2 | Agencias: 5 | Taquillas: 18|
+| v Comercializadora XYZ           |                                        |
+|   ...                            | Ventas Hoy: $12,500                    |
+|                                  | Comisiones Hoy: $450                   |
+| [+ Comercializador]              |                                        |
++----------------------------------+----------------------------------------+
+```
+
+### 5.5 Detalle de entidad: TAB Info General
+
+```
++------------------------------------------------+
+| INFORMACION GENERAL                            |
++------------------------------------------------+
+| Nombre: [Banca Norte              ] [Guardar]  |
+| Tipo: PHYSICAL                                 |
+| Estado: [Activa v]                             |
+| Padre: Comercializadora ABC                    |
+| ID Externo: 368                                |
+| Direccion: Av. Libertador #45 (solo Agencias)  |
+| Telefono: 0412-1234567 (solo Agencias)         |
+| Creada: 15/01/2026                             |
+|                                                |
+| --- RESUMEN RAPIDO ---                         |
+| Sub-entidades directas: 2 Grupos               |
+| Total sub-entidades: 5 Agencias, 18 Taquillas  |
+| Usuarios asignados: 3                          |
+| Ventas ultimas 24h: $12,500                    |
+|                                                |
+| [Desactivar Entidad]                           |
++------------------------------------------------+
+```
+
+### 5.6 Detalle de entidad: TAB Usuarios
+
+**Componente**: `EntityUsersTab.js`
+
+Cada admin de una entidad puede:
+- **Ver** todos los usuarios asignados a su entidad y sub-entidades
+- **Crear** nuevos usuarios con rol asignado
+- **Editar** rol de usuarios en su scope
+- **Desactivar** usuarios en su scope
+
+```
++-------------------------------------------------------------+
+| USUARIOS DE: Banca Norte                                    |
++-------------------------------------------------------------+
+| [+ Crear Usuario]                                           |
+|                                                             |
+| Usuario     | Rol          | Entidad          | Estado      |
+|-------------|--------------|------------------|-------------|
+| juan.perez  | ADMIN        | Banca Norte      | Activo      |
+| maria.lopez | ADMIN        | Grupo Centro     | Activo      |
+| carlos.r    | ADMIN        | Agencia Mall     | Activo      |
+| pedro.g     | OPERATOR     | Taquilla #1      | Activo      |
+| ana.m       | OPERATOR     | Taquilla #2      | Activo      |
+| luis.v      | VIEWER       | Banca Norte      | Activo      |
+|                                                             |
+| Mostrando usuarios de Banca Norte y sub-entidades           |
++-------------------------------------------------------------+
+
+Modal "Crear Usuario":
++------------------------------------------+
+| CREAR USUARIO                            |
++------------------------------------------+
+| Nombre de usuario: [__________]          |
+| Email: [__________]                      |
+| Telefono: [__________]                   |
+| Contrasena: [__________] [Generar]       |
+|                                          |
+| Asignar a:                               |
+| Entidad: [Dropdown jerarquico]           |
+|  - Banca Norte                           |
+|  - Grupo Centro                          |
+|    - Agencia Mall Plaza                  |
+|      - Taquilla #1                       |
+|      - Taquilla #2                       |
+|    - Agencia Centro Com.                 |
+|  - Grupo Sur                             |
+|                                          |
+| Rol: [ADMIN / OPERATOR / VIEWER]         |
+|                                          |
+| [Cancelar] [Crear Usuario]              |
++------------------------------------------+
+```
+
+### 5.7 Detalle de entidad: TAB Comisiones
+
+**Componente**: `CommissionConfigTab.js`
+
+```
++--------------------------------------------------------------+
+| COMISIONES: Banca Norte                                      |
++--------------------------------------------------------------+
+| --- CONFIGURACION DE ESTA ENTIDAD ---                        |
+|                                                              |
+| Tipo de Comision: [SHARED v]                                 |
+|   ( ) SALES - Solo de ventas (siempre gana)                  |
+|   ( ) PROFIT - Solo de ganancias (no pierde si hay perdida)  |
+|   (*) SHARED - Compartida (comparte ganancias Y perdidas)    |
+|                                                              |
+| Comision de Ventas: [3.00] %                                 |
+| Comision de Ganancias: [8.00] %                              |
+| Comparte Perdidas: [Si v]                                    |
+|                                                              |
+| Juego especifico: [Todos los juegos v]                       |
+|   (Puedes configurar comisiones diferentes por juego)        |
+|                                                              |
+| [Guardar Configuracion]                                      |
+|                                                              |
+| --- VISTA EN CASCADA (toda la cadena) ---                    |
+|                                                              |
+| Nivel          | Tipo    | Ventas | Ganancias | Perdidas?   |
+|----------------|---------|--------|-----------|-------------|
+| Comercial ABC  | SHARED  | 5.00%  | 10.00%    | Si          |
+| > Banca Norte  | SHARED  | 3.00%  | 8.00%     | Si          |
+| >> Grupo Centr | SALES   | 2.00%  | -         | No          |
+| >>> Agencia M  | PROFIT  | 1.00%  | 5.00%     | No          |
+| >>>> Taq #1    | SALES   | 0.50%  | -         | No          |
+|                                                              |
+| TOTAL CADENA:  | Ventas: 11.50%  | Ganancias: 23.00%        |
+| ⚠ La suma de comisiones de ganancias es alta (23%)           |
+|                                                              |
+| --- SIMULADOR ---                                            |
+| Si las ventas son $[10,000] y los premios $[7,000]:          |
+| Ganancia bruta: $3,000                                       |
+| Comision ventas Banca: $300 (3% de $10,000)                  |
+| Comision ganancias Banca: $240 (8% de $3,000)               |
+| Total comision Banca: $540                                   |
++--------------------------------------------------------------+
+```
+
+### 5.8 Detalle de entidad: TAB Cupos
+
+**Componente**: `QuotaConfigTab.js`
+
+```
++--------------------------------------------------------------+
+| CUPOS: Grupo Centro                                          |
++--------------------------------------------------------------+
+| --- CUPOS CONFIGURADOS ---                                   |
+|                                                              |
+| [+ Agregar Cupo]                                             |
+|                                                              |
+| Alcance      | Juego    | Numero  | Limite     | Acciones   |
+|--------------|----------|---------|------------|------------|
+| PER_NUMBER   | Delfin   | Todos   | $1,000.00  | [Editar][X]|
+| PER_NUMBER   | Delfin   | #32     | $500.00    | [Editar][X]|
+| PER_DRAW     | Delfin   | -       | $15,000.00 | [Editar][X]|
+| GLOBAL       | Todos    | -       | $50,000.00 | [Editar][X]|
+|                                                              |
+| --- VISTA EN CASCADA (cupos heredados) ---                   |
+|                                                              |
+| Para: Delfin 1:00PM, Numero #32                             |
+|                                                              |
+| Nivel          | Cupo       | Usado     | Disponible  | %   |
+|----------------|------------|-----------|-------------|-----|
+| Banca Norte    | $5,000.00  | $2,300.00 | $2,700.00   | 46% |
+| > Grupo Centro | $1,000.00  | $450.00   | $550.00     | 45% |
+| >> Agencia M   | $500.00    | $200.00   | $300.00     | 40% |
+| >>> Taq #1     | $200.00    | $80.00    | $120.00     | 40% |
+| >>> Taq #2     | $200.00    | $120.00   | $80.00      | 60% |
+|                                                              |
+| Cupo efectivo para Taq #1: $120.00 (min de la cadena)        |
+|                                                              |
+| --- MATRIZ DE USO POR SORTEO ---                             |
+| Sorteo: [Delfin 1:00PM v]                                   |
+|                                                              |
+| Numero | Taq #1  | Taq #2  | Taq #3  | Total  | Cupo  | %  |
+|--------|---------|---------|---------|--------|-------|-----|
+| #00    | $50     | $30     | $20     | $100   | $1000 | 10% |
+| #01    | $0      | $80     | $0      | $80    | $1000 | 8%  |
+| #32    | $80     | $120    | $45     | $245   | $500  | 49% |
+| ...    |         |         |         |        |       |     |
+|                                                              |
+| [Barra de colores: verde < 50%, amarillo 50-80%, rojo > 80%]|
++--------------------------------------------------------------+
+```
+
+### 5.9 Detalle de entidad: TAB Contabilidad
+
+**Componente**: `LedgerTab.js`
+
+```
++--------------------------------------------------------------+
+| CONTABILIDAD: Banca Norte                                    |
++--------------------------------------------------------------+
+| Periodo: [01/02/2026] - [28/02/2026]  Juego: [Todos v]      |
+|                                                              |
+| --- RESUMEN DEL PERIODO ---                                  |
+|                                                              |
+| +-------------+ +-------------+ +-------------+ +-----------+|
+| | Ventas      | | Premios     | | Gan. Bruta  | | Comision  ||
+| | $245,600    | | $178,200    | | $67,400     | | $12,430   ||
+| | 1,234 tix   | | 89 ganador  | | +27.4%      | | (5.06%)   ||
+| +-------------+ +-------------+ +-------------+ +-----------+|
+|                                                              |
+| +-------------+ +-------------+                              |
+| | Neto        | | Pendiente   |                              |
+| | $54,970     | | 12 sorteos  |                              |
+| | por liquidar| | $4,200      |                              |
+| +-------------+ +-------------+                              |
+|                                                              |
+| --- DESGLOSE DIARIO ---                                      |
+|                                                              |
+| Fecha      | Ventas   | Premios  | Ganancia | Comision | Net |
+|------------|----------|----------|----------|----------|-----|
+| 28/02/2026 | $8,500   | $5,200   | $3,300   | $430     |$2870|
+| 27/02/2026 | $9,200   | $7,800   | $1,400   | $460     | $940|
+| 26/02/2026 | $7,100   | $8,900   | -$1,800  | $355     |-2155|
+| ...        |          |          |          |          |     |
+|                                                              |
+| [Dias en rojo = perdida]                                     |
+|                                                              |
+| --- DESGLOSE POR JUEGO ---                                   |
+|                                                              |
+| Juego    | Ventas   | Premios  | Ganancia | Comision | Mrg% |
+|----------|----------|----------|----------|----------|------|
+| Delfin   | $120,300 | $89,400  | $30,900  | $6,015   | 25.7%|
+| Guacharo | $85,200  | $62,100  | $23,100  | $4,260   | 27.1%|
+| Lotto    | $40,100  | $26,700  | $13,400  | $2,155   | 33.4%|
+|                                                              |
+| --- DESGLOSE EN CASCADA (sub-entidades) ---                  |
+|                                                              |
+| Entidad        | Ventas   | Premios | Ganancia | Comision   |
+|----------------|----------|---------|----------|------------|
+| Grupo Centro   | $145,200 | $98,500 | $46,700  | $7,260     |
+|   Agencia Mall | $82,100  | $55,300 | $26,800  | $4,105     |
+|     Taq #1     | $45,600  | $30,200 | $15,400  | $2,280     |
+|     Taq #2     | $36,500  | $25,100 | $11,400  | $1,825     |
+|   Agencia CC   | $63,100  | $43,200 | $19,900  | $3,155     |
+| Grupo Sur      | $100,400 | $79,700 | $20,700  | $5,170     |
+|   ...          |          |         |          |            |
+|                                                              |
+| --- LIQUIDACIONES ---                                        |
+|                                                              |
+| [Seleccionar todo] [Liquidar seleccionados]                  |
+|                                                              |
+| Sorteo          | Fecha    | Ventas | Comision | Estado      |
+|-----------------|----------|--------|----------|-------------|
+| Delfin 1:00PM   | 28/02   | $2,300 | $115     | PENDIENTE   |
+| Guacharo 2:00PM | 28/02   | $1,800 | $90      | PENDIENTE   |
+| Delfin 1:00PM   | 27/02   | $2,500 | $125     | LIQUIDADO   |
+| ...              |         |        |          |             |
++--------------------------------------------------------------+
+```
+
+### 5.10 Dashboard por rol de entidad
+
+Cada rol ve SU dashboard adaptado al hacer login:
+
+#### Dashboard COMERCIALIZADOR (`/admin/mi-comercializadora`)
+
+```
++--------------------------------------------------------------+
+| MI COMERCIALIZADORA: ABC Corp                                |
++--------------------------------------------------------------+
+|                                                              |
+| +----------+ +----------+ +----------+ +----------+         |
+| | Bancas   | | Grupos   | | Agencias | | Taquillas|         |
+| | 4        | | 12       | | 34       | | 128      |         |
+| +----------+ +----------+ +----------+ +----------+         |
+|                                                              |
+| +----------+ +----------+ +----------+ +----------+         |
+| | Ventas   | | Premios  | | Ganancia | | Comision |         |
+| | Hoy      | | Hoy      | | Hoy      | | Hoy     |         |
+| | $45,230  | | $32,100  | | $13,130  | | $2,261  |         |
+| +----------+ +----------+ +----------+ +----------+         |
+|                                                              |
+| --- TOP BANCAS HOY ---                                       |
+| 1. Banca Norte  $18,500 ventas | $1,200 comision            |
+| 2. Banca Sur    $15,200 ventas | $680 comision              |
+| 3. Banca Este   $11,530 ventas | $381 comision              |
+|                                                              |
+| --- ALERTAS ---                                              |
+| ⚠ 3 liquidaciones pendientes por mas de 48h                 |
+| ⚠ Taquilla #45 inactiva hace 2 horas                        |
+| ⚠ Cupo al 90% en Banca Norte para Delfin 3:00PM            |
+|                                                              |
+| [Gestionar Entidades] [Reportes] [Liquidaciones]             |
++--------------------------------------------------------------+
+```
+
+#### Dashboard BANCA_ADMIN (`/admin/mi-banca`)
+
+Similar pero scoped a su banca: muestra grupos, agencias, taquillas de su banca.
+
+#### Dashboard AGENCIA_ADMIN (`/admin/mi-agencia`)
+
+```
++--------------------------------------------------------------+
+| MI AGENCIA: Mall Plaza                                       |
++--------------------------------------------------------------+
+| +----------+ +----------+ +----------+ +----------+         |
+| | Taquillas| | Activas  | | Ventas   | | Comision |         |
+| | 6        | | 5        | | Hoy      | | Hoy     |         |
+| |          | |          | | $8,200   | | $410    |         |
+| +----------+ +----------+ +----------+ +----------+         |
+|                                                              |
+| --- TAQUILLAS ---                                            |
+| Taquilla   | Operador   | Ventas Hoy | Tickets | Estado     |
+|------------|------------|------------|---------|------------|
+| Taquilla 1 | pedro.g    | $2,300     | 45      | En linea   |
+| Taquilla 2 | ana.m      | $1,800     | 32      | En linea   |
+| Taquilla 3 | -          | $0         | 0       | Sin operador|
+| Taquilla 4 | jose.r     | $2,100     | 38      | En linea   |
+| Taquilla 5 | maria.v    | $1,500     | 28      | En linea   |
+| Taquilla 6 | luis.f     | $500       | 12      | En linea   |
+|                                                              |
+| --- CUPOS CRITICOS ---                                       |
+| #32 Delfin 3PM: 82% usado ($410 de $500)                    |
+| #15 Guacharo 4PM: 75% usado ($375 de $500)                  |
+|                                                              |
+| [Gestionar Taquillas] [Crear Taquilla] [Reportes]            |
++--------------------------------------------------------------+
+```
+
+#### Dashboard TAQUILLERO - Ver Fase 6 (POS)
+
+### 5.11 Navegacion adaptativa en sidebar
 
 **Archivo a modificar**: `frontend/app/admin/layout.js`
 
-- Agregar seccion "Entidades" en el sidebar para ADMIN
-- Agregar seccion "Mi Comercializadora" / "Mi Banca" / "Mi Agencia" segun rol
-- Los roles de entidad (COMERCIALIZADOR, BANCA_ADMIN, etc.) ven su dashboard propio
-- Redirigir segun rol al hacer login
-
-**Archivo a modificar**: `frontend/middleware.js`
-
-- Agregar rutas protegidas para los nuevos roles
-- Redirigir al dashboard correspondiente segun el rol
+```javascript
+const navigationByRole = {
+  ADMIN: [
+    // Todo lo actual +
+    { name: 'Entidades', href: '/admin/entidades', icon: Building2 },
+    { name: 'Liquidaciones', href: '/admin/liquidaciones', icon: Receipt },
+  ],
+  COMERCIALIZADOR: [
+    { name: 'Dashboard', href: '/admin/mi-comercializadora', icon: LayoutDashboard },
+    { name: 'Entidades', href: '/admin/entidades', icon: Building2 },
+    { name: 'Usuarios', href: '/admin/mis-usuarios', icon: Users },
+    { name: 'Comisiones', href: '/admin/comisiones', icon: Percent },
+    { name: 'Cupos', href: '/admin/cupos', icon: Gauge },
+    { name: 'Contabilidad', href: '/admin/contabilidad', icon: Calculator },
+    { name: 'Reportes', href: '/admin/reportes-entidad', icon: FileText },
+    { name: 'Liquidaciones', href: '/admin/liquidaciones', icon: Receipt },
+  ],
+  BANCA_ADMIN: [
+    { name: 'Dashboard', href: '/admin/mi-banca', icon: LayoutDashboard },
+    { name: 'Entidades', href: '/admin/entidades', icon: Building2 },
+    { name: 'Usuarios', href: '/admin/mis-usuarios', icon: Users },
+    { name: 'Comisiones', href: '/admin/comisiones', icon: Percent },
+    { name: 'Cupos', href: '/admin/cupos', icon: Gauge },
+    { name: 'Contabilidad', href: '/admin/contabilidad', icon: Calculator },
+    { name: 'Reportes', href: '/admin/reportes-entidad', icon: FileText },
+  ],
+  GRUPO_ADMIN: [
+    { name: 'Dashboard', href: '/admin/mi-grupo', icon: LayoutDashboard },
+    { name: 'Agencias', href: '/admin/entidades', icon: Building2 },
+    { name: 'Usuarios', href: '/admin/mis-usuarios', icon: Users },
+    { name: 'Comisiones', href: '/admin/comisiones', icon: Percent },
+    { name: 'Cupos', href: '/admin/cupos', icon: Gauge },
+    { name: 'Contabilidad', href: '/admin/contabilidad', icon: Calculator },
+    { name: 'Reportes', href: '/admin/reportes-entidad', icon: FileText },
+  ],
+  AGENCIA_ADMIN: [
+    { name: 'Dashboard', href: '/admin/mi-agencia', icon: LayoutDashboard },
+    { name: 'Taquillas', href: '/admin/entidades', icon: Monitor },
+    { name: 'Usuarios', href: '/admin/mis-usuarios', icon: Users },
+    { name: 'Cupos', href: '/admin/cupos', icon: Gauge },
+    { name: 'Contabilidad', href: '/admin/contabilidad', icon: Calculator },
+    { name: 'Reportes', href: '/admin/reportes-entidad', icon: FileText },
+  ],
+  TAQUILLERO: [
+    // Redirige automaticamente a /pos
+  ],
+};
+```
 
 ---
 
 ## Fase 6: Frontend - POS de Taquilla Fisica
 
-### 6.1 Layout del POS
+### 6.1 Layout y pagina
 
-**Archivos nuevos**:
 ```
 frontend/app/pos/
-  layout.js           - Layout fullscreen del POS (sin sidebar admin)
-  page.js             - Pantalla principal del POS
+  layout.js     - Layout fullscreen (sin sidebar admin)
+  page.js       - Pantalla principal del POS
 ```
 
-### 6.2 Componentes del POS
+### 6.2 Componentes POS
 
 ```
 frontend/components/pos/
-  POSLayout.js        - Layout principal dividido en zonas
-  NumberInput.js      - Input de numeros con teclado (2-3 digitos)
-  AmountInput.js      - Input de monto
-  QuickAmounts.js     - Botones de montos rapidos
+  POSLayout.js        - Layout 3 columnas
+  NumberInput.js      - Input de numeros (numpad)
+  AmountInput.js      - Input de monto con botones rapidos
   DrawSelector.js     - Selector de sorteo activo
   GameSelector.js     - Selector de juego
-  TicketBuilder.js    - Constructor de ticket (lista de jugadas)
-  TicketPreview.js    - Vista previa del ticket antes de confirmar
-  TicketReceipt.js    - Recibo imprimible del ticket
-  SalesHistory.js     - Historial de ventas del dia
+  TicketBuilder.js    - Lista de jugadas del ticket actual
+  TicketReceipt.js    - Recibo imprimible
+  SalesHistory.js     - Ventas del dia
   CashReport.js       - Corte de caja
-  QuotaIndicator.js   - Indicador visual de cupo disponible
-  ResultsBanner.js    - Banner con ultimos resultados
-  POSHeader.js        - Barra superior con info de taquilla, hora, sorteos
-  KeyboardHelp.js     - Ayuda de atajos de teclado (overlay)
+  QuotaIndicator.js   - Cupo disponible en tiempo real
+  ResultsBanner.js    - Ultimos resultados
+  POSHeader.js        - Barra superior con info de taquilla
+  KeyboardHelp.js     - Overlay de atajos
+  CancelModal.js      - Modal para anular venta
 ```
 
-### 6.3 Diseno de la interfaz POS
+### 6.3 Interfaz POS
 
 ```
 +------------------------------------------------------------------+
@@ -587,80 +1314,70 @@ frontend/components/pos/
 | +/- | Subir/bajar monto |
 | Ctrl+Z | Quitar ultima jugada |
 
-### 6.5 Soporte mobile/tablet
+### 6.5 Mobile/Tablet
 
-- Layout responsive: en pantalla pequena se usa un layout vertical (stacked)
-- NumberPad mas grande en tablet
-- Botones de montos rapidos como chips tocables
-- Swipe para cambiar entre panel de jugadas y panel de resultados
-
-### Archivos a modificar:
-- `frontend/middleware.js` - Agregar ruta /pos como protegida para TAQUILLERO
+- Layout vertical en pantallas < 768px
+- NumberPad ocupa ancho completo
+- Tabs deslizables: Jugadas | Resultados | Cupos
+- Touch-friendly con botones grandes
 
 ---
 
-## Fase 7: Integracion Redis
+## Fase 7: Redis
 
-### 7.1 Configuracion
+### 7.1 Configuracion (`backend/src/config/redis.js`)
 
-**Archivo nuevo**: `backend/src/config/redis.js`
+- Conexion con `ioredis`
+- Retry y reconexion automatica
+- Health check
 
-- Conexion a Redis (usando `ioredis`)
-- Pool de conexiones
-- Manejo de reconexion
-- Health check endpoint
+### 7.2 Uso
 
-### 7.2 Dependencia
-
-- Agregar `ioredis` al package.json del backend
-
-### 7.3 Fallback
-
-Si Redis no esta disponible:
-- Las verificaciones de cupos se hacen directamente contra PostgreSQL
-- Se loguea warning pero el sistema sigue funcionando
-- Performance degradado pero funcional
+- Cache de cupos en tiempo real (operaciones atomicas INCRBYFLOAT)
+- TTL por sorteo (expira 2h despues de cierre)
+- Sync periodico a PostgreSQL (cada 30s)
+- Fallback a PostgreSQL si Redis no disponible
 
 ---
 
 ## Fase 8: Seguridad y Validaciones
 
-### 8.1 Validaciones de negocio
-
-- Un usuario solo puede pertenecer a UNA entidad de cada nivel (evitar conflictos de interes)
-- No se puede eliminar una entidad con sub-entidades activas
-- No se puede eliminar un usuario con entidades asignadas sin reasignar
-- Cupos de entidades hijas no pueden exceder al padre
-- Comisiones combinadas de todas las entidades en una cadena no pueden exceder el 100%
-
-### 8.2 Auditoria
-
-- Todas las operaciones de gestion de entidades se registran en AuditLog (modelo existente)
-- Las ventas en taquilla fisica se registran con timestamp, taquillero, y monto
+- Un usuario solo puede ser admin de UNA entidad por nivel
+- No eliminar entidades con sub-entidades activas
+- Cupos hijos no pueden exceder al padre
+- Comisiones combinadas no pueden exceder 100%
+- Todas las operaciones en AuditLog
+- Rate limiting en endpoints POS
 
 ---
 
 ## Orden de Implementacion
 
-Dado que esto es un sistema grande, se implementa en este orden:
-
-1. **Fase 1** - Schema y migracion (base de datos)
-2. **Fase 2.1** - Servicio de gestion de entidades (CRUD basico)
-3. **Fase 3** - Middleware de permisos por entidad
-4. **Fase 4.1** - Rutas de entidades
-5. **Fase 5** - Frontend de gestion de entidades (admin)
-6. **Fase 1.4** - Nuevos roles y relaciones usuario-entidad
-7. **Fase 2.2** - Servicio de comisiones
-8. **Fase 2.3 + 2.4** - Servicio de cupos + Redis
-9. **Fase 7** - Integracion Redis completa
-10. **Fase 2.5 + 2.6** - Contabilidad y ventas fisicas
-11. **Fase 4** - Resto de rutas (comisiones, cupos, POS, contabilidad)
-12. **Fase 6** - Frontend del POS
-13. **Fase 8** - Seguridad y validaciones finales
+1. **Fase 1** - Schema y migracion (modelos, enums, relaciones)
+2. **Fase 2.1** - entity-management.service.js (CRUD + arbol + usuarios)
+3. **Fase 3** - entity-auth.middleware.js (permisos multi-nivel)
+4. **Fase 4.1** - entity.routes.js + entity.controller.js
+5. **Fase 5.1-5.3** - API clients + store + pagina entidades
+6. **Fase 5.4-5.6** - Tabs de info, usuarios, navegacion por rol
+7. **Fase 2.2** - commission.service.js
+8. **Fase 4.2** - commission.routes.js
+9. **Fase 5.7** - Tab comisiones con cascada y simulador
+10. **Fase 7** - Redis config
+11. **Fase 2.3-2.4** - quota.service.js + quota-cache.service.js
+12. **Fase 4.3** - quota.routes.js
+13. **Fase 5.8** - Tab cupos con cascada y matriz
+14. **Fase 2.5** - entity-ledger.service.js
+15. **Fase 4.4** - ledger.routes.js
+16. **Fase 5.9** - Tab contabilidad + liquidaciones
+17. **Fase 5.10** - Dashboards por rol
+18. **Fase 2.6** - physical-sale.service.js
+19. **Fase 4.5** - pos.routes.js
+20. **Fase 6** - Frontend POS completo
+21. **Fase 8** - Validaciones finales y seguridad
 
 ## Resumen de Archivos
 
-### Archivos nuevos (backend):
+### Backend (nuevos: 18 archivos):
 - `backend/src/config/redis.js`
 - `backend/src/services/entity-management.service.js`
 - `backend/src/services/commission.service.js`
@@ -680,7 +1397,7 @@ Dado que esto es un sistema grande, se implementa en este orden:
 - `backend/src/routes/ledger.routes.js`
 - `backend/src/middlewares/entity-auth.middleware.js`
 
-### Archivos nuevos (frontend):
+### Frontend (nuevos: ~30 archivos):
 - `frontend/lib/api/entities.js`
 - `frontend/lib/api/commissions.js`
 - `frontend/lib/api/quotas.js`
@@ -689,18 +1406,35 @@ Dado que esto es un sistema grande, se implementa en este orden:
 - `frontend/lib/stores/entityStore.js`
 - `frontend/app/admin/entidades/page.js`
 - `frontend/app/admin/entidades/[entityType]/[id]/page.js`
+- `frontend/app/admin/mi-comercializadora/page.js`
+- `frontend/app/admin/mi-banca/page.js`
+- `frontend/app/admin/mi-grupo/page.js`
+- `frontend/app/admin/mi-agencia/page.js`
+- `frontend/app/admin/mis-usuarios/page.js`
+- `frontend/app/admin/comisiones/page.js`
+- `frontend/app/admin/cupos/page.js`
+- `frontend/app/admin/contabilidad/page.js`
+- `frontend/app/admin/reportes-entidad/page.js`
+- `frontend/app/admin/liquidaciones/page.js`
 - `frontend/app/pos/layout.js`
 - `frontend/app/pos/page.js`
-- `frontend/components/entities/*.js` (8 componentes)
+- `frontend/components/entities/EntityTree.js`
+- `frontend/components/entities/EntityForm.js`
+- `frontend/components/entities/EntityUsersTab.js`
+- `frontend/components/entities/CommissionConfigTab.js`
+- `frontend/components/entities/QuotaConfigTab.js`
+- `frontend/components/entities/LedgerTab.js`
 - `frontend/components/pos/*.js` (13 componentes)
 
-### Archivos a modificar:
-- `backend/prisma/schema.prisma` - Modelos y enums nuevos
-- `backend/src/middlewares/auth.middleware.js` - Nuevos roles
-- `backend/src/services/ticket.service.js` - Source TAQUILLA_FISICA
-- `backend/src/services/prize-processor.service.js` - Trigger ledger/comisiones
-- `backend/src/services/draw-stats.service.js` - Stats de taquillas fisicas
-- `backend/src/app.js` o `backend/src/routes/index.js` - Registrar nuevas rutas
-- `backend/package.json` - Agregar ioredis
-- `frontend/app/admin/layout.js` - Sidebar con nuevas secciones
-- `frontend/middleware.js` - Rutas protegidas nuevas
+### Backend (modificar):
+- `backend/prisma/schema.prisma`
+- `backend/src/middlewares/auth.middleware.js`
+- `backend/src/services/ticket.service.js`
+- `backend/src/services/prize-processor.service.js`
+- `backend/src/app.js` o `backend/src/routes/index.js`
+- `backend/package.json`
+
+### Frontend (modificar):
+- `frontend/app/admin/layout.js`
+- `frontend/middleware.js`
+- `frontend/app/admin/page.js`
