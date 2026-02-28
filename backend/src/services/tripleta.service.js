@@ -5,6 +5,7 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import playerMovementService from './player-movement.service.js';
+import { calculateBetSplit } from '../lib/balanceUtils.js';
 
 export class TripletaService {
   /**
@@ -61,9 +62,13 @@ export class TripletaService {
         throw new Error('Usuario no encontrado');
       }
 
-      if (user.balance < amount) {
-        throw new Error('Saldo insuficiente');
-      }
+      // Split bet between regular balance and bonus balance
+      const { fromRegular, fromBonus } = calculateBetSplit(
+        parseFloat(user.balance),
+        parseFloat(user.blockedBalance || 0),
+        parseFloat(user.bonusBalance || 0),
+        parseFloat(amount)
+      );
 
       // Obtener los próximos sorteos programados
       const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
@@ -100,14 +105,14 @@ export class TripletaService {
 
       // Crear la apuesta en una transacción
       const result = await prisma.$transaction(async (tx) => {
-        // Descontar el saldo del usuario
+        // Descontar el saldo del usuario (regular first, then bonus)
+        const updateData = {};
+        if (fromRegular > 0) updateData.balance = { decrement: fromRegular };
+        if (fromBonus > 0) updateData.bonusBalance = { decrement: fromBonus };
+
         await tx.user.update({
           where: { id: userId },
-          data: {
-            balance: {
-              decrement: amount,
-            },
-          },
+          data: updateData,
         });
 
         // Crear la apuesta tripleta
@@ -140,6 +145,7 @@ export class TripletaService {
         await playerMovementService.recordTripletaBet(tx, userId, amount, tripleBet.id, {
           gameId,
           drawsCount: tripletaConfig.drawsCount,
+          bonusUsed: fromBonus > 0 ? fromBonus : undefined,
         });
 
         return tripleBet;

@@ -453,7 +453,7 @@ export default function MiCuentaPage() {
 
         {/* Balance */}
         <div className="bg-white rounded-xl shadow-sm border p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className={`grid grid-cols-1 ${(profile?.bonusBalance || 0) > 0 ? 'sm:grid-cols-4' : 'sm:grid-cols-3'} gap-4`}>
             <div className="p-4 bg-green-50 rounded-lg text-center">
               <p className="text-xs text-green-600 mb-1">Balance Disponible</p>
               <p className="text-2xl font-bold text-green-700">
@@ -466,6 +466,14 @@ export default function MiCuentaPage() {
                 Bs. {(profile?.blockedBalance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
+            {(profile?.bonusBalance || 0) > 0 && (
+              <div className="p-4 bg-purple-50 rounded-lg text-center">
+                <p className="text-xs text-purple-600 mb-1">Bono (Solo Jugar)</p>
+                <p className="text-2xl font-bold text-purple-700">
+                  Bs. {(profile?.bonusBalance || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </p>
+              </div>
+            )}
             <div className="p-4 bg-blue-50 rounded-lg text-center">
               <p className="text-xs text-blue-600 mb-1">Balance Total</p>
               <p className="text-2xl font-bold text-blue-700">

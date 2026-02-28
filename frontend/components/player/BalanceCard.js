@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Wallet, RefreshCw, TrendingUp, Lock } from 'lucide-react';
+import { Wallet, RefreshCw, TrendingUp, Lock, Gift } from 'lucide-react';
 
 export default function BalanceCard({ balance, onRefresh }) {
   const [refreshing, setRefreshing] = useState(false);
@@ -50,7 +50,7 @@ export default function BalanceCard({ balance, onRefresh }) {
           </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4 pt-4 border-t border-white/20">
+        <div className={`grid ${balance.bonusBalance > 0 ? 'grid-cols-3' : 'grid-cols-2'} gap-4 pt-4 border-t border-white/20`}>
           <div className="bg-white/10 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp className="w-4 h-4 text-green-300" />
@@ -70,6 +70,19 @@ export default function BalanceCard({ balance, onRefresh }) {
               Bs. {balance.blockedBalance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
+
+          {balance.bonusBalance > 0 && (
+            <div className="bg-white/10 rounded-lg p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Gift className="w-4 h-4 text-purple-300" />
+                <p className="text-sm text-blue-100">Bono</p>
+              </div>
+              <p className="text-2xl font-semibold">
+                Bs. {balance.bonusBalance.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-blue-200 mt-1">Solo para jugar</p>
+            </div>
+          )}
         </div>
       </div>
 

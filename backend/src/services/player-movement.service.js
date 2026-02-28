@@ -184,6 +184,22 @@ class PlayerMovementService {
   }
 
   /**
+   * Registrar bonificación por admin
+   */
+  async recordBonus(tx, userId, amount, description, adminId, metadata = {}) {
+    return this.createMovement(tx, {
+      userId,
+      type: 'BONUS',
+      amount: Math.abs(parseFloat(amount)),
+      description: description || 'Bonificación',
+      referenceType: 'BONUS',
+      referenceId: null,
+      metadata,
+      createdBy: adminId
+    });
+  }
+
+  /**
    * Obtener historial de movimientos de un jugador
    * Enriquece movimientos BET/PRIZE con datos del ticket o tripleta
    */

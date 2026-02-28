@@ -16,6 +16,7 @@ class PlayerQueryService {
           whatsappNotifications: true,
           balance: true,
           blockedBalance: true,
+          bonusBalance: true,
           createdAt: true
         }
       });
@@ -24,11 +25,18 @@ class PlayerQueryService {
         throw new Error('Usuario no encontrado');
       }
 
+      const balance = parseFloat(user.balance);
+      const blockedBalance = parseFloat(user.blockedBalance);
+      const bonusBalance = parseFloat(user.bonusBalance || 0);
+      const availableBalance = balance - blockedBalance;
+
       return {
         ...user,
-        balance: parseFloat(user.balance),
-        blockedBalance: parseFloat(user.blockedBalance),
-        availableBalance: parseFloat(user.balance) - parseFloat(user.blockedBalance)
+        balance,
+        blockedBalance,
+        bonusBalance,
+        availableBalance,
+        bettingBalance: availableBalance + bonusBalance
       };
     } catch (error) {
       logger.error('Error getting player profile:', error);
@@ -43,6 +51,7 @@ class PlayerQueryService {
         select: {
           balance: true,
           blockedBalance: true,
+          bonusBalance: true,
           phone: true,
           whatsappVerified: true,
           whatsappNotifications: true
@@ -53,10 +62,17 @@ class PlayerQueryService {
         throw new Error('Usuario no encontrado');
       }
 
+      const balance = parseFloat(user.balance);
+      const blockedBalance = parseFloat(user.blockedBalance);
+      const bonusBalance = parseFloat(user.bonusBalance || 0);
+      const availableBalance = balance - blockedBalance;
+
       return {
-        balance: parseFloat(user.balance),
-        blockedBalance: parseFloat(user.blockedBalance),
-        availableBalance: parseFloat(user.balance) - parseFloat(user.blockedBalance),
+        balance,
+        blockedBalance,
+        bonusBalance,
+        availableBalance,
+        bettingBalance: availableBalance + bonusBalance,
         phone: user.phone,
         whatsappVerified: user.whatsappVerified,
         whatsappNotifications: user.whatsappNotifications

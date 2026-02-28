@@ -3,6 +3,7 @@ import logger from '../lib/logger.js';
 import taquillaWebService from './taquilla-web.service.js';
 import playerMovementService from './player-movement.service.js';
 import playerNotificationService from './player-notification.service.js';
+import { calculateBetSplit } from '../lib/balanceUtils.js';
 
 class TicketService {
   async create(userId, data) {
@@ -71,19 +72,22 @@ class TicketService {
           });
         }
 
-        const availableBalance = user.balance - user.blockedBalance;
-        
-        if (availableBalance < totalAmount) {
-          throw new Error(`Saldo insuficiente. Disponible: ${availableBalance}, Requerido: ${totalAmount}`);
-        }
+        // Split bet between regular balance and bonus balance
+        const { fromRegular, fromBonus } = calculateBetSplit(
+          parseFloat(user.balance),
+          parseFloat(user.blockedBalance),
+          parseFloat(user.bonusBalance || 0),
+          totalAmount
+        );
+
+        // Deduct from regular balance and bonus balance
+        const updateData = {};
+        if (fromRegular > 0) updateData.balance = { decrement: fromRegular };
+        if (fromBonus > 0) updateData.bonusBalance = { decrement: fromBonus };
 
         await tx.user.update({
           where: { id: userId },
-          data: {
-            balance: {
-              decrement: totalAmount
-            }
-          }
+          data: updateData
         });
 
         const createdTicket = await tx.ticket.create({
@@ -122,7 +126,8 @@ class TicketService {
         await playerMovementService.recordBet(tx, userId, totalAmount, createdTicket.id, {
           drawId: data.drawId,
           gameName: draw.game.name,
-          drawTime: draw.drawTime
+          drawTime: draw.drawTime,
+          bonusUsed: fromBonus > 0 ? fromBonus : undefined
         });
 
         logger.info('Ticket created', { 

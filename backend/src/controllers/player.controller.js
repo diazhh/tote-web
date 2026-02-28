@@ -9,12 +9,13 @@ class PlayerController {
    */
   async getPlayers(req, res) {
     try {
-      const { search, limit = 50, offset = 0 } = req.query;
-      
+      const { search, limit = 50, offset = 0, status } = req.query;
+
       const players = await playerService.getPlayers({
         search,
         limit: parseInt(limit),
-        offset: parseInt(offset)
+        offset: parseInt(offset),
+        status
       });
 
       res.json({
@@ -166,6 +167,124 @@ class PlayerController {
         success: false,
         error: error.message || 'Error al obtener estadísticas del jugador'
       });
+    }
+  }
+  // ============================================
+  // ADMIN ACTIONS
+  // ============================================
+
+  /**
+   * PATCH /api/players/:id/status
+   */
+  async toggleStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await playerService.togglePlayerStatus(id, req.user.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error in toggleStatus:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * PATCH /api/players/:id/profile
+   */
+  async updateProfile(req, res) {
+    try {
+      const { id } = req.params;
+      const { username, email, phone } = req.body;
+      const result = await playerService.updatePlayerProfile(id, { username, email, phone }, req.user.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error in updateProfile:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * POST /api/players/:id/send-reset-link
+   */
+  async sendResetLink(req, res) {
+    try {
+      const { id } = req.params;
+      const result = await playerService.sendPlayerResetLink(id, req.user.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error in sendResetLink:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * POST /api/players/:id/adjustment
+   */
+  async adjustBalance(req, res) {
+    try {
+      const { id } = req.params;
+      const { amount, reason } = req.body;
+      if (!amount) return res.status(400).json({ success: false, error: 'Monto es requerido' });
+      const result = await playerService.adjustBalance(id, amount, reason, req.user.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error in adjustBalance:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * POST /api/players/:id/bonus
+   */
+  async giveBonus(req, res) {
+    try {
+      const { id } = req.params;
+      const { amount, reason } = req.body;
+      if (!amount || parseFloat(amount) <= 0) {
+        return res.status(400).json({ success: false, error: 'Monto de bono debe ser positivo' });
+      }
+      const result = await playerService.giveBonus(id, amount, reason, req.user.id);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error in giveBonus:', error);
+      res.status(400).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * GET /api/players/:id/deposits
+   */
+  async getPlayerDeposits(req, res) {
+    try {
+      const { id } = req.params;
+      const { limit = 50, offset = 0, status } = req.query;
+      const result = await playerService.getPlayerDeposits(id, {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        status
+      });
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error in getPlayerDeposits:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * GET /api/players/:id/withdrawals
+   */
+  async getPlayerWithdrawals(req, res) {
+    try {
+      const { id } = req.params;
+      const { limit = 50, offset = 0, status } = req.query;
+      const result = await playerService.getPlayerWithdrawals(id, {
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+        status
+      });
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error in getPlayerWithdrawals:', error);
+      res.status(500).json({ success: false, error: error.message });
     }
   }
 }

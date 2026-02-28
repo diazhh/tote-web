@@ -323,6 +323,7 @@ model User {
   whatsappNotifications  Boolean   @default(false)
   balance                Decimal   @default(0) @db.Decimal(12, 2)
   blockedBalance         Decimal   @default(0) @db.Decimal(12, 2)
+  bonusBalance           Decimal   @default(0) @db.Decimal(12, 2)
 
   // Relaciones
   auditLogs       AuditLog[]
