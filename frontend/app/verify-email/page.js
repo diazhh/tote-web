@@ -24,6 +24,20 @@ export default function VerifyEmailPage() {
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
+    // Auto-send verification code on page load
+    const sendInitialCode = async () => {
+      try {
+        setSending(true);
+        await emailVerificationAPI.sendCode();
+        toast.success('Código enviado a tu correo');
+        setCooldown(60);
+      } catch (error) {
+        toast.error(error.response?.data?.error || 'Error al enviar el código');
+      } finally {
+        setSending(false);
+      }
+    };
+    sendInitialCode();
   }, []);
 
   const handleChange = (index, value) => {
