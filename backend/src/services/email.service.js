@@ -11,27 +11,19 @@ class EmailService {
   init() {
     if (this.initialized) return;
 
-    const host = process.env.SMTP_HOST;
-    const port = parseInt(process.env.SMTP_PORT || '587');
     const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASSWORD;
+    const from = process.env.SMTP_FROM || `Multiloterias <${user || 'noreply@atilax.io'}>`;
 
-    if (!host || !user || !pass) {
-      logger.warn('Email service not configured - SMTP_HOST, SMTP_USER, or SMTP_PASSWORD missing');
-      return;
-    }
-
+    // Use sendmail transport (local Postfix) for reliable delivery
     this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
-      tls: { rejectUnauthorized: false }
+      sendmail: true,
+      newline: 'unix',
+      path: '/usr/sbin/sendmail'
     });
 
-    this.from = process.env.SMTP_FROM || `Multiloterias <${user}>`;
+    this.from = from;
     this.initialized = true;
-    logger.info('Email service initialized', { host, port, user });
+    logger.info('Email service initialized (sendmail transport)');
   }
 
   async send({ to, subject, template, data }) {
