@@ -228,16 +228,10 @@ export function extractDateFromCaracasString(dateString) {
 export function buildDrawDateTime(drawDate, drawTime) {
   if (!drawDate || !drawTime) return null;
   
-  // Extraer solo la parte de fecha (YYYY-MM-DD) sin conversión UTC
-  // para evitar desfase horario cuando drawDate viene como "2026-02-28T00:00:00.000Z"
-  const datePart = typeof drawDate === 'string'
-    ? drawDate.substring(0, 10)
-    : drawDate.toISOString().substring(0, 10);
-  const [year, month, day] = datePart.split('-').map(Number);
+  const date = new Date(drawDate);
   const [hours, minutes, seconds = '0'] = drawTime.split(':');
   
-  // Crear fecha en hora local (no UTC) para evitar el desfase
-  const date = new Date(year, month - 1, day, parseInt(hours, 10), parseInt(minutes, 10), parseInt(seconds, 10), 0);
+  date.setHours(parseInt(hours, 10), parseInt(minutes, 10), parseInt(seconds, 10), 0);
   return date;
 }
 
