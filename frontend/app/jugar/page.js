@@ -226,7 +226,7 @@ export default function JugarPage() {
     }
 
     const total = getTotalAmount();
-    if (total > balance.availableBalance) {
+    if (total > (balance.bettingBalance ?? balance.availableBalance)) {
       toast.error('Saldo insuficiente');
       return;
     }
@@ -343,7 +343,7 @@ export default function JugarPage() {
               <div className="flex items-center gap-2 px-3 lg:px-4 py-1.5 lg:py-2 bg-blue-50 rounded-lg">
                 <Wallet className="w-4 h-4 lg:w-5 lg:h-5 text-blue-600" />
                 <span className="text-sm lg:text-base font-bold text-blue-600">
-                  Bs. {balance.availableBalance.toFixed(2)}
+                  Bs. {(balance.bettingBalance ?? balance.availableBalance).toFixed(2)}
                 </span>
               </div>
             )}
@@ -503,7 +503,7 @@ export default function JugarPage() {
                           <div>
                             <p className="text-sm text-gray-600">Saldo Después</p>
                             <p className="text-xl font-semibold text-gray-700">
-                              Bs. {(balance?.availableBalance - getTotalAmount()).toFixed(2)}
+                              Bs. {((balance?.bettingBalance ?? balance?.availableBalance) - getTotalAmount()).toFixed(2)}
                             </p>
                           </div>
                         </div>
@@ -552,7 +552,7 @@ export default function JugarPage() {
             <div className="text-right">
               <p className="text-xs text-gray-600">Saldo después</p>
               <p className="text-sm font-semibold text-gray-700">
-                Bs. {(balance?.availableBalance - getTotalAmount()).toFixed(2)}
+                Bs. {((balance?.bettingBalance ?? balance?.availableBalance) - getTotalAmount()).toFixed(2)}
               </p>
             </div>
           </div>
