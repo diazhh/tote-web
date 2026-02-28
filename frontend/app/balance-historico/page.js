@@ -432,8 +432,6 @@ export default function BalanceHistoricoPage() {
                               {getStatusBadge(tripleta.status)}
                             </div>
                             <div className="flex items-center gap-2 mt-1 text-sm text-purple-600">
-                              <span>{tripleta.numbersWon || 0}/3 numeros</span>
-                              <span className="text-purple-400">|</span>
                               <span>{tripleta.drawsCount} sorteos</span>
                               {tripleta.gameName && (
                                 <>
@@ -464,14 +462,9 @@ export default function BalanceHistoricoPage() {
                           {tripleta.items.map((gi, idx) => (
                             <div
                               key={idx}
-                              className={`px-3 py-1 rounded-lg text-sm font-semibold ${
-                                gi.won
-                                  ? 'bg-green-100 text-green-700 border-2 border-green-300'
-                                  : 'bg-purple-100 text-purple-800 border border-purple-300'
-                              }`}
+                              className="px-3 py-1 rounded-lg text-sm font-semibold bg-purple-100 text-purple-800 border border-purple-300"
                             >
                               {gi.number} - {gi.name}
-                              {gi.won && <span className="ml-1">✓</span>}
                             </div>
                           ))}
                         </div>

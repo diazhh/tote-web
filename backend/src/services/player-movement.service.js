@@ -246,20 +246,31 @@ class PlayerMovementService {
         : [],
       tripletaIds.length > 0
         ? prisma.tripleBet.findMany({
-            where: { id: { in: [...new Set(tripletaIds)] } },
-            include: {
-              game: true,
-              items: { include: { gameItem: true } },
-              draws: {
-                include: {
-                  draw: { include: { winnerItem: true } }
-                },
-                orderBy: { draw: { drawDate: 'asc' } }
-              }
-            }
+            where: { id: { in: [...new Set(tripletaIds)] } }
           })
         : []
     ]);
+
+    // Enriquecer tripletas con game e items (no tienen relaciones directas en schema)
+    if (tripletas.length > 0) {
+      const gameIds = [...new Set(tripletas.map(t => t.gameId).filter(Boolean))];
+      const itemIds = [...new Set(tripletas.flatMap(t => [t.item1Id, t.item2Id, t.item3Id].filter(Boolean)))];
+
+      const [games, items] = await Promise.all([
+        gameIds.length > 0 ? prisma.game.findMany({ where: { id: { in: gameIds } }, select: { id: true, name: true } }) : [],
+        itemIds.length > 0 ? prisma.gameItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, number: true, name: true } }) : []
+      ]);
+
+      const gameMap = new Map(games.map(g => [g.id, g]));
+      const itemMap = new Map(items.map(i => [i.id, i]));
+
+      for (const t of tripletas) {
+        t.game = gameMap.get(t.gameId) || null;
+        t.item1 = itemMap.get(t.item1Id) || { number: '?', name: '?' };
+        t.item2 = itemMap.get(t.item2Id) || { number: '?', name: '?' };
+        t.item3 = itemMap.get(t.item3Id) || { number: '?', name: '?' };
+      }
+    }
 
     // Indexar por ID
     const ticketMap = new Map(tickets.map(t => [t.id, t]));
@@ -298,28 +309,19 @@ class PlayerMovementService {
       } else if (m.referenceType === 'TRIPLETA' && m.referenceId) {
         const tripleta = tripletaMap.get(m.referenceId);
         if (tripleta) {
-          const numbersWon = tripleta.items.filter(i => i.won).length;
           enriched.tripleta = {
             id: tripleta.id,
             status: tripleta.status,
             amount: parseFloat(tripleta.amount),
             prize: parseFloat(tripleta.prize || 0),
             multiplier: parseFloat(tripleta.multiplier),
-            numbersWon,
             drawsCount: tripleta.drawsCount,
             gameName: tripleta.game?.name || null,
-            items: tripleta.items.map(i => ({
-              number: i.gameItem.number,
-              name: i.gameItem.name,
-              won: i.won
-            })),
-            draws: tripleta.draws.map(d => ({
-              drawDate: d.draw.drawDate,
-              drawTime: d.draw.drawTime,
-              status: d.draw.status,
-              winnerNumber: d.draw.winnerItem?.number || null,
-              matched: d.matched
-            }))
+            items: [
+              { number: tripleta.item1?.number || '?', name: tripleta.item1?.name || '?' },
+              { number: tripleta.item2?.number || '?', name: tripleta.item2?.name || '?' },
+              { number: tripleta.item3?.number || '?', name: tripleta.item3?.name || '?' }
+            ]
           };
         }
       }
