@@ -59,14 +59,17 @@ export class TripletaController {
         gameId: req.query.gameId,
         limit: req.query.limit ? parseInt(req.query.limit) : 50,
         offset: req.query.offset ? parseInt(req.query.offset) : 0,
+        dateFrom: req.query.dateFrom,
+        dateTo: req.query.dateTo,
       };
 
-      const tripleBets = await tripletaService.getUserTripleBets(userId, filters);
+      const result = await tripletaService.getUserTripleBets(userId, filters);
 
       res.json({
         success: true,
-        data: tripleBets,
-        count: tripleBets.length,
+        data: result.data,
+        count: result.data.length,
+        pagination: result.pagination,
       });
     } catch (error) {
       next(error);

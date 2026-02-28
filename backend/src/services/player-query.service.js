@@ -218,13 +218,20 @@ class PlayerQueryService {
 
   async getPlayerTickets(userId, filters = {}) {
     try {
-      const { status, drawId, limit = 20, offset = 0 } = filters;
+      const { status, drawId, gameId, dateFrom, dateTo, limit = 20, offset = 0 } = filters;
 
       const where = {
         userId,
         ...(status && { status }),
-        ...(drawId && { drawId })
+        ...(drawId && { drawId }),
+        ...(gameId && { draw: { gameId } }),
       };
+
+      if (dateFrom || dateTo) {
+        where.createdAt = {};
+        if (dateFrom) where.createdAt.gte = new Date(dateFrom);
+        if (dateTo) where.createdAt.lte = new Date(dateTo);
+      }
 
       const [tickets, total] = await Promise.all([
         prisma.ticket.findMany({

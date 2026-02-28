@@ -4,6 +4,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import playerMovementService from './player-movement.service.js';
 
 export class TripletaService {
   /**
@@ -135,6 +136,12 @@ export class TripletaService {
           },
         });
 
+        // Registrar movimiento de apuesta tripleta
+        await playerMovementService.recordTripletaBet(tx, userId, amount, tripleBet.id, {
+          gameId,
+          drawsCount: tripletaConfig.drawsCount,
+        });
+
         return tripleBet;
       });
 
@@ -164,20 +171,90 @@ export class TripletaService {
         where.gameId = filters.gameId;
       }
 
-      const tripleBets = await prisma.tripleBet.findMany({
-        where,
-        orderBy: {
-          createdAt: 'desc',
-        },
-        take: filters.limit || 50,
-        skip: filters.offset || 0,
-      });
+      if (filters.dateFrom || filters.dateTo) {
+        where.createdAt = {};
+        if (filters.dateFrom) where.createdAt.gte = new Date(filters.dateFrom);
+        if (filters.dateTo) where.createdAt.lte = new Date(filters.dateTo);
+      }
 
-      return tripleBets;
+      const [tripleBets, total] = await Promise.all([
+        prisma.tripleBet.findMany({
+          where,
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: filters.limit || 50,
+          skip: filters.offset || 0,
+          include: {
+            item1: { select: { id: true, number: true, name: true } },
+            item2: { select: { id: true, number: true, name: true } },
+            item3: { select: { id: true, number: true, name: true } },
+            game: { select: { id: true, name: true } },
+          },
+        }),
+        prisma.tripleBet.count({ where }),
+      ]);
+
+      // Enrich each tripleta with items array and numbersWon
+      const enriched = await Promise.all(tripleBets.map(async (bet) => {
+        try {
+          const drawsInfo = await this.getDrawsForTripleta(bet.id);
+          const items = [
+            { ...bet.item1, won: drawsInfo.tripletaItems[0]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item1Id) },
+            { ...bet.item2, won: drawsInfo.tripletaItems[1]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item2Id) },
+            { ...bet.item3, won: drawsInfo.tripletaItems[2]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, bet.item3Id) },
+          ];
+          const numbersWon = items.filter(i => i.won).length;
+
+          return {
+            ...bet,
+            items,
+            numbersWon,
+            drawsInRange: {
+              total: drawsInfo.total,
+              executed: drawsInfo.executed,
+              remaining: drawsInfo.remaining,
+              draws: drawsInfo.draws,
+            },
+          };
+        } catch (err) {
+          // If draws lookup fails, return bet with basic items
+          return {
+            ...bet,
+            items: [
+              { ...bet.item1, won: false },
+              { ...bet.item2, won: false },
+              { ...bet.item3, won: false },
+            ],
+            numbersWon: 0,
+            drawsInRange: null,
+          };
+        }
+      }));
+
+      return {
+        data: enriched,
+        pagination: {
+          total,
+          limit: filters.limit || 50,
+          offset: filters.offset || 0,
+          hasMore: total > (filters.offset || 0) + (filters.limit || 50),
+        },
+      };
     } catch (error) {
       logger.error('Error obteniendo apuestas tripleta del usuario:', error);
       throw error;
     }
+  }
+
+  /**
+   * Helper: find the draw where a specific item won
+   */
+  _findWonDraw(drawsInfo, itemId) {
+    if (!drawsInfo?.draws) return null;
+    const draw = drawsInfo.draws.find(d => d.winnerItemId === itemId);
+    if (!draw) return null;
+    return { drawDate: draw.drawDate, drawTime: draw.drawTime };
   }
 
   /**
@@ -196,10 +273,49 @@ export class TripletaService {
               username: true,
             },
           },
+          item1: { select: { id: true, number: true, name: true } },
+          item2: { select: { id: true, number: true, name: true } },
+          item3: { select: { id: true, number: true, name: true } },
+          game: { select: { id: true, name: true } },
         },
       });
 
-      return tripleBet;
+      if (!tripleBet) return null;
+
+      // Enrich with draws info
+      try {
+        const drawsInfo = await this.getDrawsForTripleta(id);
+        const items = [
+          { ...tripleBet.item1, won: drawsInfo.tripletaItems[0]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item1Id) },
+          { ...tripleBet.item2, won: drawsInfo.tripletaItems[1]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item2Id) },
+          { ...tripleBet.item3, won: drawsInfo.tripletaItems[2]?.matched || false, wonInDraw: this._findWonDraw(drawsInfo, tripleBet.item3Id) },
+        ];
+        const numbersWon = items.filter(i => i.won).length;
+
+        return {
+          ...tripleBet,
+          items,
+          numbersWon,
+          drawsInRange: {
+            total: drawsInfo.total,
+            executed: drawsInfo.executed,
+            remaining: drawsInfo.remaining,
+            draws: drawsInfo.draws,
+          },
+        };
+      } catch (err) {
+        // If draws lookup fails, return with basic items
+        return {
+          ...tripleBet,
+          items: [
+            { ...tripleBet.item1, won: false },
+            { ...tripleBet.item2, won: false },
+            { ...tripleBet.item3, won: false },
+          ],
+          numbersWon: 0,
+          drawsInRange: null,
+        };
+      }
     } catch (error) {
       logger.error(`Error obteniendo apuesta tripleta ${id}:`, error);
       throw error;
@@ -299,6 +415,12 @@ export class TripletaService {
                   increment: prize,
                 },
               },
+            });
+
+            // Registrar movimiento de premio tripleta
+            await playerMovementService.recordTripletaPrize(tx, bet.userId, prize, bet.id, {
+              drawId,
+              multiplier: bet.multiplier,
             });
           });
 

@@ -36,6 +36,17 @@ export default function TicketDetailModal({ ticket, onClose }) {
 
   const groupedDetails = groupDetailsByDraw();
 
+  const formatDrawDateTime = (draw) => {
+    if (!draw) return 'N/A';
+    if (draw.drawDate) {
+      const date = new Date(draw.drawDate);
+      const dateStr = date.toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' });
+      const time = draw.drawTime ? draw.drawTime.substring(0, 5) : date.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' });
+      return `${dateStr} - ${time}`;
+    }
+    return 'N/A';
+  };
+
   const formatDateTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('es-VE', {

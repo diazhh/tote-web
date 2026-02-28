@@ -1,4 +1,5 @@
 import playerQueryService from '../services/player-query.service.js';
+import playerMovementService from '../services/player-movement.service.js';
 import logger from '../lib/logger.js';
 
 class PlayerQueryController {
@@ -69,11 +70,14 @@ class PlayerQueryController {
   async getTickets(req, res) {
     try {
       const userId = req.user.id;
-      const { status, drawId, limit, offset } = req.query;
+      const { status, drawId, gameId, dateFrom, dateTo, limit, offset } = req.query;
 
       const result = await playerQueryService.getPlayerTickets(userId, {
         status,
         drawId,
+        gameId,
+        dateFrom,
+        dateTo,
         limit,
         offset
       });
@@ -138,6 +142,38 @@ class PlayerQueryController {
       res.status(500).json({
         success: false,
         error: error.message || 'Error al obtener retiros'
+      });
+    }
+  }
+
+  async getMovements(req, res) {
+    try {
+      const userId = req.user.id;
+      const { type, dateFrom, dateTo, limit = 20, offset = 0 } = req.query;
+
+      const result = await playerMovementService.getPlayerMovements(userId, {
+        type,
+        dateFrom,
+        dateTo,
+        limit: parseInt(limit),
+        offset: parseInt(offset),
+      });
+
+      res.json({
+        success: true,
+        data: result.movements,
+        pagination: {
+          total: result.total,
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+          hasMore: result.total > parseInt(offset) + parseInt(limit),
+        },
+      });
+    } catch (error) {
+      logger.error('Error in getMovements:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Error al obtener movimientos',
       });
     }
   }

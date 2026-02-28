@@ -18,6 +18,8 @@ const tripletaAPI = {
     if (filters.gameId) params.append('gameId', filters.gameId);
     if (filters.limit) params.append('limit', filters.limit);
     if (filters.offset) params.append('offset', filters.offset);
+    if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
+    if (filters.dateTo) params.append('dateTo', filters.dateTo);
 
     const response = await api.get(`/tripleta/my-bets?${params.toString()}`);
     return response.data;

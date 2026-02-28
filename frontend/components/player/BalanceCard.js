@@ -74,17 +74,23 @@ export default function BalanceCard({ balance, onRefresh }) {
       </div>
 
       <div className="mt-6 flex gap-3">
-        <button 
+        <button
           onClick={() => window.location.href = '/depositos'}
           className="flex-1 bg-white text-blue-600 font-semibold py-3 rounded-lg hover:bg-blue-50 transition-colors"
         >
           Depositar
         </button>
-        <button 
+        <button
           onClick={() => window.location.href = '/retiros'}
           className="flex-1 bg-white/20 hover:bg-white/30 font-semibold py-3 rounded-lg transition-colors"
         >
           Retirar
+        </button>
+        <button
+          onClick={() => window.location.href = '/cuentas'}
+          className="flex-1 bg-white/20 hover:bg-white/30 font-semibold py-3 rounded-lg transition-colors"
+        >
+          Mis Cuentas
         </button>
       </div>
     </div>

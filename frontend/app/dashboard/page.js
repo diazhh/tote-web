@@ -117,7 +117,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <button
             onClick={() => router.push('/jugar')}
             className="bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center gap-3"
@@ -137,14 +137,20 @@ export default function DashboardPage() {
             </svg>
             <span className="text-3xl font-bold">BALANCE / HISTÓRICO</span>
           </button>
+          <button
+            onClick={() => router.push('/cuentas')}
+            className="bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl p-8 shadow-lg hover:shadow-xl transition-all transform hover:scale-105 flex items-center justify-center gap-3"
+          >
+            <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
+            <span className="text-3xl font-bold">MIS CUENTAS</span>
+          </button>
         </div>
 
         {/* Recent Tickets Section */}
         <div>
-          <RecentTickets 
-            tickets={statistics?.recentTickets || []} 
-            onRefresh={loadDashboardData}
-          />
+          <RecentTickets />
         </div>
       </main>
     </div>

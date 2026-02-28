@@ -13,5 +13,6 @@ router.get('/tickets', playerQueryController.getTickets.bind(playerQueryControll
 router.get('/deposits', playerQueryController.getDeposits.bind(playerQueryController));
 router.get('/withdrawals', playerQueryController.getWithdrawals.bind(playerQueryController));
 router.get('/balance-history', playerQueryController.getBalanceHistory.bind(playerQueryController));
+router.get('/movements', playerQueryController.getMovements.bind(playerQueryController));
 
 export default router;

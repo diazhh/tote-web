@@ -29,6 +29,11 @@ export const playerApi = {
   getWithdrawals: async (params = {}) => {
     const response = await api.get('/player/withdrawals', { params });
     return response.data;
+  },
+
+  getMovements: async (params = {}) => {
+    const response = await api.get('/player/movements', { params });
+    return response.data;
   }
 };
 
