@@ -10,7 +10,7 @@ const router = Router();
 
 // Todas las rutas requieren autenticación y rol ADMIN o TAQUILLA_ADMIN
 router.use(authenticate);
-router.use(authorize('ADMIN', 'TAQUILLA_ADMIN', 'OPERATOR'));
+router.use(authorize('ADMIN', 'OPERATOR'));
 
 // Análisis completo de impacto de ganadores
 router.get('/draw/:drawId', drawAnalysisController.analyzeDrawWinnerImpact);

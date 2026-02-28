@@ -131,10 +131,11 @@ export default function LoginPage() {
             <div className="w-16 h-16 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
               <User className="h-8 w-8" />
             </div>
+            <img src="/images/multiloterias-logo.png" alt="Multiloterias" className="h-16 w-auto mx-auto mb-2" />
             <h1 className="text-3xl font-bold mb-2">
-              Totalizador
+              Multiloterias
             </h1>
-            <p className="text-white/90">Loterías en Línea</p>
+            <p className="text-white/90">Loterias en Linea</p>
           </div>
 
           {/* Tabs */}

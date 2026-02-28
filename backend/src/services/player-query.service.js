@@ -8,7 +8,10 @@ class PlayerQueryService {
         where: { id: userId },
         select: {
           balance: true,
-          blockedBalance: true
+          blockedBalance: true,
+          phone: true,
+          whatsappVerified: true,
+          whatsappNotifications: true
         }
       });
 
@@ -19,7 +22,10 @@ class PlayerQueryService {
       return {
         balance: parseFloat(user.balance),
         blockedBalance: parseFloat(user.blockedBalance),
-        availableBalance: parseFloat(user.balance) - parseFloat(user.blockedBalance)
+        availableBalance: parseFloat(user.balance) - parseFloat(user.blockedBalance),
+        phone: user.phone,
+        whatsappVerified: user.whatsappVerified,
+        whatsappNotifications: user.whatsappNotifications
       };
     } catch (error) {
       logger.error('Error getting player balance:', error);

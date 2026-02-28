@@ -29,9 +29,7 @@ export function middleware(request) {
       const taquillaRoutes = [
         '/admin/depositos',
         '/admin/retiros',
-        '/admin/cuentas-sistema',
         '/admin/jugadores',
-        '/admin/tickets',
         '/admin/reportes-taquilla'
       ];
       

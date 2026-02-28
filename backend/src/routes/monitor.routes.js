@@ -10,7 +10,7 @@ const router = Router();
 
 // Todas las rutas requieren autenticación y rol ADMIN o TAQUILLA_ADMIN
 router.use(authenticate);
-router.use(authorize('ADMIN', 'TAQUILLA_ADMIN', 'OPERATOR'));
+router.use(authorize('ADMIN', 'OPERATOR'));
 
 // Estadísticas por banca
 router.get('/bancas/:drawId', monitorController.getBancaStats);

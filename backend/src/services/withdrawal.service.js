@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import playerMovementService from './player-movement.service.js';
+import playerNotificationService from './player-notification.service.js';
 
 class WithdrawalService {
   async create(userId, data) {
@@ -12,10 +13,6 @@ class WithdrawalService {
 
         if (!user) {
           throw new Error('Usuario no encontrado');
-        }
-
-        if (!user.phoneVerified) {
-          throw new Error('Debes verificar tu teléfono antes de solicitar retiros');
         }
 
         const availableBalance = user.balance - user.blockedBalance;
@@ -253,12 +250,15 @@ class WithdrawalService {
           }
         });
 
-        logger.info('Withdrawal completed', { 
-          id, 
-          userId: withdrawal.userId, 
+        logger.info('Withdrawal completed', {
+          id,
+          userId: withdrawal.userId,
           amount: withdrawal.amount,
-          adminId 
+          adminId
         });
+
+        // Notificar al jugador por WhatsApp (fire-and-forget)
+        playerNotificationService.notifyWithdrawalCompleted(updatedWithdrawal);
 
         return updatedWithdrawal;
       });
@@ -317,6 +317,10 @@ class WithdrawalService {
         });
 
         logger.info('Withdrawal rejected', { id, userId: withdrawal.userId, adminId });
+
+        // Notificar al jugador por WhatsApp (fire-and-forget)
+        playerNotificationService.notifyWithdrawalRejected(updatedWithdrawal);
+
         return updatedWithdrawal;
       });
     } catch (error) {

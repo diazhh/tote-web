@@ -7,10 +7,10 @@ export default function LandingHeader() {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2">
-            <Trophy className="h-8 w-8 text-primary" />
+            <img src="/images/multiloterias-logo.png" alt="Multiloterias" className="h-10 w-auto" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                Totalizador
+                Multiloterias
               </h1>
               <p className="text-xs text-gray-500">Resultados en tiempo real</p>
             </div>

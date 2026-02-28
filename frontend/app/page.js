@@ -30,14 +30,12 @@ function NavigationHeader({ onOpenMobileMenu }) {
       <div className="container mx-auto px-4">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-              <Trophy className="h-6 w-6 text-white" />
-            </div>
+            <img src="/images/multiloterias-logo.png" alt="Multiloterias" className="h-10 w-auto" />
             <div>
               <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Totalizador
+                Multiloterias
               </h1>
-              <p className="text-xs text-gray-500">Loterías en línea</p>
+              <p className="text-xs text-gray-500">Loterias en linea</p>
             </div>
           </div>
 
@@ -110,15 +108,14 @@ function HeroSection({ nextDraws, games }) {
       <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
       <div className="container mx-auto px-4 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/10 backdrop-blur-sm rounded-full mb-6">
-            <Star className="h-4 w-4 text-yellow-300" />
-            <span className="text-sm font-medium">Sistema de Loterías en Línea</span>
+          <div className="mb-6">
+            <img src="/images/multiloterias-logo.png" alt="Multiloterias" className="h-20 w-auto mx-auto mb-4" />
           </div>
-          
+
           <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
-            Juega y Gana con las
+            Juega y Gana con
             <span className="block bg-gradient-to-r from-yellow-300 to-orange-300 bg-clip-text text-transparent">
-              Mejores Loterías
+              Multiloterias
             </span>
           </h1>
           
@@ -204,19 +201,24 @@ function FeaturesSection() {
 function GamesSection({ games }) {
   const gameInfo = {
     'triple-pantera': {
-      description: 'Juego de 3 cifras del 000 al 999. Elige tu número de la suerte y gana grandes premios.',
-      icon: '🎯',
+      description: 'Juego de 3 cifras del 000 al 999. Elige tu numero de la suerte y gana grandes premios.',
+      logo: '/images/games/triple-pantera.png',
       color: 'from-blue-500 to-blue-700'
     },
     'lotoanimalito': {
-      description: 'Juego de animalitos del 00 al 36. Cada número representa un animal diferente.',
-      icon: '🦁',
+      description: 'Juego de animalitos del 00 al 36. Cada numero representa un animal diferente.',
+      logo: '/images/games/lotoanimalito.png',
       color: 'from-green-500 to-green-700'
     },
     'lottopantera': {
-      description: 'Lotería clásica con números del 0 al 99. Simple, rápido y emocionante.',
-      icon: '🎲',
+      description: 'Loteria clasica con numeros del 0 al 99. Simple, rapido y emocionante.',
+      logo: '/images/games/lotto-pantera.png',
       color: 'from-purple-500 to-purple-700'
+    },
+    'centenario-pantera': {
+      description: 'Juego centenario con grandes premios. La tradicion de ganar.',
+      logo: '/images/games/centenario-pantera.png',
+      color: 'from-yellow-500 to-orange-600'
     }
   };
 
@@ -232,11 +234,15 @@ function GamesSection({ games }) {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
           {games.map((game) => {
-            const info = gameInfo[game.slug] || { description: game.description, icon: '🎰', color: 'from-gray-500 to-gray-700' };
+            const info = gameInfo[game.slug] || { description: game.description, logo: null, color: 'from-gray-500 to-gray-700' };
             return (
               <div key={game.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-all hover:-translate-y-1">
-                <div className={`h-32 bg-gradient-to-br ${info.color} flex items-center justify-center text-6xl`}>
-                  {info.icon}
+                <div className={`h-40 bg-gradient-to-br ${info.color} flex items-center justify-center p-4`}>
+                  {info.logo ? (
+                    <img src={info.logo} alt={game.name} className="h-full w-auto object-contain max-h-32" />
+                  ) : (
+                    <Trophy className="h-16 w-16 text-white/80" />
+                  )}
                 </div>
                 <div className="p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{game.name}</h3>
@@ -596,16 +602,14 @@ export default function HomePage() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-12">
             <div className="md:col-span-2">
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-lg flex items-center justify-center">
-                  <Trophy className="h-7 w-7 text-white" />
-                </div>
+                <img src="/images/multiloterias-logo.png" alt="Multiloterias" className="h-12 w-auto" />
                 <div>
-                  <h3 className="text-xl font-bold">Totalizador</h3>
-                  <p className="text-sm text-gray-400">Loterías en línea</p>
+                  <h3 className="text-xl font-bold">Multiloterias</h3>
+                  <p className="text-sm text-gray-400">Loterias en linea</p>
                 </div>
               </div>
               <p className="text-gray-400 text-sm mb-4">
-                La plataforma más confiable para jugar loterías en línea. Sorteos cada hora, premios garantizados y pagos instantáneos.
+                La plataforma mas confiable para jugar loterias en linea. Sorteos cada hora, premios garantizados y pagos instantaneos.
               </p>
             </div>
 
@@ -634,7 +638,7 @@ export default function HomePage() {
           <div className="border-t border-gray-700 pt-8">
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
               <p className="text-sm text-gray-400">
-                © {new Date().getFullYear()} Totalizador de Loterías. Todos los derechos reservados.
+                © {new Date().getFullYear()} Multiloterias. Todos los derechos reservados.
               </p>
               <div className="flex gap-4">
                 <a href="#" className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center hover:bg-blue-600 transition">

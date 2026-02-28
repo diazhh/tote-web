@@ -8,8 +8,12 @@ const inter = Inter({
 });
 
 export const metadata = {
-  title: "Totalizador - Loterías en Línea | Triple Pantera, Animalitos y Más",
-  description: "Juega loterías en línea de forma segura. Triple Pantera, Animalitos y más juegos. Sorteos cada hora, premios garantizados, resultados en tiempo real.",
+  title: "Multiloterias - Loterias en Linea | Triple Pantera, Animalitos y Mas",
+  description: "Juega loterias en linea de forma segura. Triple Pantera, Animalitos y mas juegos. Sorteos cada hora, premios garantizados, resultados en tiempo real.",
+  icons: {
+    icon: '/images/multiloterias-logo.png',
+    apple: '/images/multiloterias-logo.png',
+  },
   keywords: "lotería, triple pantera, animalitos, juegos en línea, sorteos, premios",
 };
 

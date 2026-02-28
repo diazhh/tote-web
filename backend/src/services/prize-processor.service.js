@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import playerNotificationService from './player-notification.service.js';
 
 class PrizeProcessorService {
   async processPrizesForDraw(drawId) {
@@ -162,6 +163,9 @@ class PrizeProcessorService {
                 ticketId: ticket.id,
                 prize: thisDrawPrize
               });
+
+              // Notificar al jugador por WhatsApp (fire-and-forget)
+              playerNotificationService.notifyPrizeWon(ticket.userId, thisDrawPrize, draw);
             } else {
               logger.info('Prize calculated for external ticket', {
                 ticketId: ticket.id,

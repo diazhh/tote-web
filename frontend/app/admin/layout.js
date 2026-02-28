@@ -54,9 +54,7 @@ export default function AdminLayout({ children }) {
     { name: 'Juegos', href: '/admin/juegos', icon: Calendar, excludeForTaquilla: true },
     { name: 'Depósitos', href: '/admin/depositos', icon: DollarSign, taquillaAccess: true },
     { name: 'Retiros', href: '/admin/retiros', icon: DollarSign, taquillaAccess: true },
-    { name: 'Cuentas Sistema', href: '/admin/cuentas-sistema', icon: DollarSign, taquillaAccess: true },
     { name: 'Jugadores', href: '/admin/jugadores', icon: Users, taquillaAccess: true },
-    { name: 'Tickets', href: '/admin/tickets', icon: Trophy, taquillaAccess: true },
     { name: 'Reportes Taquilla', href: '/admin/reportes-taquilla', icon: LayoutDashboard, taquillaAccess: true },
     { name: 'Cuentas Pago Móvil', href: '/admin/pago-movil', icon: DollarSign, excludeForTaquilla: true },
     { name: 'Pausas y Emergencia', href: '/admin/pausas', icon: PauseCircle, adminOnly: true },
@@ -116,7 +114,7 @@ export default function AdminLayout({ children }) {
         `}>
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">Totalizador</h1>
+          <h1 className="text-xl font-bold text-gray-900">Multiloterias</h1>
           <button
             onClick={() => setSidebarOpen(false)}
             className="lg:hidden p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100"

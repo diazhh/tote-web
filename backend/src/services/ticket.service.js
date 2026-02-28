@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import taquillaWebService from './taquilla-web.service.js';
 import playerMovementService from './player-movement.service.js';
+import playerNotificationService from './player-notification.service.js';
 
 class TicketService {
   async create(userId, data) {
@@ -131,6 +132,9 @@ class TicketService {
           totalAmount,
           detailsCount: detailsToCreate.length
         });
+
+        // Notificar al jugador por WhatsApp (fire-and-forget)
+        playerNotificationService.notifyTicketCreated(createdTicket);
 
         return createdTicket;
       });

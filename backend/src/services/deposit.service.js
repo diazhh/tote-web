@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import playerMovementService from './player-movement.service.js';
+import playerNotificationService from './player-notification.service.js';
 
 class DepositService {
   async create(userId, data) {
@@ -150,12 +151,15 @@ class DepositService {
           approvedBy: adminId
         });
 
-        logger.info('Deposit approved', { 
-          id, 
-          userId: deposit.userId, 
+        logger.info('Deposit approved', {
+          id,
+          userId: deposit.userId,
           amount: deposit.amount,
-          adminId 
+          adminId
         });
+
+        // Notificar al jugador por WhatsApp (fire-and-forget)
+        playerNotificationService.notifyDepositApproved(updatedDeposit);
 
         return updatedDeposit;
       });
@@ -201,6 +205,10 @@ class DepositService {
       });
 
       logger.info('Deposit rejected', { id, userId: deposit.userId, adminId });
+
+      // Notificar al jugador por WhatsApp (fire-and-forget)
+      playerNotificationService.notifyDepositRejected(updatedDeposit);
+
       return updatedDeposit;
     } catch (error) {
       logger.error('Error rejecting deposit:', error);

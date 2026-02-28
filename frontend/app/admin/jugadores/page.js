@@ -167,8 +167,8 @@ export default function JugadoresPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{player.email}</td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                     {player.phone || '-'}
-                    {player.phoneVerified && (
-                      <span className="ml-2 text-green-600">✓</span>
+                    {player.whatsappVerified && (
+                      <span className="ml-2 text-green-600" title="WhatsApp verificado">✓</span>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">

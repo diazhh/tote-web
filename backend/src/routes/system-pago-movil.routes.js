@@ -8,7 +8,7 @@ router.use(authenticate);
 
 router.get('/active', systemPagoMovilController.getActive.bind(systemPagoMovilController));
 
-router.use(authorize('ADMIN', 'TAQUILLA_ADMIN'));
+router.use(authorize('ADMIN'));
 
 router.post('/', systemPagoMovilController.create.bind(systemPagoMovilController));
 router.get('/', systemPagoMovilController.getAll.bind(systemPagoMovilController));

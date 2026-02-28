@@ -22,6 +22,7 @@ model Game {
   totalNumbers  Int           // 38 para animalitos, 1000 para triple
   isActive      Boolean       @default(true)
   description   String?
+  logoUrl       String?       // URL o path del logo del juego
   config        Json?         // Configuración adicional del juego
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -315,15 +316,18 @@ model User {
   updatedAt       DateTime  @updatedAt
   
   // Campos para jugadores (PLAYER role)
-  phone           String?   @unique
-  phoneVerified   Boolean   @default(false)
-  balance         Decimal   @default(0) @db.Decimal(12, 2)
-  blockedBalance  Decimal   @default(0) @db.Decimal(12, 2)
-  
+  phone                  String?   @unique
+  phoneVerified          Boolean   @default(false)
+  whatsappVerified       Boolean   @default(false)
+  whatsappNotifications  Boolean   @default(false)
+  balance                Decimal   @default(0) @db.Decimal(12, 2)
+  blockedBalance         Decimal   @default(0) @db.Decimal(12, 2)
+
   // Relaciones
   auditLogs       AuditLog[]
   games           UserGame[]  // Juegos asociados al usuario
   telegramLinkCode TelegramLinkCode? // Código de vinculación temporal
+  whatsappOtpCode  WhatsAppOtpCode?  // Código OTP de WhatsApp
   tickets         Ticket[]
   deposits        Deposit[]
   withdrawals     Withdrawal[]
@@ -706,9 +710,25 @@ model TelegramLinkCode {
   code      String   @unique // Código de 6 dígitos
   expiresAt DateTime // Expira en 10 minutos
   createdAt DateTime @default(now())
-  
+
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
+  @@index([code])
+  @@index([expiresAt])
+}
+
+// Código OTP de WhatsApp para verificación de jugadores
+model WhatsAppOtpCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  phone     String   // Número al que se envió el OTP
+  code      String   // Código de 6 dígitos
+  expiresAt DateTime // Expira en 10 minutos
+  attempts  Int      @default(0) // Intentos de verificación
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([code])
   @@index([expiresAt])
 }

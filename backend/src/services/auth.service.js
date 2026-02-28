@@ -95,8 +95,11 @@ class AuthService {
           id: user.id,
           username: user.username,
           email: user.email,
+          phone: user.phone,
           role: user.role,
-          telegramUserId: user.telegramUserId
+          telegramUserId: user.telegramUserId,
+          whatsappVerified: user.whatsappVerified || false,
+          whatsappNotifications: user.whatsappNotifications || false
         },
         token
       };
@@ -318,6 +321,8 @@ class AuthService {
           role: 'PLAYER',
           isActive: true,
           phoneVerified: false,
+          whatsappVerified: false,
+          whatsappNotifications: false,
           balance: 0,
           blockedBalance: 0
         },
@@ -328,7 +333,8 @@ class AuthService {
           phone: true,
           role: true,
           balance: true,
-          phoneVerified: true,
+          whatsappVerified: true,
+          whatsappNotifications: true,
           isActive: true,
           createdAt: true
         }

@@ -15,7 +15,7 @@ router.get('/players', authenticate, authorize('ADMIN', 'TAQUILLA_ADMIN'), async
         username: true,
         email: true,
         phone: true,
-        phoneVerified: true,
+        whatsappVerified: true,
         balance: true,
         blockedBalance: true,
         isActive: true,
@@ -40,7 +40,7 @@ router.get('/players', authenticate, authorize('ADMIN', 'TAQUILLA_ADMIN'), async
   }
 });
 
-router.get('/tickets', authenticate, authorize('ADMIN', 'TAQUILLA_ADMIN'), async (req, res) => {
+router.get('/tickets', authenticate, authorize('ADMIN', 'OPERATOR'), async (req, res) => {
   try {
     const tickets = await prisma.ticket.findMany({
       include: {
