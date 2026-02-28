@@ -118,3 +118,7 @@ jspm_packages/
 backups/
 *.sql
 *.dump
+
+# Excepciones: logos del proyecto
+!frontend/public/images/**
+!frontend/public/images/games/**
