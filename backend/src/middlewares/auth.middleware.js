@@ -53,7 +53,7 @@ export const authenticate = async (req, res, next) => {
 /**
  * Middleware para verificar roles
  */
-export const authorize = (roles) => {
+export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
@@ -62,8 +62,8 @@ export const authorize = (roles) => {
       });
     }
 
-    // Asegurar que roles sea un array
-    const allowedRoles = Array.isArray(roles) ? roles : [roles];
+    // Aplanar en caso de que se pasen arrays o múltiples argumentos
+    const allowedRoles = roles.flat();
 
     logger.debug(`Verificando autorización: Usuario ${req.user.username} con rol ${req.user.role}, roles permitidos: ${allowedRoles.join(', ')}`);
 
