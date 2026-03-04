@@ -174,6 +174,23 @@ class ExecuteDrawJob {
             });
           }
 
+          // Publicar en canales PRIMERO (antes de totalizar para no bloquear envío)
+          try {
+            logger.info(`📢 Publicando sorteo ${updatedDraw.id} en canales...`);
+            const publicationService = (await import('../services/publication.service.js')).default;
+            const publicationResult = await publicationService.publishDraw(updatedDraw.id);
+
+            if (publicationResult.success) {
+              const successCount = publicationResult.results.filter(r => r.success).length;
+              const totalCount = publicationResult.results.length;
+              logger.info(
+                `✅ Sorteo publicado en ${successCount}/${totalCount} canales para ${updatedDraw.game.name} - ${updatedDraw.drawTime}`
+              );
+            }
+          } catch (publishError) {
+            logger.error(`❌ Error publicando sorteo ${updatedDraw.id}:`, publishError);
+          }
+
           // Totalizar premios: calcular ganadores/perdedores y actualizar tickets
           try {
             logger.info(`💰 Totalizando premios para sorteo ${updatedDraw.id}...`);
@@ -196,7 +213,7 @@ class ExecuteDrawJob {
             logger.error(`❌ Error calculando estadísticas para sorteo ${updatedDraw.id}:`, statsError);
           }
 
-          // Calcular estadísticas y notificar a administradores
+          // Notificar a administradores (después de totalizar para tener stats reales)
           try {
             const stats = await this.calculateDrawStats(updatedDraw);
             await adminNotificationService.notifyDrawResult({
@@ -216,25 +233,6 @@ class ExecuteDrawJob {
             logger.info(`📱 Notificación enviada a administradores para sorteo ${updatedDraw.id}`);
           } catch (notifyError) {
             logger.error(`❌ Error notificando administradores para sorteo ${updatedDraw.id}:`, notifyError);
-          }
-
-          // Publicar en canales INMEDIATAMENTE después de totalizar
-          // Esto asegura que las imágenes se envíen al momento, no en el siguiente minuto
-          try {
-            logger.info(`📢 Publicando sorteo ${updatedDraw.id} en canales...`);
-            const publicationService = (await import('../services/publication.service.js')).default;
-            const publicationResult = await publicationService.publishDraw(updatedDraw.id);
-            
-            if (publicationResult.success) {
-              const successCount = publicationResult.results.filter(r => r.success).length;
-              const totalCount = publicationResult.results.length;
-              logger.info(
-                `✅ Sorteo publicado en ${successCount}/${totalCount} canales para ${updatedDraw.game.name} - ${updatedDraw.drawTime}`
-              );
-            }
-          } catch (publishError) {
-            logger.error(`❌ Error publicando sorteo ${updatedDraw.id}:`, publishError);
-            // No fallar el sorteo si la publicación falla, ya está ejecutado
           }
         } catch (error) {
           logger.error(`Error al ejecutar sorteo ${draw.id}:`, error);
