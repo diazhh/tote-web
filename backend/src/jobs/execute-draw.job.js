@@ -174,7 +174,29 @@ class ExecuteDrawJob {
             });
           }
 
-          // Publicar en canales PRIMERO (antes de totalizar para no bloquear envío)
+          // Notificar a administradores (con imagen)
+          try {
+            const stats = await this.calculateDrawStats(updatedDraw);
+            await adminNotificationService.notifyDrawResult({
+              drawId: updatedDraw.id,
+              game: updatedDraw.game,
+              drawDate: updatedDraw.drawDate,
+              drawTime: updatedDraw.drawTime,
+              winnerItem: updatedDraw.winnerItem,
+              totalSales: stats.totalSales,
+              totalPayout: stats.totalPayout,
+              profit: stats.profit,
+              dailyStats: stats.daily,
+              weeklyStats: stats.weekly,
+              monthlyStats: stats.monthly,
+              imagePath // Ruta local del archivo
+            });
+            logger.info(`📱 Notificación enviada a administradores para sorteo ${updatedDraw.id}`);
+          } catch (notifyError) {
+            logger.error(`❌ Error notificando administradores para sorteo ${updatedDraw.id}:`, notifyError);
+          }
+
+          // Publicar en redes sociales
           try {
             logger.info(`📢 Publicando sorteo ${updatedDraw.id} en canales...`);
             const publicationService = (await import('../services/publication.service.js')).default;
@@ -211,28 +233,6 @@ class ExecuteDrawJob {
             logger.info(`✅ Estadísticas calculadas y guardadas para sorteo ${updatedDraw.id}`);
           } catch (statsError) {
             logger.error(`❌ Error calculando estadísticas para sorteo ${updatedDraw.id}:`, statsError);
-          }
-
-          // Notificar a administradores (después de totalizar para tener stats reales)
-          try {
-            const stats = await this.calculateDrawStats(updatedDraw);
-            await adminNotificationService.notifyDrawResult({
-              drawId: updatedDraw.id,
-              game: updatedDraw.game,
-              drawDate: updatedDraw.drawDate,
-              drawTime: updatedDraw.drawTime,
-              winnerItem: updatedDraw.winnerItem,
-              totalSales: stats.totalSales,
-              totalPayout: stats.totalPayout,
-              profit: stats.profit,
-              dailyStats: stats.daily,
-              weeklyStats: stats.weekly,
-              monthlyStats: stats.monthly,
-              imagePath // Ruta local del archivo
-            });
-            logger.info(`📱 Notificación enviada a administradores para sorteo ${updatedDraw.id}`);
-          } catch (notifyError) {
-            logger.error(`❌ Error notificando administradores para sorteo ${updatedDraw.id}:`, notifyError);
           }
         } catch (error) {
           logger.error(`Error al ejecutar sorteo ${draw.id}:`, error);
