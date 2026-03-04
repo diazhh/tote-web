@@ -61,20 +61,25 @@ class CloseDrawJob {
       // Obtener fecha y hora actual en Venezuela
       const venezuelaTime = getVenezuelaTimeString(); // HH:MM:SS
       const venezuelaDate = getVenezuelaDateAsUTC(); // Date object para DB
-      
-      // Calcular hora + 5 minutos (para cerrar sorteos 5 min antes)
-      const targetDrawTime = addMinutesToTime(venezuelaTime, 5);
+
+      // Normalizar a :00 segundos antes de calcular target (evita mismatch por segundos del cron)
+      const venezuelaTimeNormalized = venezuelaTime.substring(0, 5) + ':00'; // "HH:MM:00"
+      const targetDrawTime = addMinutesToTime(venezuelaTimeNormalized, 5);  // "HH:MM:00" exacto
+      const targetDrawTimeNext = addMinutesToTime(venezuelaTimeNormalized, 6); // límite superior
 
       // Log cada ejecución para monitoreo
       logger.info(`[CloseDraws] Ejecutando - VE Time: ${venezuelaTime}, VE Date: ${venezuelaDate.toISOString()}, Target: ${targetDrawTime}`);
 
       // Buscar sorteos que deben cerrarse (5 minutos antes)
-      // Usar drawDate y drawTime (hora Venezuela directa)
+      // Usar rango en lugar de match exacto para tolerar segundos del cron
       const drawsToClose = await prisma.draw.findMany({
         where: {
           status: 'SCHEDULED',
           drawDate: venezuelaDate,
-          drawTime: targetDrawTime
+          drawTime: {
+            gte: targetDrawTime,
+            lt: targetDrawTimeNext
+          }
         },
         include: {
           game: {
