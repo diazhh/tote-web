@@ -201,7 +201,7 @@ class PrizeProcessorService {
         logger.info('Prize processing completed', summary);
 
         return summary;
-      });
+      }, { timeout: 30000 }); // 30s: procesar muchos tickets puede tardar más de 5s
     } catch (error) {
       logger.error('Error processing prizes:', error);
       throw error;
