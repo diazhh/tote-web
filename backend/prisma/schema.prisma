@@ -1037,7 +1037,7 @@ model DrawStats {
   
   // Balance
   grossProfit     Decimal       @default(0) @db.Decimal(12, 2)  // Ganancia bruta (ventas - premios)
-  profitMargin    Decimal       @default(0) @db.Decimal(5, 2)   // Margen de ganancia %
+  profitMargin    Decimal       @default(0) @db.Decimal(10, 2)  // Margen de ganancia %
   
   // Tripletas
   tripletaSales   Decimal       @default(0) @db.Decimal(12, 2)  // Ventas de tripletas
@@ -1084,7 +1084,7 @@ model ProviderStats {
   
   // Balance
   grossProfit     Decimal             @default(0) @db.Decimal(12, 2)
-  profitMargin    Decimal             @default(0) @db.Decimal(5, 2)
+  profitMargin    Decimal             @default(0) @db.Decimal(10, 2)
   
   // Timestamps
   calculatedAt    DateTime            @default(now())
