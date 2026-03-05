@@ -772,11 +772,8 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
    * @param {string} documentPath - Ruta de documento PDF opcional
    */
   async notifyGameAdmins(gameId, message, photoPath = null, documentPath = null) {
-    if (process.env.DISABLE_SOCIAL_CHANNELS === 'true') {
-      logger.warn(`⛔ [LOCAL] DISABLE_SOCIAL_CHANNELS=true — notificación admin Telegram desactivada`);
-      return { notified: 0, total: 0 };
-    }
-
+    // NOTE: El bot de admin se mantiene activo en local para testing.
+    // DISABLE_SOCIAL_CHANNELS solo aplica a canales públicos (publicationService, playerNotification).
     try {
       const admins = await this.getGameAdmins(gameId);
 
