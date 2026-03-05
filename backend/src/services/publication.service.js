@@ -37,6 +37,12 @@ class PublicationService {
    * Publicar sorteo en todos los canales activos
    */
   async publishDraw(drawId) {
+    // Guard: si DISABLE_SOCIAL_CHANNELS=true, no publicar en ningún canal
+    if (process.env.DISABLE_SOCIAL_CHANNELS === 'true') {
+      logger.warn(`⛔ [LOCAL] DISABLE_SOCIAL_CHANNELS=true — publicación en redes sociales desactivada para sorteo ${drawId}`);
+      return { success: true, drawId, results: [], skipped: true };
+    }
+
     try {
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },

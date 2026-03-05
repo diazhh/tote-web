@@ -8,6 +8,11 @@ class PlayerNotificationService {
    * Siempre fire-and-forget: nunca bloquea ni lanza errores al caller.
    */
   async _send(userId, message) {
+    if (process.env.DISABLE_SOCIAL_CHANNELS === 'true') {
+      logger.warn(`⛔ [LOCAL] DISABLE_SOCIAL_CHANNELS=true — notificación WhatsApp jugador desactivada`);
+      return;
+    }
+
     try {
       if (!userId) return;
 
