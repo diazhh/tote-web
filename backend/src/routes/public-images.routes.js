@@ -193,4 +193,52 @@ router.get('/info/draw/:drawId', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/public/images/results/:filename
+ * Servir imágenes especiales (pirámides, resúmenes, recomendaciones) públicamente
+ */
+router.get('/results/:filename', async (req, res) => {
+  try {
+    const { filename } = req.params;
+
+    // Validar filename para evitar path traversal
+    if (filename.includes('..') || filename.includes('/')) {
+      return res.status(400).json({ error: 'Nombre de archivo inválido' });
+    }
+
+    const imagePath = path.join(__dirname, '../../storage/results', filename);
+
+    // Verificar que el archivo existe
+    try {
+      await fs.access(imagePath);
+    } catch (error) {
+      return res.status(404).json({ error: 'Imagen no encontrada' });
+    }
+
+    // Determinar tipo de contenido
+    const ext = path.extname(filename).toLowerCase();
+    const contentTypes = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp'
+    };
+
+    const contentType = contentTypes[ext] || 'application/octet-stream';
+
+    // Configurar headers
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 hora
+    res.setHeader('Access-Control-Allow-Origin', '*');
+
+    // Enviar archivo
+    res.sendFile(imagePath);
+
+  } catch (error) {
+    logger.error('Error sirviendo imagen de resultados:', error);
+    res.status(500).json({ error: 'Error al servir imagen' });
+  }
+});
+
 export default router;

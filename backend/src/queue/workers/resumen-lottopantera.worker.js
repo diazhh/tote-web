@@ -116,7 +116,7 @@ export async function generateResumenLottopantera(dateInput) {
     .toFile(outputPath);
 
   logger.info(`[resumen-lottopantera] Imagen generada: ${outputPath}`);
-  return { filename: outputFilename, path: outputPath };
+  return { filename: outputFilename, path: outputPath, gameId: game.id };
 }
 
 export async function resumenLottopanteraWorker(job) {
@@ -129,6 +129,18 @@ export async function resumenLottopanteraWorker(job) {
     await adminBot.sendImageToAdmins(result.path, `📋 Resumen LOTTOPANTERA - ${date}`);
   } catch (err) {
     logger.warn(`[resumen-lottopantera] Error enviando al admin: ${err.message}`);
+  }
+
+  try {
+    const publicationService = (await import('../../services/publication.service.js')).default;
+    await publicationService.publishImageToChannels(
+      result.gameId,
+      result.path,
+      result.filename,
+      `📋 Resumen LOTTOPANTERA - ${date}`
+    );
+  } catch (err) {
+    logger.warn(`[resumen-lottopantera] Error publicando en redes sociales: ${err.message}`);
   }
 
   return { success: true, ...result };

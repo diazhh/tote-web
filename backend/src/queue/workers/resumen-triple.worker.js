@@ -108,7 +108,7 @@ export async function generateResumenTriple(dateInput) {
     .toFile(outputPath);
 
   logger.info(`[resumen-triple] Imagen generada: ${outputPath}`);
-  return { filename: outputFilename, path: outputPath };
+  return { filename: outputFilename, path: outputPath, gameId: game.id };
 }
 
 export async function resumenTripleWorker(job) {
@@ -121,6 +121,18 @@ export async function resumenTripleWorker(job) {
     await adminBot.sendImageToAdmins(result.path, `📋 Resumen TRIPLE - ${date}`);
   } catch (err) {
     logger.warn(`[resumen-triple] Error enviando al admin: ${err.message}`);
+  }
+
+  try {
+    const publicationService = (await import('../../services/publication.service.js')).default;
+    await publicationService.publishImageToChannels(
+      result.gameId,
+      result.path,
+      result.filename,
+      `📋 Resumen TRIPLE PANTERA - ${date}`
+    );
+  } catch (err) {
+    logger.warn(`[resumen-triple] Error publicando en redes sociales: ${err.message}`);
   }
 
   return { success: true, ...result };

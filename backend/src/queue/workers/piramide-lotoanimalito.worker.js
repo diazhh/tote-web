@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { prisma } from '../../lib/prisma.js';
 import logger from '../../lib/logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -154,6 +155,21 @@ export async function piramideLotoanimalitoWorker(job) {
     await adminBot.sendImageToAdmins(result.path, `🔺 Pirámide LOTOANIMALITO - ${date}`);
   } catch (err) {
     logger.warn(`[piramide-lotoanimalito] Error enviando al admin: ${err.message}`);
+  }
+
+  try {
+    const game = await prisma.game.findFirst({ where: { slug: 'lotoanimalito' } });
+    if (game) {
+      const publicationService = (await import('../../services/publication.service.js')).default;
+      await publicationService.publishImageToChannels(
+        game.id,
+        result.path,
+        result.filename,
+        `🔺 Pirámide LOTOANIMALITO - ${date}`
+      );
+    }
+  } catch (err) {
+    logger.warn(`[piramide-lotoanimalito] Error publicando en redes sociales: ${err.message}`);
   }
 
   return { success: true, ...result };

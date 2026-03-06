@@ -2,6 +2,7 @@ import sharp from 'sharp';
 import path from 'path';
 import fs from 'fs/promises';
 import { fileURLToPath } from 'url';
+import { prisma } from '../../lib/prisma.js';
 import logger from '../../lib/logger.js';
 import { isSemanaSanta } from '../../utils/efemerides-venezolanas.js';
 
@@ -190,6 +191,21 @@ export async function piramideLottopanteraWorker(job) {
     await adminBot.sendImageToAdmins(result.path, `🔺 Pirámide LOTTOPANTERA - ${date}`);
   } catch (err) {
     logger.warn(`[piramide-lottopantera] Error enviando al admin: ${err.message}`);
+  }
+
+  try {
+    const game = await prisma.game.findFirst({ where: { slug: 'lottopantera' } });
+    if (game) {
+      const publicationService = (await import('../../services/publication.service.js')).default;
+      await publicationService.publishImageToChannels(
+        game.id,
+        result.path,
+        result.filename,
+        `🔺 Pirámide LOTTOPANTERA - ${date}`
+      );
+    }
+  } catch (err) {
+    logger.warn(`[piramide-lottopantera] Error publicando en redes sociales: ${err.message}`);
   }
 
   return { success: true, ...result };

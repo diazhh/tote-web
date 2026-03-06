@@ -110,7 +110,7 @@ export async function generateResumenLotoanimalito(dateInput) {
     .toFile(outputPath);
 
   logger.info(`[resumen-lotoanimalito] Imagen generada: ${outputPath}`);
-  return { filename: outputFilename, path: outputPath };
+  return { filename: outputFilename, path: outputPath, gameId: game.id };
 }
 
 export async function resumenLotoanimalitoWorker(job) {
@@ -123,6 +123,18 @@ export async function resumenLotoanimalitoWorker(job) {
     await adminBot.sendImageToAdmins(result.path, `📋 Resumen LOTOANIMALITO - ${date}`);
   } catch (err) {
     logger.warn(`[resumen-lotoanimalito] Error enviando al admin: ${err.message}`);
+  }
+
+  try {
+    const publicationService = (await import('../../services/publication.service.js')).default;
+    await publicationService.publishImageToChannels(
+      result.gameId,
+      result.path,
+      result.filename,
+      `📋 Resumen LOTOANIMALITO - ${date}`
+    );
+  } catch (err) {
+    logger.warn(`[resumen-lotoanimalito] Error publicando en redes sociales: ${err.message}`);
   }
 
   return { success: true, ...result };

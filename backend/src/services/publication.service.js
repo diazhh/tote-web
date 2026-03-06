@@ -705,6 +705,156 @@ class PublicationService {
   }
 
   /**
+   * Publicar imagen especial (pirámide, resumen, recomendaciones) en canales sociales.
+   * A diferencia de publishDraw(), no requiere un Draw ni crea registros DrawPublication.
+   *
+   * @param {string} gameId    - ID del juego al que pertenece la imagen
+   * @param {string} imagePath - Ruta local del archivo (para logging)
+   * @param {string} filename  - Nombre del archivo (se construye la URL pública con él)
+   * @param {string} caption   - Texto del mensaje a enviar junto a la imagen
+   */
+  async publishImageToChannels(gameId, imagePath, filename, caption) {
+    if (process.env.DISABLE_SOCIAL_CHANNELS === 'true') {
+      logger.warn(`⛔ [LOCAL] DISABLE_SOCIAL_CHANNELS=true — publicación de imagen especial desactivada`);
+      return { success: true, skipped: true, results: [] };
+    }
+
+    const MAX_ATTEMPTS = 5;
+    const RETRY_DELAY_MS = 5000;
+
+    try {
+      // Obtener canales activos para este juego
+      const channels = await prisma.gameChannel.findMany({
+        where: { gameId, isActive: true }
+      });
+
+      if (channels.length === 0) {
+        logger.warn(`⚠️ No hay canales activos para gameId=${gameId} (imagen especial)`);
+        return { success: true, results: [] };
+      }
+
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+      const imageUrl = `${baseUrl}/api/public/images/results/${filename}`;
+
+      logger.info(`📢 Publicando imagen especial en ${channels.length} canal(es): ${imageUrl}`);
+
+      // Helper: intenta publicar en un canal con hasta MAX_ATTEMPTS reintentos.
+      // Los errores de configuración (sin instancia, canal pausado, sin destinatarios)
+      // se devuelven de inmediato sin reintentar.
+      const sendWithRetry = async (channel) => {
+        let lastError = null;
+
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            switch (channel.channelType) {
+              case 'WHATSAPP': {
+                const recipients = channel.recipients || [];
+                if (!recipients.length) {
+                  return { channel: channel.channelType, name: channel.name, success: false, skipped: true, error: 'Sin destinatarios' };
+                }
+                const result = await whatsappClient.sendToMultipleGroups(recipients, caption, imageUrl);
+                if (result.summary.successful === 0) {
+                  throw new Error(`WhatsApp: 0 de ${recipients.length} grupos exitosos`);
+                }
+                return { channel: channel.channelType, name: channel.name, success: true, sent: result.summary.successful, failed: result.summary.failed, attempts: attempt };
+              }
+
+              case 'TELEGRAM': {
+                const instanceId = channel.telegramInstanceId;
+                const chatId = channel.telegramChatId;
+                if (!instanceId || !chatId) {
+                  return { channel: channel.channelType, name: channel.name, success: false, skipped: true, error: 'Sin instancia o chatId' };
+                }
+                const instance = await prisma.telegramInstance.findUnique({ where: { instanceId } });
+                if (!instance || instance.isActive === false) {
+                  return { channel: channel.channelType, name: channel.name, success: false, skipped: true, message: 'Instancia pausada' };
+                }
+                const htmlCaption = this.formatMessageForTelegram(caption);
+                const result = await telegramService.sendPhoto(instanceId, chatId, imageUrl, htmlCaption);
+                if (!result.success) {
+                  throw new Error(`Telegram sendPhoto falló: ${result.error || 'error desconocido'}`);
+                }
+                return { channel: channel.channelType, name: channel.name, success: true, messageId: result.messageId, attempts: attempt };
+              }
+
+              case 'FACEBOOK': {
+                const instanceId = channel.facebookInstanceId;
+                if (!instanceId) {
+                  return { channel: channel.channelType, name: channel.name, success: false, skipped: true, error: 'Sin instancia' };
+                }
+                const instance = await prisma.facebookInstance.findUnique({ where: { instanceId } });
+                if (!instance || instance.isActive === false) {
+                  return { channel: channel.channelType, name: channel.name, success: false, skipped: true, message: 'Instancia pausada' };
+                }
+                const result = await facebookService.publishPost(instanceId, caption, imageUrl);
+                if (!result.success) {
+                  throw new Error(`Facebook publishPost falló: ${result.error || 'error desconocido'}`);
+                }
+                return { channel: channel.channelType, name: channel.name, success: true, postId: result.postId, attempts: attempt };
+              }
+
+              case 'INSTAGRAM': {
+                const instanceId = channel.instagramInstanceId;
+                if (!instanceId) {
+                  return { channel: 'INSTAGRAM', name: channel.name, success: false, skipped: true, error: 'Sin instancia' };
+                }
+                const instance = await prisma.instagramInstance.findUnique({ where: { instanceId } });
+                if (!instance || instance.isActive === false) {
+                  return { channel: 'INSTAGRAM', name: channel.name, success: false, skipped: true, message: 'Instancia pausada' };
+                }
+                const result = await instagramService.publishPhoto(instanceId, imageUrl, caption);
+                if (!result.success) {
+                  throw new Error(`Instagram publishPhoto falló: ${result.error || 'error desconocido'}`);
+                }
+                return { channel: 'INSTAGRAM', name: channel.name, success: true, mediaId: result.mediaId, attempts: attempt };
+              }
+
+              default:
+                return { channel: channel.channelType, name: channel.name, success: false, skipped: true, error: 'Canal no soportado' };
+            }
+          } catch (error) {
+            lastError = error;
+            if (attempt < MAX_ATTEMPTS) {
+              logger.warn(`⚠️ [imagen] Intento ${attempt}/${MAX_ATTEMPTS} fallido — ${channel.channelType} (${channel.name}): ${error.message}. Reintentando en ${RETRY_DELAY_MS / 1000}s...`);
+              await this.sleep(RETRY_DELAY_MS);
+            }
+          }
+        }
+
+        // Todos los intentos agotados
+        logger.error(`❌ [imagen] Canal ${channel.channelType} (${channel.name}) falló tras ${MAX_ATTEMPTS} intentos: ${lastError?.message}`);
+        return { channel: channel.channelType, name: channel.name, success: false, attempts: MAX_ATTEMPTS, error: lastError?.message };
+      };
+
+      // Separar Instagram del resto para evitar rate limits
+      const instagramChannels = channels.filter(c => c.channelType === 'INSTAGRAM');
+      const otherChannels = channels.filter(c => c.channelType !== 'INSTAGRAM');
+
+      // Publicar en canales no-Instagram en paralelo (cada uno con reintentos independientes)
+      const otherResults = await Promise.all(otherChannels.map(c => sendWithRetry(c)));
+
+      // Publicar en Instagram secuencialmente con delay entre canales (cada uno con reintentos)
+      const instagramResults = [];
+      for (let i = 0; i < instagramChannels.length; i++) {
+        const result = await sendWithRetry(instagramChannels[i]);
+        instagramResults.push(result);
+        if (i < instagramChannels.length - 1) {
+          await this.sleep(5000);
+        }
+      }
+
+      const results = [...otherResults, ...instagramResults];
+      const successCount = results.filter(r => r.success).length;
+      logger.info(`✅ Imagen especial publicada: ${successCount}/${results.length} canales exitosos`);
+
+      return { success: successCount > 0, results };
+    } catch (error) {
+      logger.error('Error al publicar imagen especial en canales:', error);
+      return { success: false, error: error.message, results: [] };
+    }
+  }
+
+  /**
    * Republicar sorteo en un canal específico
    */
   async republishToChannel(drawId, channelType) {

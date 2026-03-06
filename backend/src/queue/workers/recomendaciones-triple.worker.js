@@ -147,7 +147,7 @@ export async function generateRecomendacionesTriple(dateInput) {
     .toFile(outputPath);
 
   logger.info(`[recomendaciones-triple] Imagen generada: ${outputPath}`);
-  return { filename: outputFilename, path: outputPath };
+  return { filename: outputFilename, path: outputPath, gameId: game.id };
 }
 
 export async function recomendacionesTripleWorker(job) {
@@ -160,6 +160,18 @@ export async function recomendacionesTripleWorker(job) {
     await adminBot.sendImageToAdmins(result.path, `💡 Recomendaciones TRIPLE - ${date}`);
   } catch (err) {
     logger.warn(`[recomendaciones-triple] Error enviando al admin: ${err.message}`);
+  }
+
+  try {
+    const publicationService = (await import('../../services/publication.service.js')).default;
+    await publicationService.publishImageToChannels(
+      result.gameId,
+      result.path,
+      result.filename,
+      `💡 Recomendaciones TRIPLE PANTERA - ${date}`
+    );
+  } catch (err) {
+    logger.warn(`[recomendaciones-triple] Error publicando en redes sociales: ${err.message}`);
   }
 
   return { success: true, ...result };
