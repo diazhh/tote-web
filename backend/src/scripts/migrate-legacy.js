@@ -368,12 +368,12 @@ async function migrateHistoricalDraws(connection) {
     }
 
     // Determinar estado del sorteo
-    let status = 'PUBLISHED';
+    let status = 'DRAWN';
     let drawnAt = null;
     let publishedAt = null;
-    
+
     if (planned.status === 'totalizado' && winnerItemId) {
-      status = 'PUBLISHED';
+      status = 'DRAWN';
       drawnAt = planned.updated_at || scheduledAt;
       publishedAt = planned.updated_at || scheduledAt;
     } else if (planned.status === 'cerrado' && winnerItemId) {

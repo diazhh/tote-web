@@ -260,7 +260,7 @@ async function resyncTripletas(startDate, endDate) {
         gte: new Date(startDate),
         lte: new Date(endDate)
       },
-      status: { in: ['PUBLISHED', 'EXECUTED'] },
+      status: 'DRAWN',
       winnerItemId: { not: null }
     },
     include: {

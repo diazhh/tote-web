@@ -44,7 +44,7 @@ export default function GameTodayResults({ draws }) {
  * Individual draw result card
  */
 function DrawResultCard({ draw }) {
-  const isDrawn = draw.status === 'DRAWN' || draw.status === 'PUBLISHED';
+  const isDrawn = draw.status === 'DRAWN';
   const isPending = draw.status === 'PENDING';
 
   return (

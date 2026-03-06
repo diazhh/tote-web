@@ -26,7 +26,7 @@ export class ResultsController {
       const draws = await prisma.draw.findMany({
         where: {
           drawDate: todayVenezuela,
-          status: 'PUBLISHED'
+          status: 'DRAWN'
         },
         include: {
           game: true,

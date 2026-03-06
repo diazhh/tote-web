@@ -5,6 +5,8 @@ import apiIntegrationService from '../services/api-integration.service.js';
 import prewinnerSelectionService from '../services/prewinner-selection.service.js';
 import { addMinutes, subMinutes } from 'date-fns';
 import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * Job para sincronizar tickets de APIs externas (SRQ)
@@ -79,6 +81,17 @@ class SyncApiTicketsJob {
    */
   async execute() {
     try {
+      if (process.env.PGBOSS_SYNC_API_TICKETS === 'true') {
+        const boss = getBoss();
+        const tickKey = new Date().toISOString().slice(0, 16);
+        await boss.send(QUEUES.SYNC_API_TICKETS, {}, {
+          singletonKey: `sync-tickets-${tickKey}`,
+          ...QUEUE_CONFIGS[QUEUES.SYNC_API_TICKETS],
+        });
+        logger.info('[sync-api-tickets] Job encolado en pg-boss');
+        return;
+      }
+
       const now = new Date();
 
       // 1. Obtener todos los juegos activos

@@ -61,18 +61,14 @@ class PublicationService {
         throw new Error('El sorteo debe estar en estado DRAWN para publicar');
       }
 
-      // CRÍTICO: Marcar como publicado INMEDIATAMENTE antes de intentar publicar
-      // Esto previene que el job o reintentos publiquen múltiples veces el mismo sorteo
-      // Si hay errores en canales individuales, se registran en DrawPublication
+      // Marcar publishedAt para tracking — el status se mantiene en DRAWN
+      // DrawPublication rastrea el estado por canal individual
       await prisma.draw.update({
         where: { id: drawId },
-        data: { 
-          status: 'PUBLISHED',
-          publishedAt: new Date()
-        }
+        data: { publishedAt: new Date() }
       });
 
-      logger.info(`📢 Sorteo ${drawId} marcado como PUBLISHED - iniciando publicación en canales`);
+      logger.info(`📢 Sorteo ${drawId} marcado con publishedAt - iniciando publicación en canales`);
 
       // Obtener canales activos para este juego
       const channels = await prisma.gameChannel.findMany({
@@ -176,7 +172,6 @@ class PublicationService {
       // Combinar resultados
       const results = [...otherResults, ...instagramResults];
 
-      // El sorteo ya fue marcado como PUBLISHED al inicio
       // Los resultados individuales se registran en DrawPublication
 
       return {

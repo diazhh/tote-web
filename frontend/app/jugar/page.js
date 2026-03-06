@@ -130,7 +130,7 @@ export default function JugarPage() {
   };
 
   const handleNumberInput = (digit) => {
-    const maxLength = selectedGame?.type === 'TRIPLE' ? 3 : 2;
+    const maxLength = selectedGame?.type === 'TRIPLE' ? 3 : 2; // TERMINAL, ANIMALITOS, ROULETTE = 2
     if (inputValue.length < maxLength) {
       setInputValue(prev => prev + digit);
     }

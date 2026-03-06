@@ -92,7 +92,7 @@ async function main() {
     const sampleDraw = await prisma.draw.findFirst({
       where: { 
         winnerItemId: { not: null },
-        status: 'PUBLISHED'
+        status: 'DRAWN'
       },
       include: {
         game: true,

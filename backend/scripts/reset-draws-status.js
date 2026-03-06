@@ -67,30 +67,30 @@ async function resetDrawsStatus() {
       console.log(`✅ Reseteados ${resetResult.count} sorteos a SCHEDULED\n`);
     }
 
-    // 3. Marcar sorteos de 3pm y 4pm como PUBLISHED
-    const drawsToPublish = todayDraws.filter(draw => {
+    // 3. Marcar sorteos de 3pm y 4pm como DRAWN
+    const drawsToDraw = todayDraws.filter(draw => {
       const hour = parseInt(draw.drawTime.split(':')[0]);
       return hour === 15 || hour === 16;
     });
 
-    console.log(`📊 Sorteos a publicar (3pm y 4pm): ${drawsToPublish.length}`);
-    for (const draw of drawsToPublish) {
+    console.log(`📊 Sorteos a marcar como DRAWN (3pm y 4pm): ${drawsToDraw.length}`);
+    for (const draw of drawsToDraw) {
       console.log(`   - ${draw.drawTime} ${draw.game.name} (${draw.status})`);
     }
     console.log('');
 
-    if (drawsToPublish.length > 0) {
-      const publishResult = await prisma.draw.updateMany({
+    if (drawsToDraw.length > 0) {
+      const drawResult = await prisma.draw.updateMany({
         where: {
           id: {
-            in: drawsToPublish.map(d => d.id)
+            in: drawsToDraw.map(d => d.id)
           }
         },
         data: {
-          status: 'PUBLISHED'
+          status: 'DRAWN'
         }
       });
-      console.log(`✅ Publicados ${publishResult.count} sorteos\n`);
+      console.log(`✅ Marcados ${drawResult.count} sorteos como DRAWN\n`);
     }
 
     // 4. Mostrar estado final

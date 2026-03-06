@@ -396,7 +396,7 @@ export class TripletaService {
               { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
               { drawDate: { gt: startDraw.drawDate, lte: expiresDate } }
             ],
-            status: { in: ['DRAWN', 'PUBLISHED'] },
+            status: 'DRAWN',
             winnerItemId: { not: null },
           },
           select: {
@@ -530,7 +530,7 @@ export class TripletaService {
 
       // Contar sorteos ejecutados
       const executed = draws.filter(d => 
-        d.status === 'DRAWN' || d.status === 'PUBLISHED'
+        d.status === 'DRAWN'
       ).length;
 
       // IDs de los items de la tripleta

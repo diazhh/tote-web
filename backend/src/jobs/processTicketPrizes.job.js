@@ -8,9 +8,7 @@ export async function processTicketPrizesJob() {
 
     const drawnDraws = await prisma.draw.findMany({
       where: {
-        status: {
-          in: ['DRAWN', 'PUBLISHED']
-        },
+        status: 'DRAWN',
         winnerItemId: {
           not: null
         }
@@ -22,7 +20,7 @@ export async function processTicketPrizesJob() {
     });
 
     if (drawnDraws.length === 0) {
-      logger.info('No draws in DRAWN or PUBLISHED status to process');
+      logger.info('No draws in DRAWN status to process');
       return {
         success: true,
         message: 'No hay sorteos pendientes de procesar',

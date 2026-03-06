@@ -138,7 +138,7 @@ async function testCompleteTripletaFlow() {
           where: {
             gameId: game.id,
             drawDate: date,
-            status: { in: ['DRAWN', 'PUBLISHED'] },
+            status: 'DRAWN',
             winnerItemId: { not: null }
           },
           include: { winnerItem: true },

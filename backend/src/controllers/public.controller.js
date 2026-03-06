@@ -92,10 +92,10 @@ class PublicController {
         ]
       });
 
-      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      // Solo mostrar winnerItem cuando el sorteo está DRAWN
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
-        winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+        winnerItem: draw.status === 'DRAWN' ? draw.winnerItem : null
       }));
 
       res.json({
@@ -163,10 +163,10 @@ class PublicController {
         ]
       });
 
-      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      // Solo mostrar winnerItem cuando el sorteo está DRAWN
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
-        winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+        winnerItem: draw.status === 'DRAWN' ? draw.winnerItem : null
       }));
 
       res.json({
@@ -235,10 +235,10 @@ class PublicController {
         ]
       });
 
-      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      // Solo mostrar winnerItem cuando el sorteo está DRAWN
       const sanitizedDraws = draws.map(draw => ({
         ...draw,
-        winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+        winnerItem: draw.status === 'DRAWN' ? draw.winnerItem : null
       }));
 
       res.json({
@@ -276,7 +276,7 @@ class PublicController {
 
       const where = {
         gameId: game.id,
-        status: 'PUBLISHED'
+        status: 'DRAWN'
       };
 
       // Filtros opcionales
@@ -335,7 +335,7 @@ class PublicController {
         data: {
           draws: draws.map(draw => ({
             ...draw,
-            winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+            winnerItem: draw.status === 'DRAWN' ? draw.winnerItem : null
           })),
           pagination: {
             page: parseInt(page),
@@ -456,12 +456,12 @@ class PublicController {
         });
       }
 
-      // Solo mostrar winnerItem cuando el sorteo está PUBLISHED
+      // Solo mostrar winnerItem cuando el sorteo está DRAWN
       res.json({
         success: true,
         data: {
           ...draw,
-          winnerItem: draw.status === 'PUBLISHED' ? draw.winnerItem : null
+          winnerItem: draw.status === 'DRAWN' ? draw.winnerItem : null
         }
       });
     } catch (error) {
@@ -501,7 +501,7 @@ class PublicController {
       const totalDraws = await prisma.draw.count({
         where: {
           gameId: game.id,
-          status: 'PUBLISHED',
+          status: 'DRAWN',
           drawDate: {
             gte: startDrawDate
           }
@@ -513,7 +513,7 @@ class PublicController {
         by: ['winnerItemId'],
         where: {
           gameId: game.id,
-          status: 'PUBLISHED',
+          status: 'DRAWN',
           drawDate: {
             gte: startDrawDate
           },

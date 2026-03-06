@@ -61,7 +61,7 @@ export default function AdminDashboard() {
     );
   }
 
-  const completedToday = stats.todayDraws.filter(d => d.status === 'PUBLISHED').length;
+  const completedToday = stats.todayDraws.filter(d => d.status === 'DRAWN').length;
   const pendingToday = stats.todayDraws.filter(d => 
     d.status === 'PENDING' || d.status === 'SCHEDULED' || d.status === 'CLOSED'
   ).length;
@@ -158,7 +158,7 @@ export default function AdminDashboard() {
                 >
                   <div className="flex items-center space-x-4">
                     <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                      draw.status === 'PUBLISHED' ? 'bg-green-500' :
+                      draw.status === 'DRAWN' ? 'bg-green-500' :
                       draw.status === 'CLOSED' ? 'bg-orange-500' :
                       'bg-blue-500'
                     }`} />
@@ -173,14 +173,12 @@ export default function AdminDashboard() {
                   </div>
                   <div className="text-right">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                      draw.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :
+                      draw.status === 'DRAWN' ? 'bg-green-100 text-green-800' :
                       draw.status === 'CLOSED' ? 'bg-orange-100 text-orange-800' :
-                      draw.status === 'DRAWN' ? 'bg-purple-100 text-purple-800' :
                       'bg-blue-100 text-blue-800'
                     }`}>
-                      {draw.status === 'PUBLISHED' ? 'Publicado' :
+                      {draw.status === 'DRAWN' ? 'Ejecutado' :
                        draw.status === 'CLOSED' ? 'Cerrado' :
-                       draw.status === 'DRAWN' ? 'Sorteado' :
                        draw.status === 'SCHEDULED' ? 'Programado' :
                        'Pendiente'}
                     </span>

@@ -6,6 +6,7 @@ import syncApiPlanningJob from './sync-api-planning.job.js';
 import syncApiTicketsJob from './sync-api-tickets.job.js';
 import testBetsJob from './test-bets.job.js';
 import simulateBetsJob from './simulate-bets.job.js';
+import specialImagesJob from './special-images.job.js';
 import logger from '../lib/logger.js';
 
 /**
@@ -29,6 +30,9 @@ export function startAllJobs() {
     simulateBetsJob.start();         // Cada 30 segundos - Simular jugadas
     testBetsJob.start();             // Cada minuto - Verificar jugadas de prueba
 
+    // Jobs de imagenes especiales
+    specialImagesJob.start();        // 7:00am piramides/reco, 7:01pm resumenes
+
     logger.info('✅ Todos los Jobs iniciados correctamente');
   } catch (error) {
     logger.error('❌ Error al iniciar Jobs:', error);
@@ -51,6 +55,7 @@ export function stopAllJobs() {
     syncApiTicketsJob.stop();
     simulateBetsJob.stop();
     testBetsJob.stop();
+    specialImagesJob.stop();
 
     logger.info('✅ Todos los Jobs detenidos');
   } catch (error) {
@@ -68,5 +73,6 @@ export default {
   syncApiPlanningJob,
   syncApiTicketsJob,
   simulateBetsJob,
-  testBetsJob
+  testBetsJob,
+  specialImagesJob
 };

@@ -230,7 +230,7 @@ class DrawAnalysisService {
               { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
               { drawDate: { gt: startDraw.drawDate, lte: expiresDate } }
             ],
-            status: { in: ['DRAWN', 'PUBLISHED'] },
+            status: 'DRAWN',
             winnerItemId: { not: null }
           },
           select: { id: true, winnerItemId: true }

@@ -119,10 +119,8 @@ export default function GameHistory({ history, currentPage, onPageChange }) {
 function StatusBadge({ status }) {
   const getStatusConfig = (status) => {
     switch (status) {
-      case 'PUBLISHED':
-        return { label: 'Publicado', color: 'bg-green-100 text-green-800' };
       case 'DRAWN':
-        return { label: 'Sorteado', color: 'bg-blue-100 text-blue-800' };
+        return { label: 'Ejecutado', color: 'bg-green-100 text-green-800' };
       case 'CLOSED':
         return { label: 'Cerrado', color: 'bg-yellow-100 text-yellow-800' };
       case 'PENDING':

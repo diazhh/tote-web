@@ -149,7 +149,7 @@ class SRQService {
 
               if (gameItem) {
                 updateData.winnerItemId = gameItem.id;
-                updateData.status = 'PUBLISHED';
+                updateData.status = 'DRAWN';
                 updateData.drawnAt = new Date();
               }
             }
@@ -174,7 +174,7 @@ class SRQService {
                   gameId: config.gameId,
                   drawDate: drawDate,
                   drawTime: drawTime + ':00',
-                  status: srqDraw.abierta ? 'SCHEDULED' : 'PUBLISHED',
+                  status: srqDraw.abierta ? 'SCHEDULED' : 'DRAWN',
                   notes: srqDraw.descripcion,
                 },
               });
@@ -204,7 +204,7 @@ class SRQService {
                   where: { id: draw.id },
                   data: {
                     winnerItemId: gameItem.id,
-                    status: 'PUBLISHED',
+                    status: 'DRAWN',
                     drawnAt: new Date(),
                   },
                 });

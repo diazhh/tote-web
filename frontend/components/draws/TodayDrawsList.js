@@ -61,7 +61,7 @@ export default function TodayDrawsList({ draws }) {
  * Individual draw card
  */
 function DrawCard({ draw }) {
-  const isDrawn = draw.status === 'DRAWN' || draw.status === 'PUBLISHED';
+  const isDrawn = draw.status === 'DRAWN';
   const isPending = draw.status === 'PENDING';
 
   return (

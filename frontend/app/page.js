@@ -484,7 +484,7 @@ export default function HomePage() {
               </div>
             ) : (
             filteredDraws.map((draw) => {
-              const isDrawn = draw.status === 'DRAWN' || draw.status === 'PUBLISHED';
+              const isDrawn = draw.status === 'DRAWN';
               // Mostrar imágenes para todos los juegos que tengan imageUrl
               const hasImages = draw.game?.slug === 'lotoanimalito' || draw.game?.slug === 'lottopantera' || draw.game?.slug === 'triple-pantera';
               const drawImageUrl = draw.imageUrl && hasImages

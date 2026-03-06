@@ -6,6 +6,8 @@ import drawPauseService from '../services/draw-pause.service.js';
 import systemConfigService from '../services/system-config.service.js';
 import { emitToAll } from '../lib/socket.js';
 import { getVenezuelaDateString, getVenezuelaDateAsUTC, getVenezuelaDayOfWeek } from '../lib/dateUtils.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * Job para generar sorteos diarios basados en plantillas
@@ -48,6 +50,17 @@ class GenerateDailyDrawsJob {
    */
   async execute() {
     try {
+      if (process.env.PGBOSS_GENERATE_DAILY_DRAWS === 'true') {
+        const boss = getBoss();
+        const dateKey = new Date().toISOString().slice(0, 10);
+        await boss.send(QUEUES.GENERATE_DAILY_DRAWS, {}, {
+          singletonKey: `gen-draws-${dateKey}`,
+          ...QUEUE_CONFIGS[QUEUES.GENERATE_DAILY_DRAWS],
+        });
+        logger.info('[generate-daily-draws] Job encolado en pg-boss');
+        return;
+      }
+
       logger.info('🔄 Iniciando generación de sorteos diarios...');
 
       // Verificar parada de emergencia

@@ -2,6 +2,8 @@ import { Cron } from 'croner';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
 import betSimulatorService from '../services/bet-simulator.service.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * Job para simular jugadas automáticamente
@@ -44,6 +46,18 @@ class SimulateBetsJob {
    */
   async execute() {
     try {
+      // Si pg-boss está habilitado para simulate-bets, encolar en pg-boss
+      if (process.env.PGBOSS_SIMULATE_BETS === 'true') {
+        const boss = getBoss();
+        const tickKey = new Date().toISOString().slice(0, 16); // yyyy-mm-ddThh:mm
+        await boss.send(QUEUES.SIMULATE_BETS, {}, {
+          singletonKey: `sim-${tickKey}`,
+          ...QUEUE_CONFIGS[QUEUES.SIMULATE_BETS],
+        });
+        logger.info('[simulate-bets] Job encolado en pg-boss');
+        return;
+      }
+
       // Verificar parada de emergencia
       const isEmergencyStop = await systemConfigService.isEmergencyStop();
       if (isEmergencyStop) {

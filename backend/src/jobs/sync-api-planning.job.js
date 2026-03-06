@@ -1,6 +1,8 @@
 import { Cron } from 'croner';
 import logger from '../lib/logger.js';
 import apiIntegrationService from '../services/api-integration.service.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * Job para sincronizar planificación de sorteos con APIs externas
@@ -43,6 +45,17 @@ class SyncApiPlanningJob {
    */
   async execute() {
     try {
+      if (process.env.PGBOSS_SYNC_API_PLANNING === 'true') {
+        const boss = getBoss();
+        const dateKey = new Date().toISOString().slice(0, 10);
+        await boss.send(QUEUES.SYNC_API_PLANNING, {}, {
+          singletonKey: `sync-plan-${dateKey}`,
+          ...QUEUE_CONFIGS[QUEUES.SYNC_API_PLANNING],
+        });
+        logger.info('[sync-api-planning] Job encolado en pg-boss');
+        return;
+      }
+
       logger.info('🔄 Iniciando sincronización de planificación con APIs externas...');
 
       const today = new Date();

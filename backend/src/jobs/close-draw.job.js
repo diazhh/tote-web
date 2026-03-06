@@ -10,6 +10,8 @@ import pdfReportService from '../services/pdf-report.service.js';
 import betSimulatorService from '../services/bet-simulator.service.js';
 import { startOfDay } from 'date-fns';
 import { getVenezuelaDateString, getVenezuelaTimeString, getVenezuelaDateAsUTC, addMinutesToTime } from '../lib/dateUtils.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * Job para cerrar sorteos 5 minutos antes y preseleccionar ganador
@@ -99,12 +101,89 @@ class CloseDrawJob {
         return; // No hay sorteos para cerrar
       }
 
-      logger.info(`🔒 Cerrando ${drawsToClose.length} sorteo(s)...`);
+      logger.info(`🔒 ${drawsToClose.length} sorteo(s) para cerrar...`);
 
+      // Si pg-boss está habilitado, encolar todos los draws en paralelo
+      if (process.env.PGBOSS_CLOSE_DRAW === 'true') {
+        const boss = getBoss();
+        await Promise.all(drawsToClose.map(draw =>
+          boss.send(QUEUES.CLOSE_DRAW, { drawId: draw.id }, {
+            singletonKey: `close-${draw.id}`,
+            ...QUEUE_CONFIGS[QUEUES.CLOSE_DRAW],
+          }).then(() => logger.info(`[close-draw] Draw ${draw.id} encolado en pg-boss`))
+        ));
+        return;
+      }
+
+      // Legacy: ejecución directa sin reintentos
       for (const draw of drawsToClose) {
         try {
+          // TERMINAL: solo cerrar e importar ventas. El ganador lo determina la cascada del Triple.
+          if (draw.game.type === 'TERMINAL') {
+            // Importar ventas de Terminal desde SRQ
+            let terminalTickets = 0;
+            try {
+              logger.info(`📥 Importando ventas externas Terminal para sorteo ${draw.id}...`);
+              const importResult = await apiIntegrationService.importSRQTickets(draw.id);
+              terminalTickets = importResult.imported;
+              logger.info(`✅ Ventas Terminal importadas: ${importResult.imported} tickets`);
+            } catch (error) {
+              logger.warn(`⚠️ No se pudieron importar ventas Terminal para sorteo ${draw.id}:`, error.message);
+            }
+
+            // Cerrar sin pre-ganador
+            const updatedTerminal = await prisma.draw.update({
+              where: { id: draw.id },
+              data: { status: 'CLOSED', closedAt: new Date() },
+              include: { game: true }
+            });
+
+            logger.info(`🔒 Sorteo cerrado: ${draw.game.name} - ${draw.drawTime} | Terminal (ganador viene del Triple) | ${terminalTickets} tickets`);
+
+            // Emitir evento WebSocket
+            emitToAll('draw:closed', {
+              drawId: updatedTerminal.id,
+              game: { name: updatedTerminal.game.name, slug: updatedTerminal.game.slug },
+              drawDate: updatedTerminal.drawDate,
+              drawTime: updatedTerminal.drawTime
+            });
+
+            // Notificar a admins del cierre Terminal con ventas
+            try {
+              await adminNotificationService.notifyPrewinnerSelected({
+                drawId: updatedTerminal.id,
+                game: updatedTerminal.game,
+                drawDate: updatedTerminal.drawDate,
+                drawTime: updatedTerminal.drawTime,
+                prewinnerItem: null,
+                totalSales: 0,
+                maxPayout: 0,
+                potentialPayout: 0,
+                salesByItem: null,
+                pdfPath: null,
+                tripletaRiskTop5: [],
+                isTerminal: true,
+                terminalTickets
+              });
+            } catch (notifyError) {
+              logger.warn(`⚠️ Error notificando cierre Terminal:`, notifyError.message);
+            }
+
+            // Audit log
+            await prisma.auditLog.create({
+              data: {
+                action: 'DRAW_CLOSED',
+                entity: 'Draw',
+                entityId: draw.id,
+                changes: { status: 'CLOSED', type: 'TERMINAL', terminalTickets }
+              }
+            });
+
+            continue;
+          }
+
           const items = draw.game.items;
-          
+
           if (items.length === 0) {
             logger.error(`No hay items activos para el juego ${draw.game.name}`);
             continue;

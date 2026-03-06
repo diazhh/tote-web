@@ -31,6 +31,7 @@ export async function generateDrawImage(drawId) {
       'lotoanimalito': 1,    // LOTOANIMALITO usa plantilla Ruleta
       'lottopantera': 2,     // LOTTOPANTERA usa plantilla Animalitos
       'triple-pantera': 3    // TRIPLE PANTERA usa plantilla Triple
+      // TERMINAL PANTERA no genera imagen propia
     };
     
     const numericGameId = gameSlugMap[draw.game.slug];

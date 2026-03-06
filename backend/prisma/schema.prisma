@@ -27,6 +27,11 @@ model Game {
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   
+  // Relación Terminal → Triple (linkedGameId apunta al juego padre)
+  linkedGameId  String?
+  linkedGame    Game?          @relation("LinkedGame", fields: [linkedGameId], references: [id])
+  linkedGames   Game[]         @relation("LinkedGame")
+
   // Relaciones
   items         GameItem[]
   templates     DrawTemplate[]
@@ -36,15 +41,17 @@ model Game {
   channels      GameChannel[]
   users         UserGame[]    // Usuarios asociados al juego
   adminBots     AdminBotGame[] // Bots de admin asignados
-  
+
   @@index([slug])
   @@index([isActive])
+  @@index([linkedGameId])
 }
 
 enum GameType {
   ANIMALITOS
   TRIPLE
   ROULETTE
+  TERMINAL
 }
 
 // ============================================
@@ -122,9 +129,18 @@ model Draw {
   drawnAt             DateTime?     // Cuando se ejecutó
   publishedAt         DateTime?     // Cuando se publicó
   notes               String?       // Notas adicionales
+
+  // Idempotencia — evitan doble procesamiento
+  prizesProcessed     Boolean       @default(false)
+  statsCalculated     Boolean       @default(false)
+
+  // Tracking del pipeline pg-boss
+  pipelineJobId       String?       // ID del job principal en pg-boss
+  pipelineStatus      String?       // PENDING | IN_PROGRESS | COMPLETED | FAILED
+
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
-  
+
   // Relaciones
   game                Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
   template            DrawTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
@@ -148,7 +164,6 @@ enum DrawStatus {
   SCHEDULED   // Programado
   CLOSED      // Cerrado (5 min antes)
   DRAWN       // Ejecutado (número seleccionado)
-  PUBLISHED   // Publicado en canales
   CANCELLED   // Cancelado
 }
 

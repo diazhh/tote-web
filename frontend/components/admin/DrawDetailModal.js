@@ -399,7 +399,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
     }
   };
 
-  const isNotTotalized = drawData.status !== 'DRAWN' && drawData.status !== 'PUBLISHED';
+  const isNotTotalized = drawData.status !== 'DRAWN';
   const canPreselect = isNotTotalized;
   const canChangePreselected = isNotTotalized && drawData.preselectedItemId;
   const canChangeDrawnWinner = drawData.status === 'DRAWN' && drawData.winnerItemId;
@@ -471,8 +471,7 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-gray-600">Estado:</span>
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    drawData.status === 'PUBLISHED' ? 'bg-green-100 text-green-800' :
-                    drawData.status === 'DRAWN' ? 'bg-purple-100 text-purple-800' :
+                    drawData.status === 'DRAWN' ? 'bg-green-100 text-green-800' :
                     drawData.status === 'CLOSED' ? 'bg-orange-100 text-orange-800' :
                     'bg-blue-100 text-blue-800'
                   }`}>

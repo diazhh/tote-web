@@ -83,7 +83,7 @@ class SocketService {
     this.socket.on('draw:published', (data) => {
       console.log('📢 Draw published:', data);
       useDrawStore.getState().updateDraw(data.drawId, {
-        status: 'PUBLISHED',
+        status: 'DRAWN',
         imageUrl: data.imageUrl,
         publishedAt: data.publishedAt
       });

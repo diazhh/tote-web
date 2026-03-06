@@ -3,6 +3,7 @@ const gameLogos = {
   'lotoanimalito': '/images/games/lotoanimalito.png',
   'lottopantera': '/images/games/lotto-pantera.png',
   'centenario-pantera': '/images/games/centenario-pantera.png',
+  'terminal-pantera': '/images/games/triple-pantera.png',
 };
 
 export default function GameSelector({ games, selectedGame, onSelectGame }) {

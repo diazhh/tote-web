@@ -194,7 +194,7 @@ class MonitorService {
             { drawDate: { lt: draw.drawDate } },
             { drawDate: draw.drawDate, drawTime: { lt: draw.drawTime } }
           ],
-          status: { in: ['DRAWN', 'PUBLISHED'] },
+          status: 'DRAWN',
           winnerItemId: { not: null }
         },
         orderBy: [{ drawDate: 'desc' }, { drawTime: 'desc' }],
@@ -701,7 +701,7 @@ class MonitorService {
               { drawDate: startDraw.drawDate, drawTime: { gte: startDraw.drawTime } },
               { drawDate: { gt: startDraw.drawDate, lte: new Date(t.expiresAt).toISOString().split('T')[0] + 'T00:00:00.000Z' } }
             ],
-            status: { in: ['DRAWN', 'PUBLISHED'] },
+            status: 'DRAWN',
             winnerItemId: { not: null }
           },
           select: { 
@@ -840,7 +840,7 @@ class MonitorService {
 
         // Filtrar solo los sorteos ejecutados
         const executedDraws = allDrawsInRange.filter(d => 
-          (d.status === 'DRAWN' || d.status === 'PUBLISHED') && d.winnerItemId
+          d.status === 'DRAWN' && d.winnerItemId
         );
 
         // Verificar cuántos números han ganado

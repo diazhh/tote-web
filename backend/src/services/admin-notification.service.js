@@ -62,22 +62,19 @@ class AdminNotificationService {
       potentialPayout,
       salesByItem,
       pdfPath,
-      tripletaRiskTop5
+      tripletaRiskTop5,
+      isTerminal,
+      terminalTickets
     } = data;
 
     try {
-      // Formatear mensaje
-      const message = this.formatPrewinnerMessage({
-        game,
-        drawDate,
-        drawTime,
-        prewinnerItem,
-        totalSales,
-        maxPayout,
-        potentialPayout,
-        salesByItem,
-        tripletaRiskTop5
-      });
+      // Formatear mensaje (Terminal tiene formato especial sin pre-ganador)
+      const message = isTerminal
+        ? this.formatTerminalCloseMessage({ game, drawDate, drawTime, terminalTickets })
+        : this.formatPrewinnerMessage({
+            game, drawDate, drawTime, prewinnerItem, totalSales,
+            maxPayout, potentialPayout, salesByItem, tripletaRiskTop5
+          });
 
       // Usar el nuevo servicio de bots de administración (con PDF si está disponible)
       const result = await adminTelegramBotService.notifyGameAdmins(game.id, message, null, pdfPath);
@@ -168,6 +165,33 @@ ${topItemsStr}${tripletaRiskStr}
 `.trim();
 
     return message;
+  }
+
+  /**
+   * Formatear mensaje de cierre Terminal (sin pre-ganador)
+   */
+  formatTerminalCloseMessage(data) {
+    const { game, drawDate, drawTime, terminalTickets } = data;
+    const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
+    const [hours, minutes] = drawTime.split(':');
+    const hour = parseInt(hours);
+    const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+    const displayHour = hour % 12 || 12;
+    const timeStr = `${displayHour}:${minutes} ${ampm}`;
+
+    return `
+🔒 <b>TERMINAL CERRADO</b>
+
+🎰 <b>Juego:</b> ${game.name}
+📅 <b>Fecha:</b> ${dateStr}
+⏰ <b>Hora:</b> ${timeStr}
+
+━━━━━━━━━━━━━━━━━━━━
+
+🎫 <b>Tickets importados:</b> ${terminalTickets || 0}
+
+⚠️ <i>El ganador se determinara al ejecutar el sorteo Triple vinculado (ultimos 2 digitos).</i>
+`.trim();
   }
 
   /**

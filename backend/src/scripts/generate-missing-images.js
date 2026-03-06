@@ -12,9 +12,7 @@ async function generateMissingImages() {
     // Buscar sorteos finalizados sin imagen
     const draws = await prisma.draw.findMany({
       where: {
-        status: {
-          in: ['DRAWN', 'PUBLISHED']
-        },
+        status: 'DRAWN',
         imageGenerated: false,
         winnerItemId: {
           not: null

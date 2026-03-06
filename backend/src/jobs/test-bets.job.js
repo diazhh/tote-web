@@ -3,6 +3,8 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
 import ticketService from '../services/ticket.service.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * Job para insertar jugadas de prueba automáticamente
@@ -56,6 +58,18 @@ class TestBetsJob {
    */
   async checkAndRun() {
     try {
+      // Si pg-boss está habilitado para test-bets, encolar en pg-boss
+      if (process.env.PGBOSS_TEST_BETS === 'true') {
+        const boss = getBoss();
+        const tickKey = new Date().toISOString().slice(0, 16);
+        await boss.send(QUEUES.TEST_BETS, {}, {
+          singletonKey: `test-${tickKey}`,
+          ...QUEUE_CONFIGS[QUEUES.TEST_BETS],
+        });
+        logger.info('[test-bets] Job encolado en pg-boss');
+        return;
+      }
+
       const config = await systemConfigService.getTestBetsConfig();
       
       if (!config.enabled) {

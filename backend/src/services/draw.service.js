@@ -52,7 +52,11 @@ export class DrawService {
         prisma.draw.findMany({
           where,
           include: {
-            game: true,
+            game: {
+              include: {
+                linkedGame: { select: { id: true, name: true, slug: true } }
+              }
+            },
             preselectedItem: true,
             winnerItem: true,
             template: true,
@@ -581,8 +585,8 @@ export class DrawService {
         throw new Error('Sorteo no encontrado');
       }
 
-      if (draw.status === 'PUBLISHED' || draw.status === 'CANCELLED') {
-        throw new Error('No se puede cambiar el ganador de sorteos publicados o cancelados');
+      if (draw.status === 'CANCELLED') {
+        throw new Error('No se puede cambiar el ganador de sorteos cancelados');
       }
 
       const previousItem = draw.preselectedItem;
@@ -775,12 +779,11 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
         }
       }
 
-      const [total, scheduled, closed, drawn, published, cancelled] = await Promise.all([
+      const [total, scheduled, closed, drawn, cancelled] = await Promise.all([
         prisma.draw.count({ where }),
         prisma.draw.count({ where: { ...where, status: 'SCHEDULED' } }),
         prisma.draw.count({ where: { ...where, status: 'CLOSED' } }),
         prisma.draw.count({ where: { ...where, status: 'DRAWN' } }),
-        prisma.draw.count({ where: { ...where, status: 'PUBLISHED' } }),
         prisma.draw.count({ where: { ...where, status: 'CANCELLED' } }),
       ]);
 
@@ -789,7 +792,6 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
         scheduled,
         closed,
         drawn,
-        published,
         cancelled,
       };
     } catch (error) {

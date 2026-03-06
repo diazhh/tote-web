@@ -122,3 +122,16 @@ backups/
 # Excepciones: logos del proyecto
 !frontend/public/images/**
 !frontend/public/images/games/**
+
+# Claude Code local settings
+.claude/settings.local.json
+.claude/worktrees/
+
+# Editor configs
+.windsurf/
+.agents/
+
+# Local prompt files
+prompt.md
+prompt-tote-proveedor-ventas.md
+backups/

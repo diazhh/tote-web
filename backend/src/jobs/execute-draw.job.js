@@ -8,6 +8,8 @@ import prizeProcessorService from '../services/prize-processor.service.js';
 import drawStatsService from '../services/draw-stats.service.js';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { getVenezuelaTimeString, getVenezuelaDateAsUTC } from '../lib/dateUtils.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * Job para ejecutar sorteos en su hora programada
@@ -65,12 +67,16 @@ class ExecuteDrawJob {
 
       // Buscar sorteos que deben ejecutarse (hora programada ya pasó)
       // Usar drawDate y drawTime (hora Venezuela directa)
+      // Excluir TERMINAL: se ejecutan en cascada al ejecutar el sorteo Triple vinculado
       const drawsToExecute = await prisma.draw.findMany({
         where: {
           status: 'CLOSED',
           drawDate: venezuelaDate,
           drawTime: {
             lte: venezuelaTime
+          },
+          game: {
+            type: { not: 'TERMINAL' }
           }
         },
         include: {
@@ -83,8 +89,21 @@ class ExecuteDrawJob {
         return; // No hay sorteos para ejecutar
       }
 
-      logger.info(`🎲 Ejecutando ${drawsToExecute.length} sorteo(s)...`);
+      logger.info(`🎲 ${drawsToExecute.length} sorteo(s) para ejecutar...`);
 
+      // Si pg-boss está habilitado, encolar todos los draws en paralelo
+      if (process.env.PGBOSS_EXECUTE_DRAW === 'true') {
+        const boss = getBoss();
+        await Promise.all(drawsToExecute.map(draw =>
+          boss.send(QUEUES.EXECUTE_DRAW, { drawId: draw.id }, {
+            singletonKey: `exec-${draw.id}`,
+            ...QUEUE_CONFIGS[QUEUES.EXECUTE_DRAW],
+          }).then(() => logger.info(`[execute-draw] Draw ${draw.id} encolado en pg-boss`))
+        ));
+        return;
+      }
+
+      // Legacy: ejecución directa sin reintentos
       for (const draw of drawsToExecute) {
         try {
           // El número ganador es el preseleccionado (puede haber sido cambiado manualmente)
@@ -234,6 +253,14 @@ class ExecuteDrawJob {
           } catch (statsError) {
             logger.error(`❌ Error calculando estadísticas para sorteo ${updatedDraw.id}:`, statsError);
           }
+
+          // Cascada TERMINAL: si este juego tiene linkedGames de tipo TERMINAL,
+          // ejecutar sus sorteos con ganador = últimos 2 dígitos del Triple
+          try {
+            await this.cascadeTerminalDraws(updatedDraw);
+          } catch (terminalError) {
+            logger.error(`❌ Error cascada Terminal para sorteo ${updatedDraw.id}:`, terminalError);
+          }
         } catch (error) {
           logger.error(`Error al ejecutar sorteo ${draw.id}:`, error);
         }
@@ -298,6 +325,142 @@ class ExecuteDrawJob {
   }
 
   /**
+   * Cascada Terminal: cuando un sorteo Triple se ejecuta, buscar sorteos Terminal
+   * vinculados (misma fecha/hora) y ejecutarlos con ganador = últimos 2 dígitos
+   */
+  async cascadeTerminalDraws(tripleDraw) {
+    // Buscar juegos TERMINAL vinculados a este juego
+    const terminalGames = await prisma.game.findMany({
+      where: { linkedGameId: tripleDraw.gameId, type: 'TERMINAL', isActive: true }
+    });
+
+    if (terminalGames.length === 0) return;
+
+    const tripleWinnerNumber = tripleDraw.winnerItem.number; // e.g. "123"
+    const terminalNumber = tripleWinnerNumber.slice(-2); // e.g. "23"
+
+    for (const terminalGame of terminalGames) {
+      // Buscar sorteo Terminal para misma fecha/hora (SCHEDULED o CLOSED)
+      const terminalDraw = await prisma.draw.findFirst({
+        where: {
+          gameId: terminalGame.id,
+          drawDate: tripleDraw.drawDate,
+          drawTime: tripleDraw.drawTime,
+          status: { in: ['SCHEDULED', 'CLOSED'] }
+        }
+      });
+
+      if (!terminalDraw) {
+        logger.warn(`[Terminal] No se encontró sorteo Terminal para ${terminalGame.name} ${tripleDraw.drawTime}`);
+        continue;
+      }
+
+      // Buscar el GameItem que corresponde al número terminal
+      const winnerItem = await prisma.gameItem.findUnique({
+        where: { gameId_number: { gameId: terminalGame.id, number: terminalNumber } }
+      });
+
+      if (!winnerItem) {
+        logger.error(`[Terminal] GameItem ${terminalNumber} no encontrado para ${terminalGame.name}`);
+        continue;
+      }
+
+      // Ejecutar el sorteo Terminal directamente a DRAWN
+      const updatedTerminal = await prisma.draw.update({
+        where: { id: terminalDraw.id },
+        data: {
+          status: 'DRAWN',
+          preselectedItemId: winnerItem.id,
+          winnerItemId: winnerItem.id,
+          closedAt: new Date(),
+          drawnAt: new Date()
+        },
+        include: { game: true, winnerItem: true }
+      });
+
+      logger.info(
+        `🎰 Terminal ejecutado: ${terminalGame.name} - ${tripleDraw.drawTime} ` +
+        `| Ganador: ${terminalNumber} (de Triple ${tripleWinnerNumber})`
+      );
+
+      // Emitir WebSocket
+      emitToAll('draw:executed', {
+        drawId: updatedTerminal.id,
+        game: { name: updatedTerminal.game.name, slug: updatedTerminal.game.slug },
+        drawDate: updatedTerminal.drawDate,
+        drawTime: updatedTerminal.drawTime,
+        winnerItem: { number: updatedTerminal.winnerItem.number, name: updatedTerminal.winnerItem.name }
+      });
+
+      emitToGame(updatedTerminal.game.slug, 'draw:executed', {
+        drawId: updatedTerminal.id,
+        drawDate: updatedTerminal.drawDate,
+        drawTime: updatedTerminal.drawTime,
+        winnerItem: { number: updatedTerminal.winnerItem.number, name: updatedTerminal.winnerItem.name }
+      });
+
+      // Audit log
+      await prisma.auditLog.create({
+        data: {
+          action: 'DRAW_EXECUTED',
+          entity: 'Draw',
+          entityId: updatedTerminal.id,
+          changes: {
+            status: 'DRAWN',
+            winnerItemId: winnerItem.id,
+            winnerNumber: terminalNumber,
+            sourceTripleDrawId: tripleDraw.id,
+            sourceTripleNumber: tripleWinnerNumber
+          }
+        }
+      });
+
+      // Totalizar premios Terminal
+      let terminalPrizeResult = null;
+      try {
+        terminalPrizeResult = await prizeProcessorService.processPrizesForDraw(updatedTerminal.id);
+        logger.info(
+          `💰 Premios Terminal: ${terminalPrizeResult.winnersCount} ganadores, ` +
+          `$${terminalPrizeResult.totalPrizesAwarded.toFixed(2)} en premios`
+        );
+      } catch (prizeError) {
+        logger.error(`❌ Error premios Terminal ${updatedTerminal.id}:`, prizeError);
+      }
+
+      // Notificar resultado Terminal a administradores (sin imagen, Terminal no tiene plantilla)
+      try {
+        const terminalStats = await this.calculateDrawStats(updatedTerminal);
+        await adminNotificationService.notifyDrawResult({
+          drawId: updatedTerminal.id,
+          game: updatedTerminal.game,
+          drawDate: updatedTerminal.drawDate,
+          drawTime: updatedTerminal.drawTime,
+          winnerItem: updatedTerminal.winnerItem,
+          totalSales: terminalStats.totalSales,
+          totalPayout: terminalStats.totalPayout,
+          profit: terminalStats.profit,
+          dailyStats: terminalStats.daily,
+          weeklyStats: terminalStats.weekly,
+          monthlyStats: terminalStats.monthly,
+          isTerminal: true,
+          sourceTripleNumber: tripleWinnerNumber
+        });
+        logger.info(`📱 Notificacion Terminal enviada a administradores`);
+      } catch (notifyError) {
+        logger.error(`❌ Error notificando Terminal ${updatedTerminal.id}:`, notifyError);
+      }
+
+      // Calcular estadísticas Terminal
+      try {
+        await drawStatsService.calculateAllStats(updatedTerminal.id);
+        logger.info(`📊 Estadísticas Terminal calculadas para ${updatedTerminal.id}`);
+      } catch (statsError) {
+        logger.error(`❌ Error estadísticas Terminal ${updatedTerminal.id}:`, statsError);
+      }
+    }
+  }
+
+  /**
    * Obtener estadísticas de un período
    * @param {string} gameId - ID del juego
    * @param {Date} startDate - Fecha inicio
@@ -314,9 +477,7 @@ class ExecuteDrawJob {
             gte: startDate,
             lte: endDate
           },
-          status: {
-            in: ['DRAWN', 'PUBLISHED']
-          }
+          status: 'DRAWN'
         },
         include: {
           winnerItem: true,

@@ -204,7 +204,7 @@ export class GameService {
     try {
       const [totalDraws, publishedDraws, scheduledDraws, items] = await Promise.all([
         prisma.draw.count({ where: { gameId: id } }),
-        prisma.draw.count({ where: { gameId: id, status: 'PUBLISHED' } }),
+        prisma.draw.count({ where: { gameId: id, status: 'DRAWN' } }),
         prisma.draw.count({ where: { gameId: id, status: 'SCHEDULED' } }),
         prisma.gameItem.count({ where: { gameId: id, isActive: true } }),
       ]);

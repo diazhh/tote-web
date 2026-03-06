@@ -77,8 +77,7 @@ export function getStatusColor(status) {
   const colors = {
     PENDING: 'bg-gray-500',
     CLOSED: 'bg-yellow-500',
-    DRAWN: 'bg-blue-500',
-    PUBLISHED: 'bg-green-500',
+    DRAWN: 'bg-green-500',
     CANCELLED: 'bg-red-500'
   };
   return colors[status] || 'bg-gray-500';
@@ -93,8 +92,7 @@ export function getStatusLabel(status) {
   const labels = {
     PENDING: 'Pendiente',
     CLOSED: 'Cerrado',
-    DRAWN: 'Sorteado',
-    PUBLISHED: 'Publicado',
+    DRAWN: 'Ejecutado',
     CANCELLED: 'Cancelado'
   };
   return labels[status] || status;

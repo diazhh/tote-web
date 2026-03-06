@@ -13,7 +13,7 @@ class NumberHistoryService {
       const lastWin = await prisma.draw.findFirst({
         where: {
           gameId,
-          status: 'PUBLISHED',
+          status: 'DRAWN',
           winnerItem: {
             number: number
           }
@@ -64,7 +64,7 @@ class NumberHistoryService {
       const wins = await prisma.draw.findMany({
         where: {
           gameId,
-          status: 'PUBLISHED',
+          status: 'DRAWN',
           winnerItem: {
             number: number
           }
@@ -107,7 +107,7 @@ class NumberHistoryService {
       const draws = await prisma.draw.findMany({
         where: {
           gameId,
-          status: 'PUBLISHED',
+          status: 'DRAWN',
           winnerItemId: { not: null }
         },
         include: {

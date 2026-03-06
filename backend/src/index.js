@@ -8,6 +8,8 @@ import logger from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { initializeSocket } from './lib/socket.js';
 import { startAllJobs, stopAllJobs } from './jobs/index.js';
+import { getBoss } from './queue/boss.js';
+import { registerAllWorkers } from './queue/register.js';
 import whatsappBaileysService from './services/whatsapp-baileys.service.js';
 import adminTelegramBotService from './services/admin-telegram-bot.service.js';
 
@@ -54,7 +56,7 @@ const corsOptions = {
     } else {
       // Desarrollo: permitir localhost y servidor de desarrollo (144.126.150.120:10000)
       if (!origin || 
-          origin.startsWith('http://localhost:') || 
+          origin.startsWith('http://localhost:10000') || 
           origin.startsWith('http://127.0.0.1:') ||
           origin === 'http://144.126.150.120:10000') {
         callback(null, true);
@@ -169,6 +171,8 @@ import monitorRoutes from './routes/monitor.routes.js';
 import drawAnalysisRoutes from './routes/draw-analysis.routes.js';
 import playerRoutes from './routes/player.routes.js';
 import numberHistoryRoutes from './routes/number-history.routes.js';
+import adminJobsRoutes from './routes/admin-jobs.routes.js';
+import testSpecialImagesRoutes from './routes/test-special-images.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -225,6 +229,8 @@ app.use('/api/monitor', monitorRoutes);
 app.use('/api/analysis', drawAnalysisRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/number-history', numberHistoryRoutes);
+app.use('/api/admin/jobs', adminJobsRoutes);
+app.use('/api/admin', testSpecialImagesRoutes);
 
 // Rutas anidadas para items de juegos
 import gameItemController from './controllers/game-item.controller.js';
@@ -344,8 +350,13 @@ async function startServer() {
     // Inicializar en segundo plano sin bloquear el servidor
     initializeTelegramBots();
 
-    // Iniciar sistema de Jobs
+    // Iniciar pg-boss y registrar workers
     if (process.env.ENABLE_JOBS !== 'false') {
+      const boss = getBoss();
+      await boss.start();
+      logger.info('✅ pg-boss iniciado correctamente');
+      await registerAllWorkers(boss);
+      logger.info('✅ Workers de pg-boss registrados');
       startAllJobs();
     } else {
       logger.info('⚠️  Jobs deshabilitados (ENABLE_JOBS=false)');
@@ -360,6 +371,13 @@ async function startServer() {
 process.on('SIGTERM', async () => {
   logger.info('SIGTERM recibido, cerrando servidor...');
   stopAllJobs();
+  try {
+    const boss = getBoss();
+    await boss.stop({ graceful: true, timeout: 30000 });
+    logger.info('pg-boss detenido correctamente');
+  } catch (e) {
+    logger.warn('Error al detener pg-boss:', e.message);
+  }
   await adminTelegramBotService.shutdown();
   await prisma.$disconnect();
   process.exit(0);
@@ -368,6 +386,13 @@ process.on('SIGTERM', async () => {
 process.on('SIGINT', async () => {
   logger.info('SIGINT recibido, cerrando servidor...');
   stopAllJobs();
+  try {
+    const boss = getBoss();
+    await boss.stop({ graceful: true, timeout: 30000 });
+    logger.info('pg-boss detenido correctamente');
+  } catch (e) {
+    logger.warn('Error al detener pg-boss:', e.message);
+  }
   await adminTelegramBotService.shutdown();
   await prisma.$disconnect();
   process.exit(0);

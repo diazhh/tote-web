@@ -635,15 +635,15 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
         include: { bot: true }
       });
 
-      if (!botGame || !botGame.bot.isActive) {
-        logger.warn(`No hay bot de admin activo para el juego ${gameId}`);
-        return false;
+      if (!botGame || !botGame.bot || !botGame.bot.isActive) {
+        logger.warn(`No hay bot de juego activo para ${gameId}, usando fallback`);
+        return this.sendMessageDirect(chatId, message);
       }
 
       const bot = this.bots.get(botGame.botId);
       if (!bot) {
-        logger.warn(`Bot ${botGame.botId} no está corriendo`);
-        return false;
+        logger.warn(`Bot ${botGame.botId} no está en memoria, usando fallback`);
+        return this.sendMessageDirect(chatId, message);
       }
 
       await bot.sendMessage(chatId, message, {
@@ -667,17 +667,28 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
    */
   async sendPhoto(gameId, chatId, photoPath, caption = '') {
     try {
+      let bot = null;
+
+      // Buscar bot asignado al juego
       const botGame = await prisma.adminBotGame.findFirst({
         where: { gameId },
         include: { bot: true }
       });
 
-      if (!botGame || !botGame.bot.isActive) {
-        return false;
+      if (botGame && botGame.bot.isActive) {
+        bot = this.bots.get(botGame.botId);
       }
 
-      const bot = this.bots.get(botGame.botId);
+      // Fallback: usar cualquier bot activo
       if (!bot) {
+        for (const [, b] of this.bots) {
+          bot = b;
+          break;
+        }
+      }
+
+      if (!bot) {
+        logger.warn(`No hay bot disponible para enviar foto a ${chatId}`);
         return false;
       }
 
@@ -711,22 +722,32 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
    */
   async sendDocument(gameId, chatId, documentPath, caption = '') {
     try {
+      let bot = null;
+
       const botGame = await prisma.adminBotGame.findFirst({
         where: { gameId },
         include: { bot: true }
       });
 
-      if (!botGame || !botGame.bot.isActive) {
-        return false;
+      if (botGame && botGame.bot.isActive) {
+        bot = this.bots.get(botGame.botId);
       }
 
-      const bot = this.bots.get(botGame.botId);
+      // Fallback: usar cualquier bot activo
       if (!bot) {
+        for (const [, b] of this.bots) {
+          bot = b;
+          break;
+        }
+      }
+
+      if (!bot) {
+        logger.warn(`No hay bot disponible para enviar documento a ${chatId}`);
         return false;
       }
 
       const fs = await import('fs');
-      
+
       // Verificar que el archivo existe
       if (!fs.existsSync(documentPath)) {
         logger.warn(`Documento no encontrado: ${documentPath}`);
@@ -785,17 +806,17 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
       let notified = 0;
       for (const admin of admins) {
         try {
-          await this.sendMessage(gameId, admin.user.telegramChatId, message);
-          
+          const sent = await this.sendMessage(gameId, admin.user.telegramChatId, message);
+
           if (photoPath) {
             await this.sendPhoto(gameId, admin.user.telegramChatId, photoPath);
           }
-          
+
           if (documentPath) {
             await this.sendDocument(gameId, admin.user.telegramChatId, documentPath, '📄 Reporte de cierre');
           }
-          
-          notified++;
+
+          if (sent) notified++;
         } catch (error) {
           logger.error(`Error notificando a ${admin.user.username}:`, error);
         }
@@ -890,6 +911,45 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
     });
 
     return code;
+  }
+
+  /**
+   * Enviar imagen a todos los admins activos (todos los juegos).
+   * No depende de DISABLE_SOCIAL_CHANNELS — siempre se ejecuta.
+   * @param {string} imagePath - Ruta de la imagen
+   * @param {string} caption - Texto descriptivo
+   */
+  async sendImageToAdmins(imagePath, caption = '') {
+    try {
+      const admins = await prisma.userGame.findMany({
+        where: {
+          notify: true,
+          user: { isActive: true, telegramChatId: { not: null } },
+        },
+        include: { user: true },
+        distinct: ['userId'],
+      });
+
+      if (admins.length === 0) return { notified: 0, total: 0 };
+
+      let notified = 0;
+      const sent = new Set();
+      for (const admin of admins) {
+        if (sent.has(admin.user.telegramChatId)) continue;
+        sent.add(admin.user.telegramChatId);
+        try {
+          const ok = await this.sendPhoto(admin.gameId, admin.user.telegramChatId, imagePath, caption);
+          if (ok) notified++;
+        } catch (err) {
+          logger.error(`[sendImageToAdmins] Error enviando a ${admin.user.username}: ${err.message}`);
+        }
+      }
+
+      return { notified, total: sent.size };
+    } catch (err) {
+      logger.error(`[sendImageToAdmins] Error: ${err.message}`);
+      return { notified: 0, total: 0 };
+    }
   }
 
   /**

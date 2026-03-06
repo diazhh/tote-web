@@ -20,8 +20,8 @@ class PrizeProcessorService {
           throw new Error('Sorteo no encontrado');
         }
 
-        if (draw.status !== 'DRAWN' && draw.status !== 'PUBLISHED') {
-          throw new Error('El sorteo debe estar en estado DRAWN o PUBLISHED para procesar premios');
+        if (draw.status !== 'DRAWN') {
+          throw new Error('El sorteo debe estar en estado DRAWN para procesar premios');
         }
 
         if (!draw.winnerItemId) {
@@ -179,13 +179,7 @@ class PrizeProcessorService {
         const winnersCount = winningTickets.size;
         const losersCount = processedTickets.size - winnersCount;
 
-        // No need to update draw status - it stays in PUBLISHED
-        // await tx.draw.update({
-        //   where: { id: drawId },
-        //   data: {
-        //     status: 'PUBLISHED'
-        //   }
-        // });
+        // Draw status stays in DRAWN — no status update needed
 
         const summary = {
           drawId,

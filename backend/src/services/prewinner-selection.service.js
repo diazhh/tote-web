@@ -351,7 +351,7 @@ class PrewinnerSelectionService {
           gameId,
           drawDate: currentDraw.drawDate,
           drawTime: { lt: currentDraw.drawTime },
-          status: { in: ['DRAWN', 'PUBLISHED'] },
+          status: 'DRAWN',
           winnerItemId: { not: null }
         },
         select: { winnerItemId: true }

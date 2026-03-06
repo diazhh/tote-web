@@ -185,7 +185,7 @@ async function main() {
   const recentDraws = await prisma.draw.findMany({
     where: {
       gameId: lotoAnimalito.id,
-      status: { in: ['DRAWN', 'PUBLISHED'] },
+      status: 'DRAWN',
       winnerItemId: { not: null },
       drawDate: { gte: sevenDaysAgo }
     },

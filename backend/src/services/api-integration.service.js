@@ -601,6 +601,13 @@ class ApiIntegrationService {
     try {
       if (!ganadorStr) return;
 
+      // TERMINAL games get their winner from the Triple cascade, not from SRQ directly
+      const game = await prisma.game.findUnique({ where: { id: gameId }, select: { type: true } });
+      if (game?.type === 'TERMINAL') {
+        logger.debug(`[syncDrawWinner] Skipping TERMINAL game — winner set by Triple cascade`);
+        return;
+      }
+
       // Extraer número del ganador (ej: "32 ARDILLA" -> "32")
       const match = ganadorStr.match(/^(\d+)/);
       if (!match) {

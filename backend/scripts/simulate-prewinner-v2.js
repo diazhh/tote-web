@@ -45,7 +45,7 @@ async function getRealWinnerHistory(gameId, daysBack = 7) {
   const draws = await prisma.draw.findMany({
     where: {
       gameId,
-      status: { in: ['DRAWN', 'PUBLISHED'] },
+      status: 'DRAWN',
       winnerItemId: { not: null },
       drawDate: { gte: startDate }
     },
@@ -97,7 +97,7 @@ async function getWinnersForDate(gameId, date) {
     where: {
       gameId,
       drawDate: date,
-      status: { in: ['DRAWN', 'PUBLISHED'] },
+      status: 'DRAWN',
       winnerItemId: { not: null }
     },
     include: { winnerItem: true },

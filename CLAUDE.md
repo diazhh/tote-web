@@ -1,0 +1,188 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Tote-web is a lottery management system with real-time draw execution, multi-channel result publication (Telegram, WhatsApp, Facebook, Instagram, TikTok), player betting, and prize processing. The codebase is split into a Node.js/Express backend and a Next.js frontend.
+
+## Development Commands
+
+### Prerequisites
+```bash
+docker-compose up -d          # Start PostgreSQL 16 on port 5433
+```
+
+### Backend (port 3001)
+```bash
+cd backend
+npm install
+npm run db:push               # Push Prisma schema to DB
+npm run db:migrate             # Run Prisma migrations
+npm run db:studio              # Open Prisma Studio GUI
+npm run dev                    # Start with nodemon (hot reload)
+npm test                       # Jest tests
+npm run lint                   # ESLint
+npm run format                 # Prettier
+```
+
+### Frontend (port 10000)
+```bash
+cd frontend
+npm install
+npm run dev                    # Next.js dev server
+npm run build                  # Production build
+npm run lint                   # ESLint
+```
+
+## Architecture
+
+### Backend (`backend/src/`)
+
+**Runtime:** Node.js with ES modules (`import/export`). Express server with Socket.io for real-time updates.
+
+**Layer structure:**
+- `routes/` (41 files) - Express route definitions, thin layer
+- `controllers/` (40 files) - Request handling, validation, delegates to services
+- `services/` (55+ files) - Core business logic
+- `lib/` - Shared utilities: `prisma.js` (singleton), `socket.js`, `imageGenerator.js` (Sharp-based), `logger.js` (Winston), `dateUtils.js`
+- `jobs/` - Legacy Croner-based scheduled jobs (8 jobs)
+- `queue/` - pg-boss PostgreSQL job queue (replacement for Croner)
+
+**Draw lifecycle:** `SCHEDULED` -> `CLOSED` -> `DRAWN` -> `CANCELLED`
+
+The `PUBLISHED` status has been removed. Draws are considered complete at `DRAWN`. All queries for completed draws should filter by `status: 'DRAWN'` only.
+
+**Execute-draw pipeline (pg-boss):** Image generation -> Admin notification -> Social channel publish -> Prize processing -> Stats calculation. Each step is a separate queue worker in `queue/workers/`. Prize processing is the critical step that stops the pipeline on failure.
+
+**Job queue migration (Croner -> pg-boss):** Controlled by `PGBOSS_*` env flags in 6 phases. When a flag is `false`/absent, the legacy Croner job runs. See `.env.example` for phase ordering. Queue names and retry configs are in `queue/constants.js`, worker registration in `queue/register.js`.
+
+### Frontend (`frontend/`)
+
+**Framework:** Next.js 14 (App Router), React 18, TailwindCSS v4, Zustand for state management.
+
+**Key directories:**
+- `app/admin/` - Admin dashboard with 27+ sub-routes (draws, reports, monitoring)
+- `app/jugar/` - Player betting interface
+- `components/` - Organized by domain: `admin/`, `draws/`, `games/`, `shared/`
+- `lib/socket/socket.js` - Singleton SocketService for real-time draw updates
+
+**Real-time events:** `draw:closed`, `draw:winner-selected`, `draw:published`, `draw:created`, `draw:updated`, `publication:success`, `publication:failed`.
+
+### Database
+
+PostgreSQL 16 via Prisma ORM. Schema at `backend/prisma/schema.prisma` (~1200 lines, 50+ models).
+
+**Core model groups:**
+- Games & config: `Game`, `GameItem`, `DrawTemplate`, `GameChannel`
+- Draw lifecycle: `Draw` (with pipeline tracking fields), `DrawPublication`, `DrawStats`
+- Betting: `Ticket`, `TicketDetail`, `Prize`
+- Users: `User`, `UserGame`
+- External: `ApiConfiguration`, `ApiDrawMapping` (SRQ provider integration)
+
+### Image Generation
+
+Sharp-based image composition in `lib/imageGenerator.js`. Game-specific assets organized in `backend/storage/bases/{gameId}/` with animal PNGs, background variants, seasonal overlays (carnival, Christmas, Halloween, Easter), and pyramid templates. Special image workers generate daily pyramids and summaries.
+
+## Key Environment Variables
+
+- `DISABLE_SOCIAL_CHANNELS=true` - Blocks all social channel publishing (use in local dev)
+- `ENABLE_JOBS=true` - Master toggle for job processing
+- `PGBOSS_*` flags - Per-phase queue migration toggles (see `.env.example`)
+- `DATABASE_URL` - PostgreSQL connection string (port 5433 locally)
+- `ADMIN_TELEGRAM_BOT_TOKEN` - Admin notification bot
+
+## Conventions
+
+- Backend uses ES modules throughout (`import`/`export`, not `require`)
+- Prisma client is a singleton from `lib/prisma.js` - always import from there
+- Socket.io instance is a singleton from `lib/socket.js`
+- Timezone: Venezuela (America/Caracas, UTC-4) via `lib/dateUtils.js`
+- Image assets use numeric game IDs as directory names: `storage/bases/1/` (LOTOANIMALITO), `storage/bases/2/` (LOTTOPANTERA)
+- Draw status queries: filter by `DRAWN` for completed draws locally. **Production still uses `PUBLISHED`** (legacy status) — query both when needed: `status IN ('DRAWN', 'PUBLISHED')`
+- All social channel publishing goes through `services/publication.service.js`
+
+---
+
+## Production Environment (VPS 144)
+
+### Conexión SSH
+```bash
+ssh 144    # alias configurado localmente en ~/.ssh/config
+```
+IP del servidor: `144.126.150.120`
+
+### Ubicación de proyectos
+Todos los proyectos están en `/var/proyectos/`:
+```
+/var/proyectos/tote-web/          # Este proyecto
+/var/proyectos/atilax-web/        # Atilax frontend
+/var/proyectos/erp/               # ERP (backend + frontend)
+/var/proyectos/dentista/          # Dentista
+```
+
+### pm2 — Procesos de tote-web
+| ID | Nombre           | Descripción              |
+|----|------------------|--------------------------|
+| 7  | tote-backend     | Express API (port 3001)  |
+| 15 | tote-frontend    | Next.js (port 10000)     |
+
+Comandos útiles en producción:
+```bash
+ssh 144 "pm2 list"                          # Ver todos los procesos
+ssh 144 "pm2 logs tote-backend --lines 50"  # Ver logs del backend
+ssh 144 "pm2 restart tote-backend"          # Reiniciar backend
+ssh 144 "pm2 restart tote-frontend"         # Reiniciar frontend
+```
+
+### Base de Datos — Producción
+- **Host:** localhost:5433 (mismo puerto que local, pero en el VPS)
+- **DB:** `tote_db`
+- **User:** `tote_user`
+- **Password:** `ToteSecure2024*`
+- **URL:** `postgresql://tote_user:ToteSecure2024*@localhost:5433/tote_db?schema=public`
+
+Consultar desde local vía SSH:
+```bash
+ssh 144 "PGPASSWORD='ToteSecure2024*' psql -U tote_user -h localhost -p 5433 -d tote_db -c 'SELECT ...'"
+```
+
+### Base de Datos — Local (Docker)
+- **Contenedor:** `tote_postgres`
+- **Host:** localhost:5433
+- **DB:** `tote_db`
+- **User:** `tote_user`
+- **Password:** `tote_password_2025`
+- **URL:** `postgresql://tote_user:tote_password_2025@localhost:5433/tote_db?schema=public`
+
+Consultar local:
+```bash
+docker exec tote_postgres psql -U tote_user -d tote_db -c 'SELECT ...'
+```
+
+### Estado de draws en producción vs local
+| Entorno    | Status draws completados |
+|------------|--------------------------|
+| Producción | `PUBLISHED` (legacy)     |
+| Local/dev  | `DRAWN` (nuevo)          |
+
+En producción hay ~2648 sorteos con `PUBLISHED` desde 2025-12-20 hasta hoy. Siempre filtrar por `status = 'PUBLISHED'` al consultar producción.
+
+### Game IDs (idénticos en producción y local)
+| UUID                                 | Slug             | Nombre           |
+|--------------------------------------|------------------|------------------|
+| d953f80c-4335-4bc9-9f78-9b56193286fe | lotoanimalito    | LOTOANIMALITO    |
+| 61580ccf-5a2d-4d10-877e-4883515135e4 | lottopantera     | LOTTOPANTERA     |
+| 69efc4d7-52cb-41a6-951d-be299590f393 | triple-pantera   | TRIPLE PANTERA   |
+| 741ef8e9-129b-446b-abad-d00f68323f1c | terminal-pantera | TERMINAL PANTERA |
+
+> **Importante:** Los UUIDs de `Game` y `GameItem` son idénticos entre producción y local. Esto permite usar seeds y seeds SQL directamente sin traducción de IDs.
+
+### Seed de datos de producción
+Para actualizar la DB local con resultados reales de producción:
+```bash
+# El archivo seed-prod-results.sql contiene los últimos 5 días (2026-03-01 a 2026-03-06)
+docker exec -i tote_postgres psql -U tote_user -d tote_db < backend/src/scripts/seed-prod-results.sql
+```
+
+Para regenerar el seed con datos más recientes, consultar producción y usar el patrón del archivo `backend/src/scripts/seed-prod-results.sql`.

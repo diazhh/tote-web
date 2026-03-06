@@ -220,8 +220,7 @@ export default function SorteosPage() {
       SCHEDULED: 'bg-blue-100 text-blue-800',
       PENDING: 'bg-blue-100 text-blue-800',
       CLOSED: 'bg-orange-100 text-orange-800',
-      DRAWN: 'bg-purple-100 text-purple-800',
-      PUBLISHED: 'bg-green-100 text-green-800',
+      DRAWN: 'bg-green-100 text-green-800',
       CANCELLED: 'bg-red-100 text-red-800'
     };
 
@@ -229,8 +228,7 @@ export default function SorteosPage() {
       SCHEDULED: 'Programado',
       PENDING: 'Pendiente',
       CLOSED: 'Cerrado',
-      DRAWN: 'Sorteado',
-      PUBLISHED: 'Publicado',
+      DRAWN: 'Ejecutado',
       CANCELLED: 'Cancelado'
     };
 
@@ -309,8 +307,7 @@ export default function SorteosPage() {
               <option value="SCHEDULED">Programado</option>
               <option value="PENDING">Pendiente</option>
               <option value="CLOSED">Cerrado</option>
-              <option value="DRAWN">Sorteado</option>
-              <option value="PUBLISHED">Publicado</option>
+              <option value="DRAWN">Ejecutado</option>
             </select>
           </div>
 
@@ -344,7 +341,12 @@ export default function SorteosPage() {
                   <div className="flex items-start justify-between mb-3">
                     <div className="flex-1">
                       <h3 className="font-medium text-gray-900">{draw.game?.name}</h3>
-                      <p className="text-sm text-gray-500">{draw.game?.type}</p>
+                      <p className="text-sm text-gray-500">
+                        {draw.game?.type}
+                        {draw.game?.type === 'TERMINAL' && draw.game?.linkedGame && (
+                          <span className="ml-1 text-purple-600">→ {draw.game.linkedGame.name}</span>
+                        )}
+                      </p>
                     </div>
                     {getStatusBadge(draw.status)}
                   </div>
@@ -416,7 +418,12 @@ export default function SorteosPage() {
                     render: (draw) => (
                       <div>
                         <div className="text-sm font-medium text-gray-900">{draw.game?.name}</div>
-                        <div className="text-sm text-gray-500">{draw.game?.type}</div>
+                        <div className="text-sm text-gray-500">
+                          {draw.game?.type}
+                          {draw.game?.type === 'TERMINAL' && draw.game?.linkedGame && (
+                            <span className="ml-1 text-purple-600">→ {draw.game.linkedGame.name}</span>
+                          )}
+                        </div>
                       </div>
                     )
                   },

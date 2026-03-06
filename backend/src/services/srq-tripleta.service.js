@@ -93,7 +93,7 @@ class SRQTripletaService {
           const executedDraws = await prisma.draw.findMany({
             where: {
               id: { in: futureDraws.map(d => d.id) },
-              status: { in: ['DRAWN', 'PUBLISHED'] },
+              status: 'DRAWN',
               winnerItemId: { not: null }
             },
             select: {

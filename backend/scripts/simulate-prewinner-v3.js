@@ -29,7 +29,7 @@ const CONFIG = {
 async function getRealWinnerHistory(gameId, beforeDate = null) {
   const where = {
     gameId,
-    status: { in: ['DRAWN', 'PUBLISHED'] },
+    status: 'DRAWN',
     winnerItemId: { not: null }
   };
   

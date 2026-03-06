@@ -18,10 +18,10 @@ async function generateDemoVideos() {
     // Inicializar servicio de videos
     await videoGeneratorService.initialize();
 
-    // Buscar sorteos PUBLISHED o DRAWN con ganador
+    // Buscar sorteos DRAWN con ganador
     const draws = await prisma.draw.findMany({
       where: {
-        status: { in: ['DRAWN', 'PUBLISHED'] },
+        status: 'DRAWN',
         winnerItemId: { not: null }
       },
       include: {

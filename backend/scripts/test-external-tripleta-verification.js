@@ -10,7 +10,7 @@ async function testExternalTripletaVerification() {
     // Buscar un sorteo ejecutado reciente
     const executedDraw = await prisma.draw.findFirst({
       where: {
-        status: { in: ['DRAWN', 'PUBLISHED'] },
+        status: 'DRAWN',
         winnerItemId: { not: null }
       },
       orderBy: { drawDate: 'desc' },
