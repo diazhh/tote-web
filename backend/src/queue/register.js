@@ -85,6 +85,16 @@ export async function registerAllWorkers(boss) {
     const { recomendacionesTripleWorker } = await import('./workers/recomendaciones-triple.worker.js');
     const { resumenTripleWorker } = await import('./workers/resumen-triple.worker.js');
 
+    // En pg-boss v10, boss.work() NO crea la cola automaticamente.
+    // La cola debe existir en pgboss.queue para que boss.send() pueda insertar jobs (usa JOIN).
+    // Sin createQueue(), boss.send() retorna null silenciosamente y los jobs nunca se procesan.
+    await boss.createQueue(QUEUES.PIRAMIDE_LOTOANIMALITO);
+    await boss.createQueue(QUEUES.RESUMEN_LOTOANIMALITO);
+    await boss.createQueue(QUEUES.PIRAMIDE_LOTTOPANTERA);
+    await boss.createQueue(QUEUES.RESUMEN_LOTTOPANTERA);
+    await boss.createQueue(QUEUES.RECOMENDACIONES_TRIPLE);
+    await boss.createQueue(QUEUES.RESUMEN_TRIPLE);
+
     await boss.work(QUEUES.PIRAMIDE_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.PIRAMIDE_LOTOANIMALITO], piramideLotoanimalitoWorker);
     await boss.work(QUEUES.RESUMEN_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.RESUMEN_LOTOANIMALITO], resumenLotoanimalitoWorker);
     await boss.work(QUEUES.PIRAMIDE_LOTTOPANTERA, QUEUE_CONFIGS[QUEUES.PIRAMIDE_LOTTOPANTERA], piramideLottopanteraWorker);
