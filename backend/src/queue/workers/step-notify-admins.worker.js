@@ -27,7 +27,9 @@ async function getPeriodStats(gameId, startDate, endDate) {
   return { sales, payouts, profit: sales - payouts };
 }
 
-export async function stepNotifyAdminsWorker(job) {
+export async function stepNotifyAdminsWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { drawId, imagePath, imageError } = job.data;
   logger.info(`[step-notify-admins] Notificando admins para draw ${drawId}`);
 

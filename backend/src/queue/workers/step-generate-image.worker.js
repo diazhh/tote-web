@@ -2,7 +2,9 @@ import logger from '../../lib/logger.js';
 import { getBoss } from '../boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
 
-export async function stepGenerateImageWorker(job) {
+export async function stepGenerateImageWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { drawId } = job.data;
   logger.info(`[step-generate-image] Generando imagen para draw ${drawId}`);
 

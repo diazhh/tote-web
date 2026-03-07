@@ -4,7 +4,9 @@ import prizeProcessorService from '../../services/prize-processor.service.js';
 import { getBoss } from '../boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
 
-export async function stepProcessPrizesWorker(job) {
+export async function stepProcessPrizesWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { drawId } = job.data;
 
   // Idempotencia: verificar si ya se procesaron los premios

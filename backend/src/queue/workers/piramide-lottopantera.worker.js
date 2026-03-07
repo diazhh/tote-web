@@ -181,7 +181,9 @@ export async function generatePiramideLottopantera(dateInput) {
   return { filename: outputFilename, path: outputPath };
 }
 
-export async function piramideLottopanteraWorker(job) {
+export async function piramideLottopanteraWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { date } = job.data;
   logger.info(`[piramide-lottopantera] Generando pirámide para ${date}`);
   const result = await generatePiramideLottopantera(date);

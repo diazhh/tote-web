@@ -150,7 +150,9 @@ export async function generateRecomendacionesTriple(dateInput) {
   return { filename: outputFilename, path: outputPath, gameId: game.id };
 }
 
-export async function recomendacionesTripleWorker(job) {
+export async function recomendacionesTripleWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { date } = job.data;
   logger.info(`[recomendaciones-triple] Generando recomendaciones para ${date}`);
   const result = await generateRecomendacionesTriple(date);

@@ -111,7 +111,9 @@ export async function generateResumenTriple(dateInput) {
   return { filename: outputFilename, path: outputPath, gameId: game.id };
 }
 
-export async function resumenTripleWorker(job) {
+export async function resumenTripleWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { date } = job.data;
   logger.info(`[resumen-triple] Generando resumen para ${date}`);
   const result = await generateResumenTriple(date);

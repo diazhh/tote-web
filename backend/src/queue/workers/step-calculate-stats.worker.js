@@ -2,7 +2,9 @@ import { prisma } from '../../lib/prisma.js';
 import logger from '../../lib/logger.js';
 import drawStatsService from '../../services/draw-stats.service.js';
 
-export async function stepCalculateStatsWorker(job) {
+export async function stepCalculateStatsWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { drawId } = job.data;
 
   // Idempotencia

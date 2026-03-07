@@ -113,7 +113,9 @@ export async function generateResumenLotoanimalito(dateInput) {
   return { filename: outputFilename, path: outputPath, gameId: game.id };
 }
 
-export async function resumenLotoanimalitoWorker(job) {
+export async function resumenLotoanimalitoWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { date } = job.data;
   logger.info(`[resumen-lotoanimalito] Generando resumen para ${date}`);
   const result = await generateResumenLotoanimalito(date);

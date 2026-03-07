@@ -28,7 +28,9 @@ async function getUsedItemsToday(gameId, referenceDate) {
   return usedItems;
 }
 
-export async function closeDrawWorker(job) {
+export async function closeDrawWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { drawId } = job.data;
 
   // 1. Optimistic locking: solo actualiza si sigue en SCHEDULED

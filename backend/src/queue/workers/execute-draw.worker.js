@@ -4,7 +4,9 @@ import { emitToAll, emitToGame } from '../../lib/socket.js';
 import { getBoss } from '../boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
 
-export async function executeDrawWorker(job) {
+export async function executeDrawWorker(jobs) {
+  // pg-boss v10 siempre llama al handler con un array de jobs
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { drawId } = job.data;
 
   const draw = await prisma.draw.findUnique({
