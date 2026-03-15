@@ -61,6 +61,12 @@ class PublicationService {
         throw new Error('El sorteo debe estar en estado DRAWN para publicar');
       }
 
+      // Idempotencia: si ya se publicó, no volver a enviar a redes sociales
+      if (draw.publishedAt) {
+        logger.info(`📢 Sorteo ${drawId} ya fue publicado (${draw.publishedAt.toISOString()}), saltando`);
+        return { success: true, drawId, results: [], skipped: true, reason: 'already_published' };
+      }
+
       // Marcar publishedAt para tracking — el status se mantiene en DRAWN
       // DrawPublication rastrea el estado por canal individual
       await prisma.draw.update({
@@ -191,6 +197,15 @@ class PublicationService {
   async publishToWhatsApp(draw, channel) {
     try {
       const recipients = channel.recipients || [];
+
+      // Verificar si ya se envió a este canal
+      const existingPub = await prisma.drawPublication.findUnique({
+        where: { drawId_channel: { drawId: draw.id, channel: 'WHATSAPP' } }
+      });
+      if (existingPub?.status === 'SENT') {
+        logger.info(`📢 WhatsApp ya enviado para draw ${draw.id}, saltando`);
+        return { success: true, skipped: true, reason: 'already_sent' };
+      }
 
       // Crear o actualizar registro de publicación PRIMERO
       const publication = await prisma.drawPublication.upsert({
@@ -379,6 +394,15 @@ class PublicationService {
         };
       }
 
+      // Verificar si ya se envió a este canal
+      const existingPub = await prisma.drawPublication.findUnique({
+        where: { drawId_channel: { drawId: draw.id, channel: 'TELEGRAM' } }
+      });
+      if (existingPub?.status === 'SENT') {
+        logger.info(`📢 Telegram ya enviado para draw ${draw.id}, saltando`);
+        return { success: true, skipped: true, reason: 'already_sent' };
+      }
+
       // Crear o actualizar registro de publicación
       const publication = await prisma.drawPublication.upsert({
         where: {
@@ -507,6 +531,15 @@ class PublicationService {
         };
       }
 
+      // Verificar si ya se envió a este canal
+      const existingPub = await prisma.drawPublication.findUnique({
+        where: { drawId_channel: { drawId: draw.id, channel: 'FACEBOOK' } }
+      });
+      if (existingPub?.status === 'SENT') {
+        logger.info(`📢 Facebook ya enviado para draw ${draw.id}, saltando`);
+        return { success: true, skipped: true, reason: 'already_sent' };
+      }
+
       // Crear o actualizar registro de publicación
       const publication = await prisma.drawPublication.upsert({
         where: {
@@ -615,6 +648,15 @@ class PublicationService {
           skipped: true,
           message: 'Instancia pausada por el administrador'
         };
+      }
+
+      // Verificar si ya se envió a este canal
+      const existingPub = await prisma.drawPublication.findUnique({
+        where: { drawId_channel: { drawId: draw.id, channel: 'INSTAGRAM' } }
+      });
+      if (existingPub?.status === 'SENT') {
+        logger.info(`📢 Instagram ya enviado para draw ${draw.id}, saltando`);
+        return { success: true, skipped: true, reason: 'already_sent' };
       }
 
       // Crear o actualizar registro de publicación
