@@ -494,14 +494,19 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
                     </span>
                   </div>
                 )}
-                {drawData.publishedAt && (
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Publicado:</span>
-                    <span className="text-gray-900">
-                      {formatCaracasTime(drawData.publishedAt)}
-                    </span>
-                  </div>
-                )}
+                {drawData.publishedAt && (() => {
+                  const pubs = drawData.publications || [];
+                  const allSent = pubs.length > 0 && pubs.every(p => p.status === 'SENT');
+                  const hasFailed = pubs.some(p => p.status === 'FAILED');
+                  return (
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Publicado:</span>
+                      <span className={hasFailed ? 'text-red-600 font-medium' : allSent ? 'text-green-600' : 'text-gray-900'}>
+                        {hasFailed ? 'Parcial (canales fallidos)' : allSent ? formatCaracasTime(drawData.publishedAt) : 'En proceso...'}
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

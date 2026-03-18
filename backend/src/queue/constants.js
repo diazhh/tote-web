@@ -17,6 +17,7 @@ export const QUEUES = {
   RESUMEN_LOTTOPANTERA: 'resumen-lottopantera',
   RECOMENDACIONES_TRIPLE: 'recomendaciones-triple',
   RESUMEN_TRIPLE: 'resumen-triple',
+  RETRY_FAILED_PUBLICATIONS: 'retry-failed-publications',
 };
 
 export const QUEUE_CONFIGS = {
@@ -127,5 +128,11 @@ export const QUEUE_CONFIGS = {
     retryDelay: 5,
     retryBackoff: true,
     expireInMinutes: 3,
+  },
+  [QUEUES.RETRY_FAILED_PUBLICATIONS]: {
+    retryLimit: 2,
+    retryDelay: 10,
+    retryBackoff: true,
+    expireInMinutes: 5,
   },
 };

@@ -35,6 +35,13 @@ export async function registerAllWorkers(boss) {
     // pg-boss v10 no tiene onComplete; cada worker encola el siguiente paso al completar.
   }
 
+  // Retry failed publications — siempre activo, cada 5 minutos
+  const { retryFailedPublicationsWorker } = await import('./workers/retry-failed-publications.worker.js');
+  await boss.createQueue(QUEUES.RETRY_FAILED_PUBLICATIONS);
+  await boss.work(QUEUES.RETRY_FAILED_PUBLICATIONS, QUEUE_CONFIGS[QUEUES.RETRY_FAILED_PUBLICATIONS], retryFailedPublicationsWorker);
+  await boss.schedule(QUEUES.RETRY_FAILED_PUBLICATIONS, '*/5 * * * *', {}, { tz: 'America/Caracas' });
+  logger.info('[pg-boss] Retry failed publications registrado (cada 5 min)');
+
   // Monitor DLQ (TW-16) — siempre activo cuando pg-boss está habilitado
   const { monitorDlqWorker } = await import('./workers/monitor-dlq.worker.js');
   // createQueue es necesario antes de schedule (la cola debe existir en pgboss.queue)
