@@ -8,10 +8,14 @@ export async function stepPublishDrawWorker(jobs) {
   const job = Array.isArray(jobs) ? jobs[0] : jobs;
   const { drawId } = job.data;
 
-  // Idempotencia: si ya se publicó, saltar directamente al siguiente paso
-  const draw = await prisma.draw.findUnique({ where: { id: drawId }, select: { publishedAt: true } });
-  if (draw?.publishedAt) {
-    logger.info(`[step-publish-draw] Draw ${drawId} ya publicado (${draw.publishedAt.toISOString()}), saltando`);
+  // Idempotencia: si ya se publicó y no hay canales fallidos, saltar
+  const draw = await prisma.draw.findUnique({
+    where: { id: drawId },
+    select: { publishedAt: true, publications: { select: { status: true } } }
+  });
+  const hasFailedChannels = draw?.publications?.some(p => p.status === 'FAILED');
+  if (draw?.publishedAt && !hasFailedChannels) {
+    logger.info(`[step-publish-draw] Draw ${drawId} ya publicado en todos los canales, saltando`);
   } else {
     logger.info(`[step-publish-draw] Publicando draw ${drawId} en canales...`);
 

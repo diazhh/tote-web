@@ -61,10 +61,15 @@ class PublicationService {
         throw new Error('El sorteo debe estar en estado DRAWN para publicar');
       }
 
-      // Idempotencia: si ya se publicó, no volver a enviar a redes sociales
+      // Idempotencia: si ya se publicó Y todos los canales están SENT, saltar
+      // Si hay canales FAILED, permitir reintento (las guardas por canal protegen de duplicados)
       if (draw.publishedAt) {
-        logger.info(`📢 Sorteo ${drawId} ya fue publicado (${draw.publishedAt.toISOString()}), saltando`);
-        return { success: true, drawId, results: [], skipped: true, reason: 'already_published' };
+        const hasFailedChannels = draw.publications?.some(p => p.status === 'FAILED');
+        if (!hasFailedChannels) {
+          logger.info(`📢 Sorteo ${drawId} ya publicado en todos los canales, saltando`);
+          return { success: true, drawId, results: [], skipped: true, reason: 'already_published' };
+        }
+        logger.info(`📢 Sorteo ${drawId} tiene canales FAILED, reintentando solo los fallidos`);
       }
 
       // Marcar publishedAt para tracking — el status se mantiene en DRAWN
