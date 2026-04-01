@@ -33,10 +33,10 @@ Requirements for Multi-Provider Webhook System milestone. Each maps to roadmap p
 
 ### Webhook Log Viewer
 
-- [ ] **LOGS-01**: Admin can view webhook log table with columns: provider, timestamp, status, payload preview
-- [ ] **LOGS-02**: Admin can filter logs by provider and by status
-- [ ] **LOGS-03**: Admin can click a log entry to see full raw JSON payload in a modal (inspector)
-- [ ] **LOGS-04**: Admin can see request headers in the inspector modal
+- [x] **LOGS-01**: Admin can view webhook log table with columns: provider, timestamp, status, payload preview
+- [x] **LOGS-02**: Admin can filter logs by provider and by status
+- [x] **LOGS-03**: Admin can click a log entry to see full raw JSON payload in a modal (inspector)
+- [x] **LOGS-04**: Admin can see request headers in the inspector modal
 
 ## v1.x Requirements
 
@@ -84,10 +84,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADMIN-04 | Phase 3 | Complete |
 | ADMIN-05 | Phase 3 | Complete |
 | ADMIN-06 | Phase 3 | Complete |
-| LOGS-01 | Phase 4 | Pending |
-| LOGS-02 | Phase 4 | Pending |
-| LOGS-03 | Phase 4 | Pending |
-| LOGS-04 | Phase 4 | Pending |
+| LOGS-01 | Phase 4 | Complete |
+| LOGS-02 | Phase 4 | Complete |
+| LOGS-03 | Phase 4 | Complete |
+| LOGS-04 | Phase 4 | Complete |
 
 **Coverage:**
 - v1.0 requirements: 19 total
