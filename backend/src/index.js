@@ -95,6 +95,10 @@ const authLimiter = rateLimit({
 
 app.use('/api/', generalLimiter);
 
+// Webhook routes — MUST be registered before express.json() to capture raw body Buffer.
+// See: backend/src/routes/webhook.routes.js — uses express.raw({ type: '*/*' })
+app.use('/api/webhooks', webhookRoutes);
+
 // Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -173,6 +177,7 @@ import playerRoutes from './routes/player.routes.js';
 import numberHistoryRoutes from './routes/number-history.routes.js';
 import adminJobsRoutes from './routes/admin-jobs.routes.js';
 import testSpecialImagesRoutes from './routes/test-special-images.routes.js';
+import webhookRoutes from './routes/webhook.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
