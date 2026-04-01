@@ -1,0 +1,99 @@
+# Requirements: Tote-Web
+
+**Defined:** 2026-04-01
+**Core Value:** Reliable draw lifecycle management — draws execute on schedule, results publish, prizes process correctly.
+
+## v1.0 Requirements
+
+Requirements for Multi-Provider Webhook System milestone. Each maps to roadmap phases.
+
+### Webhook Infrastructure
+
+- [ ] **WHOOK-01**: System can receive POST requests at `/api/webhooks/:providerSlug` with token-based auth
+- [ ] **WHOOK-02**: System logs raw payload to `WebhookLog` when no adapter exists (discovery mode)
+- [ ] **WHOOK-03**: System creates tickets in real-time when provider has a wired adapter
+- [ ] **WHOOK-04**: System rejects requests with invalid or missing tokens (401)
+- [ ] **WHOOK-05**: System prevents duplicate ticket creation via DB unique constraint on `(drawId, externalTicketId)`
+- [ ] **WHOOK-06**: System uses `crypto.timingSafeEqual` for token comparison
+
+### Schema
+
+- [ ] **SCHEMA-01**: `ApiSystem` model has `slug` (unique), `webhookToken`, and `mode` (PULL/PUSH) fields
+- [ ] **SCHEMA-02**: `WebhookLog` model stores raw payload, headers, provider reference, processing status, and timestamp
+- [ ] **SCHEMA-03**: `WebhookLog.status` enum: DISCOVERED, PROCESSED, DUPLICATE, FAILED
+
+### Admin Provider Management
+
+- [ ] **ADMIN-01**: Admin can create/edit providers with PULL or PUSH mode selection
+- [ ] **ADMIN-02**: Admin can set provider slug (auto-generated from name, editable)
+- [ ] **ADMIN-03**: Admin can generate webhook token (shown once on creation, masked after)
+- [ ] **ADMIN-04**: Admin can regenerate token for existing provider
+- [ ] **ADMIN-05**: Admin sees provider mode badge (PULL/PUSH) in provider list
+- [ ] **ADMIN-06**: Admin sees adapter status badge (Ready/Discovery) per provider
+
+### Webhook Log Viewer
+
+- [ ] **LOGS-01**: Admin can view webhook log table with columns: provider, timestamp, status, payload preview
+- [ ] **LOGS-02**: Admin can filter logs by provider and by status
+- [ ] **LOGS-03**: Admin can click a log entry to see full raw JSON payload in a modal (inspector)
+- [ ] **LOGS-04**: Admin can see request headers in the inspector modal
+
+## v1.x Requirements
+
+Deferred to future releases. Tracked but not in current roadmap.
+
+### Operational
+
+- **REPLAY-01**: Admin can replay a logged payload through the current adapter
+- **HEALTH-01**: Provider health monitoring with last-seen timestamp and error rate
+- **RETAIN-01**: WebhookLog retention policy with auto-cleanup job
+- **HMAC-01**: Optional HMAC signature verification per provider
+
+## Out of Scope
+
+Explicitly excluded. Documented to prevent scope creep.
+
+| Feature | Reason |
+|---------|--------|
+| Refactoring SRQ into adapter pattern | SRQ stays as-is (PULL); user decision to not touch working system |
+| Queue-based webhook processing | Low volume expected; synchronous processing sufficient |
+| HMAC signature verification | Regional providers unlikely to implement; bearer token sufficient |
+| PII masking in stored payloads | Lottery payloads don't contain GDPR-level PII |
+| Auto-adapter generation from payloads | Unreliable code generation; manual adapter writing preferred |
+| Per-provider rate limiting | Providers are trusted internal partners; token auth is sufficient |
+| Modifying SRQ deleteMany behavior | SRQ not to be touched; PUSH tickets use different source value |
+
+## Traceability
+
+Which phases cover which requirements. Updated during roadmap creation.
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| SCHEMA-01 | -- | Pending |
+| SCHEMA-02 | -- | Pending |
+| SCHEMA-03 | -- | Pending |
+| WHOOK-01 | -- | Pending |
+| WHOOK-02 | -- | Pending |
+| WHOOK-03 | -- | Pending |
+| WHOOK-04 | -- | Pending |
+| WHOOK-05 | -- | Pending |
+| WHOOK-06 | -- | Pending |
+| ADMIN-01 | -- | Pending |
+| ADMIN-02 | -- | Pending |
+| ADMIN-03 | -- | Pending |
+| ADMIN-04 | -- | Pending |
+| ADMIN-05 | -- | Pending |
+| ADMIN-06 | -- | Pending |
+| LOGS-01 | -- | Pending |
+| LOGS-02 | -- | Pending |
+| LOGS-03 | -- | Pending |
+| LOGS-04 | -- | Pending |
+
+**Coverage:**
+- v1.0 requirements: 19 total
+- Mapped to phases: 0
+- Unmapped: 19
+
+---
+*Requirements defined: 2026-04-01*
+*Last updated: 2026-04-01 after initial definition*
