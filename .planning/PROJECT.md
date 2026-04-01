@@ -8,17 +8,18 @@ A lottery management system with real-time draw execution, multi-channel result 
 
 Reliable draw lifecycle management — draws execute on schedule, results publish to all channels, and prizes are processed correctly. Everything else builds on this.
 
-## Current Milestone: v1.0 Multi-Provider Webhook System
+## Current Milestone: v1.1 Reports Dashboard
 
-**Goal:** Build infrastructure for receiving bets from external providers via webhooks, with admin UI for provider management, token generation, and discovery logging for unknown payloads.
+**Goal:** Fix the broken reportes page and rebuild it as a comprehensive reporting dashboard with date range, game, and provider filters showing sales, prizes, and profits.
 
 **Target features:**
-- Backend webhook endpoint with token auth and adapter pattern
-- Discovery mode: log raw payloads when no adapter exists
-- Real-time ticket creation when adapter is wired up
-- Admin UI for provider CRUD (PULL vs PUSH mode)
-- Token generation for webhook providers
-- Webhook log viewer in admin dashboard
+- Fix client-side crash on /admin/reportes
+- Date range filter (from/to) replacing single-day picker
+- Game filter (all or specific game)
+- Provider/source filter (SRQ, PUSH providers, online bets)
+- Summary cards: sales, prizes, profit, ticket count
+- Per-draw detail table with financial breakdown
+- Aggregated views by game, provider, and date
 
 ## Requirements
 
@@ -32,13 +33,16 @@ Reliable draw lifecycle management — draws execute on schedule, results publis
 - Admin dashboard with draw management, monitoring, and reports
 - Image generation for draw results (Sharp-based)
 - Admin Telegram bot for notifications
+- Multi-provider webhook system (PUSH-based) — v1.0
+- Admin provider management UI — v1.0
+- Webhook log viewer — v1.0
+- Token generation for webhook auth — v1.0
 
 ### Active
 
-- [ ] Multi-provider webhook system (PUSH-based)
-- [ ] Admin provider management UI
-- [ ] Webhook log viewer
-- [ ] Token generation for webhook auth
+- [ ] Fix broken /admin/reportes page
+- [ ] Reports with date range, game, and provider filters
+- [ ] Sales/prizes/profit summary and detail views
 
 ### Out of Scope
 
@@ -91,4 +95,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after milestone v1.0 initialization*
+*Last updated: 2026-04-01 after milestone v1.1 initialization*
