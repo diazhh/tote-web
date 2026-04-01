@@ -115,7 +115,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 06-01-PLAN.md — Rebuild reportes/page.js (filter bar, summary cards, breakdown tables, paginated+sortable detail table) + update monitor API client
+- [x] 06-01-PLAN.md — Rebuild reportes/page.js (filter bar, summary cards, breakdown tables, paginated+sortable detail table) + update monitor API client
 - [ ] 06-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 
 **UI hint**: yes

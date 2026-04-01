@@ -13,22 +13,22 @@ Requirements for Reports Dashboard milestone. Each maps to roadmap phases.
 
 ### Filters
 
-- [ ] **FILT-01**: Admin can select a date range (from/to) for the report
-- [ ] **FILT-02**: Admin can filter by game (all games or specific game)
-- [ ] **FILT-03**: Admin can filter by source (Online, SRQ, Webhook) and by specific provider (ApiSystem)
-- [ ] **FILT-04**: Filters apply to both summary cards and detail table simultaneously
+- [x] **FILT-01**: Admin can select a date range (from/to) for the report
+- [x] **FILT-02**: Admin can filter by game (all games or specific game)
+- [x] **FILT-03**: Admin can filter by source (Online, SRQ, Webhook) and by specific provider (ApiSystem)
+- [x] **FILT-04**: Filters apply to both summary cards and detail table simultaneously
 
 ### Summary
 
-- [ ] **SUMM-01**: Admin sees summary cards with total sales, total prizes, total profit, and ticket count
-- [ ] **SUMM-02**: Admin sees aggregated totals by game (one row per game with sales/prizes/profit)
-- [ ] **SUMM-03**: Admin sees aggregated totals by provider/source
+- [x] **SUMM-01**: Admin sees summary cards with total sales, total prizes, total profit, and ticket count
+- [x] **SUMM-02**: Admin sees aggregated totals by game (one row per game with sales/prizes/profit)
+- [x] **SUMM-03**: Admin sees aggregated totals by provider/source
 
 ### Detail
 
-- [ ] **DETL-01**: Admin sees a per-draw detail table with: date, time, game, status, winner, sales, prizes, balance, ticket count
-- [ ] **DETL-02**: Detail table supports pagination for large date ranges
-- [ ] **DETL-03**: Detail table is sortable by date/time
+- [x] **DETL-01**: Admin sees a per-draw detail table with: date, time, game, status, winner, sales, prizes, balance, ticket count
+- [x] **DETL-02**: Detail table supports pagination for large date ranges
+- [x] **DETL-03**: Detail table is sortable by date/time
 
 ### Export
 
@@ -65,16 +65,16 @@ Deferred to future releases.
 | BACK-01 | Phase 5 | Complete |
 | BACK-02 | Phase 5 | Complete |
 | BACK-03 | Phase 5 | Complete |
-| FILT-01 | Phase 6 | Pending |
-| FILT-02 | Phase 6 | Pending |
-| FILT-03 | Phase 6 | Pending |
-| FILT-04 | Phase 6 | Pending |
-| SUMM-01 | Phase 6 | Pending |
-| SUMM-02 | Phase 6 | Pending |
-| SUMM-03 | Phase 6 | Pending |
-| DETL-01 | Phase 6 | Pending |
-| DETL-02 | Phase 6 | Pending |
-| DETL-03 | Phase 6 | Pending |
+| FILT-01 | Phase 6 | Complete |
+| FILT-02 | Phase 6 | Complete |
+| FILT-03 | Phase 6 | Complete |
+| FILT-04 | Phase 6 | Complete |
+| SUMM-01 | Phase 6 | Complete |
+| SUMM-02 | Phase 6 | Complete |
+| SUMM-03 | Phase 6 | Complete |
+| DETL-01 | Phase 6 | Complete |
+| DETL-02 | Phase 6 | Complete |
+| DETL-03 | Phase 6 | Complete |
 | EXPO-01 | Phase 7 | Pending |
 
 **Coverage:**
