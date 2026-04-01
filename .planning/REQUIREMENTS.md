@@ -32,7 +32,7 @@ Requirements for Reports Dashboard milestone. Each maps to roadmap phases.
 
 ### Export
 
-- [ ] **EXPO-01**: Admin can download the current filtered report as PDF
+- [x] **EXPO-01**: Admin can download the current filtered report as PDF
 
 ### Backend
 
@@ -75,7 +75,7 @@ Deferred to future releases.
 | DETL-01 | Phase 6 | Complete |
 | DETL-02 | Phase 6 | Complete |
 | DETL-03 | Phase 6 | Complete |
-| EXPO-01 | Phase 7 | Pending |
+| EXPO-01 | Phase 7 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 15 total

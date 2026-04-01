@@ -131,7 +131,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Backend getReportePdf endpoint (PDFKit, streams PDF) + frontend Descargar PDF button (fetch+blob)
+- [x] 07-01-PLAN.md — Backend getReportePdf endpoint (PDFKit, streams PDF) + frontend Descargar PDF button (fetch+blob)
 - [ ] 07-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 
 **UI hint**: yes
@@ -149,4 +149,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 4. Webhook Log Viewer | v1.0 | 2/2 | Complete | 2026-04-01 |
 | 5. Backend Reports Foundation | v1.1 | 1/2 | In Progress|  |
 | 6. Reports Dashboard Frontend | v1.1 | 2/2 | Complete   | 2026-04-01 |
-| 7. PDF Export + Production Deploy | v1.1 | 0/2 | Not started | - |
+| 7. PDF Export + Production Deploy | v1.1 | 1/2 | In Progress|  |
