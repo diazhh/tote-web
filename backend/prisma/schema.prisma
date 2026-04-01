@@ -963,6 +963,7 @@ model Ticket {
   @@index([status])
   @@index([source])
   @@index([externalTicketId])
+  @@unique([drawId, externalTicketId, source])
   @@index([userId, status])
   @@index([drawId, source])
   @@index([createdAt])
