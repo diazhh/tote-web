@@ -77,7 +77,10 @@ Plans:
   2. Admin can filter the log table by provider and by status (DISCOVERED, PROCESSED, DUPLICATE, FAILED) independently or in combination
   3. Admin can click any log entry to open an inspector modal showing the full raw JSON payload with readable formatting
   4. The inspector modal includes a headers section showing the HTTP request headers that arrived with the payload
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 04-01-PLAN.md — Backend endpoint (getWebhookLogs + route) + frontend logs page + tab link + TDD tests
+- [ ] 04-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 **UI hint**: yes
 
 ## Progress
@@ -90,4 +93,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Schema Foundation | 1/2 | In Progress|  |
 | 2. Webhook Backend Pipeline | 1/3 | In Progress|  |
 | 3. Admin Provider Management | 3/3 | Complete   | 2026-04-01 |
-| 4. Webhook Log Viewer | 0/? | Not started | - |
+| 4. Webhook Log Viewer | 0/2 | Not started | - |
