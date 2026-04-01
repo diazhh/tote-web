@@ -69,31 +69,31 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | -- | Pending |
-| SCHEMA-02 | -- | Pending |
-| SCHEMA-03 | -- | Pending |
-| WHOOK-01 | -- | Pending |
-| WHOOK-02 | -- | Pending |
-| WHOOK-03 | -- | Pending |
-| WHOOK-04 | -- | Pending |
-| WHOOK-05 | -- | Pending |
-| WHOOK-06 | -- | Pending |
-| ADMIN-01 | -- | Pending |
-| ADMIN-02 | -- | Pending |
-| ADMIN-03 | -- | Pending |
-| ADMIN-04 | -- | Pending |
-| ADMIN-05 | -- | Pending |
-| ADMIN-06 | -- | Pending |
-| LOGS-01 | -- | Pending |
-| LOGS-02 | -- | Pending |
-| LOGS-03 | -- | Pending |
-| LOGS-04 | -- | Pending |
+| SCHEMA-01 | Phase 1 | Pending |
+| SCHEMA-02 | Phase 1 | Pending |
+| SCHEMA-03 | Phase 1 | Pending |
+| WHOOK-01 | Phase 2 | Pending |
+| WHOOK-02 | Phase 2 | Pending |
+| WHOOK-03 | Phase 2 | Pending |
+| WHOOK-04 | Phase 2 | Pending |
+| WHOOK-05 | Phase 2 | Pending |
+| WHOOK-06 | Phase 2 | Pending |
+| ADMIN-01 | Phase 3 | Pending |
+| ADMIN-02 | Phase 3 | Pending |
+| ADMIN-03 | Phase 3 | Pending |
+| ADMIN-04 | Phase 3 | Pending |
+| ADMIN-05 | Phase 3 | Pending |
+| ADMIN-06 | Phase 3 | Pending |
+| LOGS-01 | Phase 4 | Pending |
+| LOGS-02 | Phase 4 | Pending |
+| LOGS-03 | Phase 4 | Pending |
+| LOGS-04 | Phase 4 | Pending |
 
 **Coverage:**
 - v1.0 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after initial definition*
+*Last updated: 2026-04-01 after roadmap creation — all 19 requirements mapped*
