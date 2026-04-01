@@ -18,6 +18,9 @@ router.get('/bancas/:drawId', monitorController.getBancaStats);
 // Estadísticas por número/item
 router.get('/items/:drawId', monitorController.getItemStats);
 
+// Reporte PDF (debe ir ANTES de /reporte para evitar conflicto de rutas)
+router.get('/reporte/pdf', monitorController.getReportePdf);
+
 // Reporte diario
 router.get('/reporte', monitorController.getDailyReport);
 

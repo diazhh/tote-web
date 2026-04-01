@@ -82,6 +82,169 @@ class MonitorController {
   }
 
   /**
+   * GET /api/monitor/reporte/pdf
+   * Generar y descargar reporte de sorteos como PDF.
+   * Query params: same as getDailyReport (date, dateFrom, dateTo, gameId, source, apiSystemId)
+   */
+  async getReportePdf(req, res) {
+    try {
+      const { date, gameId, dateFrom, dateTo, source, apiSystemId } = req.query;
+
+      // Resolve date range — identical logic to getDailyReport
+      let resolvedFrom = dateFrom || null;
+      let resolvedTo   = dateTo   || null;
+
+      if (!resolvedFrom && !resolvedTo && date) {
+        resolvedFrom = date;
+        resolvedTo   = date;
+      } else if (!resolvedFrom && !resolvedTo) {
+        const today = new Date();
+        today.setUTCHours(today.getUTCHours() - 4);
+        const todayStr = today.toISOString().split('T')[0];
+        resolvedFrom = todayStr;
+        resolvedTo   = todayStr;
+      }
+
+      // Build filter summary string
+      const SOURCE_LABELS = { TAQUILLA_ONLINE: 'Online', EXTERNAL_API: 'SRQ / API', WEBHOOK_PUSH: 'Webhook' };
+      const filterParts = [
+        `Período: ${resolvedFrom} al ${resolvedTo}`,
+        gameId      ? `Juego ID: ${gameId}`                              : null,
+        source      ? `Fuente: ${SOURCE_LABELS[source] ?? source}`       : null,
+        apiSystemId ? `Proveedor ID: ${apiSystemId}`                     : null,
+      ].filter(Boolean);
+      const filterLabel = filterParts.join(' | ');
+
+      // Fetch report data
+      const report = await monitorService.getDailyReport({
+        dateFrom:    resolvedFrom,
+        dateTo:      resolvedTo,
+        gameId:      gameId      || null,
+        source:      source      || null,
+        apiSystemId: apiSystemId || null,
+      });
+
+      // Currency formatter
+      const fmt = (n) =>
+        new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'VES', minimumFractionDigits: 2 }).format(n ?? 0);
+
+      // Stream PDF response
+      const PDFDocument = (await import('pdfkit')).default;
+      const doc = new PDFDocument({ size: 'LETTER', margins: { top: 50, bottom: 70, left: 50, right: 50 }, bufferPages: true });
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="reporte-${resolvedFrom}-${resolvedTo}.pdf"`);
+      doc.pipe(res);
+
+      // Table rendering helper
+      function drawTable(doc, headers, colWidths, rows, startX = 50) {
+        if (doc.y > 680) { doc.addPage(); }
+        let x = startX, y = doc.y;
+        doc.fontSize(9).font('Helvetica-Bold');
+        headers.forEach((h, i) => { doc.text(h, x, y, { width: colWidths[i], align: 'left' }); x += colWidths[i]; });
+        y += 14;
+        doc.moveTo(startX, y).lineTo(startX + colWidths.reduce((a, b) => a + b, 0), y).stroke();
+        y += 4;
+        doc.fontSize(8).font('Helvetica');
+        for (const row of rows) {
+          if (y > 720) { doc.addPage(); y = 50; }
+          x = startX;
+          row.forEach((cell, i) => { doc.text(String(cell), x, y, { width: colWidths[i], align: 'left' }); x += colWidths[i]; });
+          y += 12;
+        }
+        doc.y = y + 10;
+      }
+
+      // Title block
+      doc.fontSize(18).font('Helvetica-Bold').text('REPORTE DE SORTEOS', { align: 'center' });
+      doc.moveDown(0.3);
+      doc.fontSize(10).font('Helvetica').text(filterLabel, { align: 'center' });
+      doc.moveDown(0.2);
+      doc.fontSize(8).fillColor('#888').text(`Generado: ${new Date().toLocaleString('es-VE')}`, { align: 'center' });
+      doc.fillColor('black').moveDown(0.5);
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
+      doc.moveDown(0.5);
+
+      // Resumen section
+      const t = report.totals || {};
+      doc.fontSize(12).font('Helvetica-Bold').text('RESUMEN');
+      doc.moveDown(0.3);
+      doc.fontSize(10).font('Helvetica');
+      const col1 = 60, col2 = 280;
+      let y = doc.y;
+      doc.text('Ventas Totales:', col1, y);   doc.text(fmt(t.totalSales), col2, y);
+      y += 16;
+      doc.text('Premios Pagados:', col1, y);  doc.text(fmt(t.totalPrize), col2, y);
+      y += 16;
+      doc.text('Balance:', col1, y);          doc.text(fmt(t.totalBalance), col2, y);
+      y += 16;
+      doc.text('Sorteos:', col1, y);          doc.text(String(t.drawCount ?? 0), col2, y);
+      y += 16;
+      doc.text('Tickets:', col1, y);          doc.text(String(t.totalTickets ?? 0), col2, y);
+      doc.y = y + 20;
+      doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
+      doc.moveDown(0.5);
+
+      // Desglose por Juego table
+      doc.fontSize(12).font('Helvetica-Bold').text('DESGLOSE POR JUEGO'); doc.moveDown(0.3);
+      drawTable(doc,
+        ['Juego', 'Ventas', 'Premios', 'Balance', 'Sort.'],
+        [150, 90, 90, 90, 40],
+        (report.byGame || []).map(row => [row.game, fmt(row.totalSales), fmt(row.totalPrize), fmt(row.totalBalance), String(row.drawCount)])
+      );
+      doc.moveDown(0.5);
+
+      // Desglose por Fuente table
+      doc.fontSize(12).font('Helvetica-Bold').text('DESGLOSE POR FUENTE'); doc.moveDown(0.3);
+      drawTable(doc,
+        ['Fuente', 'Ventas', 'Tickets'],
+        [200, 150, 100],
+        (report.bySource || []).map(row => [SOURCE_LABELS[row.source] ?? row.source, fmt(row.totalSales), String(row.ticketCount)])
+      );
+      doc.moveDown(0.5);
+
+      // Detalle por Sorteo table
+      const sortedDraws = [...(report.draws || [])].sort((a, b) =>
+        (a.drawDate + a.drawTime).localeCompare(b.drawDate + b.drawTime)
+      );
+      doc.fontSize(12).font('Helvetica-Bold').text('DETALLE POR SORTEO'); doc.moveDown(0.3);
+      drawTable(doc,
+        ['Fecha', 'Hora', 'Juego', 'Estado', 'Ganador', 'Ventas', 'Premios', 'Balance', 'Tickets'],
+        [60, 40, 90, 60, 100, 65, 65, 65, 40],
+        sortedDraws.map(draw => [
+          draw.drawDate,
+          draw.drawTime ?? '—',
+          draw.game,
+          draw.status,
+          draw.winnerItem ? `${draw.winnerItem.number} - ${draw.winnerItem.name}` : '—',
+          fmt(draw.totalSales),
+          fmt(draw.totalPrize),
+          fmt(draw.balance),
+          String(draw.ticketCount),
+        ])
+      );
+
+      // Footer on all pages
+      const range = doc.bufferedPageRange();
+      for (let i = range.start; i < range.start + range.count; i++) {
+        doc.switchToPage(i);
+        doc.save();
+        doc.moveTo(50, 740).lineTo(562, 740).stroke();
+        doc.fontSize(8).font('Helvetica').fillColor('#555')
+           .text(`Generado: ${new Date().toLocaleString('es-VE')} | Página ${i - range.start + 1} de ${range.count}`,
+                 50, 745, { align: 'center', width: 512 });
+        doc.fillColor('black').restore();
+      }
+      doc.end();
+
+    } catch (error) {
+      logger.error('Error en getReportePdf:', error);
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    }
+  }
+
+  /**
    * GET /api/monitor/tickets-by-banca/:drawId/:bancaId
    * Obtener tickets de una banca específica
    */
