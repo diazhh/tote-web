@@ -19,7 +19,8 @@ dist/
 
 # PM2 logs
 .pm2/
-logs/
+/logs/
+backend/logs/
 *.log
 
 # IDE and editor files
