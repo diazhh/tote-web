@@ -61,7 +61,11 @@ Plans:
   3. Admin can generate a webhook token for a PUSH provider; the token is shown once in full immediately after generation, then masked in all subsequent views
   4. Admin can regenerate a token for an existing PUSH provider; the old token is immediately invalidated
   5. Each provider in the list shows an adapter status badge: "Ready" if an adapter file exists for its slug, "Discovery" if it does not
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 03-01-PLAN.md — Backend: extend controller (createSystem/updateSystem/generateToken/getAdapterStatus) + TDD tests for ADMIN-01..06
+- [ ] 03-02-PLAN.md — Frontend: mode + adapter badges in system list; extended SystemModal with slug/mode/token panel
+- [ ] 03-03-PLAN.md — Production deploy: git pull, pm2 restart, smoke test, human verification
 **UI hint**: yes
 
 ### Phase 4: Webhook Log Viewer
