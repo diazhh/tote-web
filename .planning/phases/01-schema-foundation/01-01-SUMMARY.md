@@ -74,7 +74,7 @@ Each task was committed atomically:
 1. **Task 1: Write step-1 schema (nullable slug) and backfill script** - `8677ff7` (feat)
 2. **Task 2: Execute three-step local deployment (push → backfill → push → generate)** - `d5f06dd` (feat)
 
-**Plan metadata:** TBD (docs: complete plan)
+**Plan metadata:** `76788b4` (docs: complete plan)
 
 ## Files Created/Modified
 
