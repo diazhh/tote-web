@@ -248,7 +248,7 @@ export default function SorteosPage() {
             <h1 className="text-2xl font-bold text-gray-900">Gestión de Sorteos</h1>
             <p className="text-gray-600 mt-1">Administra los sorteos del sistema</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             <button
               onClick={handleSyncDrawIds}
               className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
@@ -351,7 +351,7 @@ export default function SorteosPage() {
                     {getStatusBadge(draw.status)}
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3">
                     <div>
                       <p className="text-xs text-gray-500">Fecha</p>
                       <p className="text-sm font-medium text-gray-900">{formatCaracasDate(draw.drawDate)}</p>
