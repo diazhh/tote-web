@@ -21,4 +21,8 @@ router.delete('/configurations/:id', providerController.deleteConfiguration.bind
 router.post('/configurations/:id/test', providerController.testConfiguration.bind(providerController));
 router.get('/configurations/:id/stats', providerController.getConfigurationStats.bind(providerController));
 
+// Rutas de webhook para sistemas
+router.post('/systems/:id/generate-token', providerController.generateToken.bind(providerController));
+router.get('/systems/:id/adapter-status', providerController.getAdapterStatus.bind(providerController));
+
 export default router;
