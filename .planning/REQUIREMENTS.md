@@ -24,12 +24,12 @@ Requirements for Multi-Provider Webhook System milestone. Each maps to roadmap p
 
 ### Admin Provider Management
 
-- [ ] **ADMIN-01**: Admin can create/edit providers with PULL or PUSH mode selection
-- [ ] **ADMIN-02**: Admin can set provider slug (auto-generated from name, editable)
-- [ ] **ADMIN-03**: Admin can generate webhook token (shown once on creation, masked after)
-- [ ] **ADMIN-04**: Admin can regenerate token for existing provider
-- [ ] **ADMIN-05**: Admin sees provider mode badge (PULL/PUSH) in provider list
-- [ ] **ADMIN-06**: Admin sees adapter status badge (Ready/Discovery) per provider
+- [x] **ADMIN-01**: Admin can create/edit providers with PULL or PUSH mode selection
+- [x] **ADMIN-02**: Admin can set provider slug (auto-generated from name, editable)
+- [x] **ADMIN-03**: Admin can generate webhook token (shown once on creation, masked after)
+- [x] **ADMIN-04**: Admin can regenerate token for existing provider
+- [x] **ADMIN-05**: Admin sees provider mode badge (PULL/PUSH) in provider list
+- [x] **ADMIN-06**: Admin sees adapter status badge (Ready/Discovery) per provider
 
 ### Webhook Log Viewer
 
@@ -78,12 +78,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WHOOK-04 | Phase 2 | Complete |
 | WHOOK-05 | Phase 2 | Complete |
 | WHOOK-06 | Phase 2 | Complete |
-| ADMIN-01 | Phase 3 | Pending |
-| ADMIN-02 | Phase 3 | Pending |
-| ADMIN-03 | Phase 3 | Pending |
-| ADMIN-04 | Phase 3 | Pending |
-| ADMIN-05 | Phase 3 | Pending |
-| ADMIN-06 | Phase 3 | Pending |
+| ADMIN-01 | Phase 3 | Complete |
+| ADMIN-02 | Phase 3 | Complete |
+| ADMIN-03 | Phase 3 | Complete |
+| ADMIN-04 | Phase 3 | Complete |
+| ADMIN-05 | Phase 3 | Complete |
+| ADMIN-06 | Phase 3 | Complete |
 | LOGS-01 | Phase 4 | Pending |
 | LOGS-02 | Phase 4 | Pending |
 | LOGS-03 | Phase 4 | Pending |

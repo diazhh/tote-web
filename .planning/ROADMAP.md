@@ -63,7 +63,7 @@ Plans:
   5. Each provider in the list shows an adapter status badge: "Ready" if an adapter file exists for its slug, "Discovery" if it does not
 **Plans**: 3 plans
 Plans:
-- [ ] 03-01-PLAN.md — Backend: extend controller (createSystem/updateSystem/generateToken/getAdapterStatus) + TDD tests for ADMIN-01..06
+- [x] 03-01-PLAN.md — Backend: extend controller (createSystem/updateSystem/generateToken/getAdapterStatus) + TDD tests for ADMIN-01..06
 - [ ] 03-02-PLAN.md — Frontend: mode + adapter badges in system list; extended SystemModal with slug/mode/token panel
 - [ ] 03-03-PLAN.md — Production deploy: git pull, pm2 restart, smoke test, human verification
 **UI hint**: yes
@@ -89,5 +89,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Schema Foundation | 1/2 | In Progress|  |
 | 2. Webhook Backend Pipeline | 1/3 | In Progress|  |
-| 3. Admin Provider Management | 0/? | Not started | - |
+| 3. Admin Provider Management | 1/3 | In Progress|  |
 | 4. Webhook Log Viewer | 0/? | Not started | - |

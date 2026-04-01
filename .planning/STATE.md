@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: verifying
-stopped_at: Completed 02-webhook-backend-pipeline/02-03-PLAN.md
-last_updated: "2026-04-01T18:47:10.406Z"
+status: executing
+stopped_at: Completed 03-admin-provider-management/03-01-PLAN.md
+last_updated: "2026-04-01T19:10:58.108Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 4
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 8
+  completed_plans: 6
   percent: 0
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Reliable draw lifecycle management — draws execute on schedule, results publish, prizes process correctly.
-**Current focus:** Phase 02 — webhook-backend-pipeline
+**Current focus:** Phase 03 — admin-provider-management
 
 ## Current Position
 
-Phase: 3
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 03 (admin-provider-management) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-04-01
 
 Progress: [░░░░░░░░░░] 0%
@@ -56,6 +56,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-webhook-backend-pipeline P01 | 5 | 1 tasks | 2 files |
 | Phase 02-webhook-backend-pipeline P02 | 8min | 2 tasks | 4 files |
 | Phase 02-webhook-backend-pipeline P03 | -233min | 4 tasks | 1 files |
+| Phase 03-admin-provider-management PP01 | 2min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,9 @@ Recent decisions affecting current work:
 - [Phase 02-webhook-backend-pipeline]: Always-200 webhook controller: processing failures in WebhookLog.status, not HTTP status codes
 - [Phase 02-webhook-backend-pipeline]: Webhook route registered before express.json() in index.js to preserve raw body Buffer for express.raw() in webhook router
 - [Phase 02-webhook-backend-pipeline]: Production DB had 0 duplicate Ticket rows; cleanup SQL was run safely and deleted 0 rows before prisma db push
+- [Phase 03-admin-provider-management]: Use Prisma select (not exclude) in getAllSystems to prevent webhookToken leakage
+- [Phase 03-admin-provider-management]: generateToken uses crypto.randomBytes(32).toString('hex') = 64 hex chars, plain storage (re-displayable)
+- [Phase 03-admin-provider-management]: getAdapterStatus resolves path relative to __dirname — ENOENT returns adapterReady: false
 
 ### Pending Todos
 
@@ -88,6 +92,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T18:46:23.732Z
-Stopped at: Completed 02-webhook-backend-pipeline/02-03-PLAN.md
+Last session: 2026-04-01T19:10:58.104Z
+Stopped at: Completed 03-admin-provider-management/03-01-PLAN.md
 Resume file: None
