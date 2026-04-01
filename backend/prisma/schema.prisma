@@ -415,17 +415,53 @@ model AuditLog {
 // ============================================
 
 model ApiSystem {
-  id            String            @id @default(uuid())
-  name          String            // "SRQ", "OtroSistema"
+  id            String          @id @default(uuid())
+  name          String          // "SRQ", "OtroSistema"
   description   String?
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  
-  // Relaciones
+  slug          String?         // Step 1 of 2: nullable. Will become @unique after backfill.
+  webhookToken  String?         @unique
+  mode          ApiSystemMode   @default(PULL)
+  isActive      Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
   configurations ApiConfiguration[]
-  comerciales   ProviderComercial[]
-  
+  comerciales    ProviderComercial[]
+  webhookLogs    WebhookLog[]
+
   @@index([name])
+  @@index([slug])
+  @@index([mode])
+}
+
+enum ApiSystemMode {
+  PULL   // Provider polled by our system (SRQ pattern)
+  PUSH   // Provider sends webhooks to our endpoint
+}
+
+enum WebhookLogStatus {
+  DISCOVERED   // Received; no adapter exists yet (discovery mode)
+  PROCESSED    // Adapter ran and ticket was created successfully
+  DUPLICATE    // Payload matched an already-processed event
+  FAILED       // Processing threw an error
+}
+
+model WebhookLog {
+  id            String           @id @default(uuid())
+  apiSystemId   String
+  rawPayload    String           // Full request body as string (not Json — avoids parse failures on malformed bodies)
+  headers       Json?            // Request headers (for Phase 4 log inspector — LOGS-04)
+  status        WebhookLogStatus @default(DISCOVERED)
+  errorMessage  String?          // Set when status = FAILED; null otherwise
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  apiSystem     ApiSystem        @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
+
+  @@index([apiSystemId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([apiSystemId, createdAt])
 }
 
 model ApiConfiguration {
@@ -902,6 +938,7 @@ enum TicketStatus {
 enum TicketSource {
   TAQUILLA_ONLINE   // Jugado por usuario en la plataforma
   EXTERNAL_API      // Importado de proveedor externo (SRQ, etc)
+  WEBHOOK_PUSH      // Received via webhook from a PUSH provider (Phase 2+)
 }
 
 model Ticket {
