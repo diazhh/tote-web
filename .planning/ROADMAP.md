@@ -31,7 +31,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 2 plans
 Plans:
 - [x] 01-01-PLAN.md — Write schema (step 1: nullable slug) + backfill script + execute full 3-step local deployment
-- [ ] 01-02-PLAN.md — SSH production deployment + human health-check verification
+- [x] 01-02-PLAN.md — SSH production deployment + human health-check verification
 **UI hint**: no
 
 ### Phase 2: Webhook Backend Pipeline
