@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 03-admin-provider-management/03-01-PLAN.md
-last_updated: "2026-04-01T19:10:58.108Z"
+stopped_at: Completed 03-admin-provider-management/03-02-PLAN.md
+last_updated: "2026-04-01T19:15:23.258Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 4
   completed_phases: 2
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 03 (admin-provider-management) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -57,6 +57,7 @@ Progress: [░░░░░░░░░░] 0%
 | Phase 02-webhook-backend-pipeline P02 | 8min | 2 tasks | 4 files |
 | Phase 02-webhook-backend-pipeline P03 | -233min | 4 tasks | 1 files |
 | Phase 03-admin-provider-management PP01 | 2min | 3 tasks | 3 files |
+| Phase 03-admin-provider-management P02 | 3min | 2 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ Recent decisions affecting current work:
 - [Phase 03-admin-provider-management]: Use Prisma select (not exclude) in getAllSystems to prevent webhookToken leakage
 - [Phase 03-admin-provider-management]: generateToken uses crypto.randomBytes(32).toString('hex') = 64 hex chars, plain storage (re-displayable)
 - [Phase 03-admin-provider-management]: getAdapterStatus resolves path relative to __dirname — ENOENT returns adapterReady: false
+- [Phase 03-admin-provider-management]: fetchAdapterStatuses called non-blocking after setSystems so loading spinner clears before status badges resolve
+- [Phase 03-admin-provider-management]: systemTokens state map tracks post-generation token presence without re-fetching masked token from backend
 
 ### Pending Todos
 
@@ -92,6 +95,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T19:10:58.104Z
-Stopped at: Completed 03-admin-provider-management/03-01-PLAN.md
+Last session: 2026-04-01T19:15:23.254Z
+Stopped at: Completed 03-admin-provider-management/03-02-PLAN.md
 Resume file: None

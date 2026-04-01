@@ -64,7 +64,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 03-01-PLAN.md — Backend: extend controller (createSystem/updateSystem/generateToken/getAdapterStatus) + TDD tests for ADMIN-01..06
-- [ ] 03-02-PLAN.md — Frontend: mode + adapter badges in system list; extended SystemModal with slug/mode/token panel
+- [x] 03-02-PLAN.md — Frontend: mode + adapter badges in system list; extended SystemModal with slug/mode/token panel
 - [ ] 03-03-PLAN.md — Production deploy: git pull, pm2 restart, smoke test, human verification
 **UI hint**: yes
 
