@@ -37,7 +37,7 @@ function LogInspectorModal({ log, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white rounded-lg p-6 max-w-3xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+      <div className="bg-white rounded-lg p-4 sm:p-6 max-w-3xl w-full mx-2 sm:mx-0 max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <h2 className="text-xl font-bold mb-4">Inspector de Payload</h2>
 
         <div className="space-y-4">
@@ -57,7 +57,7 @@ function LogInspectorModal({ log, onClose }) {
           {/* Payload — LOGS-03 */}
           <div>
             <h3 className="font-medium mb-2 text-gray-700">Payload Raw</h3>
-            <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-words max-h-64">
+            <pre className="bg-gray-100 p-3 sm:p-4 rounded-lg text-[11px] sm:text-xs overflow-x-auto whitespace-pre-wrap break-words max-h-64">
               {parseError ? log.rawPayload : JSON.stringify(parsedPayload, null, 2)}
             </pre>
           </div>
@@ -66,7 +66,7 @@ function LogInspectorModal({ log, onClose }) {
           <div>
             <h3 className="font-medium mb-2 text-gray-700">Headers</h3>
             {log.headers ? (
-              <pre className="bg-gray-100 p-4 rounded-lg text-xs overflow-x-auto whitespace-pre-wrap break-words max-h-48">
+              <pre className="bg-gray-100 p-3 sm:p-4 rounded-lg text-[11px] sm:text-xs overflow-x-auto whitespace-pre-wrap break-words max-h-48">
                 {JSON.stringify(log.headers, null, 2)}
               </pre>
             ) : (
@@ -190,7 +190,7 @@ export default function WebhookLogsPage() {
 
       {/* Filters — LOGS-02 */}
       <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex flex-wrap gap-4 items-center">
+        <div className="flex flex-wrap gap-2 sm:gap-4 items-center">
           <div className="flex items-center gap-2">
             <label className="text-sm font-medium text-gray-700">Proveedor:</label>
             <select
