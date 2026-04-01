@@ -97,7 +97,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01-PLAN.md — FIX-01 import fix + backend getDailyReport extension (BACK-01/02/03) + unit tests (TDD)
+- [x] 05-01-PLAN.md — FIX-01 import fix + backend getDailyReport extension (BACK-01/02/03) + unit tests (TDD)
 - [ ] 05-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 **UI hint**: no
 
@@ -137,6 +137,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Webhook Backend Pipeline | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 3. Admin Provider Management | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 4. Webhook Log Viewer | v1.0 | 2/2 | Complete | 2026-04-01 |
-| 5. Backend Reports Foundation | v1.1 | 0/2 | Not started | - |
+| 5. Backend Reports Foundation | v1.1 | 1/2 | In Progress|  |
 | 6. Reports Dashboard Frontend | v1.1 | 0/? | Not started | - |
 | 7. PDF Export + Production Deploy | v1.1 | 0/? | Not started | - |

@@ -9,7 +9,7 @@ Requirements for Reports Dashboard milestone. Each maps to roadmap phases.
 
 ### Fix
 
-- [ ] **FIX-01**: /admin/reportes loads without client-side errors
+- [x] **FIX-01**: /admin/reportes loads without client-side errors
 
 ### Filters
 
@@ -36,9 +36,9 @@ Requirements for Reports Dashboard milestone. Each maps to roadmap phases.
 
 ### Backend
 
-- [ ] **BACK-01**: Backend endpoint supports date range (dateFrom/dateTo) query params
-- [ ] **BACK-02**: Backend endpoint supports source and apiSystemId filters
-- [ ] **BACK-03**: Backend returns game-level and provider-level aggregations in the response
+- [x] **BACK-01**: Backend endpoint supports date range (dateFrom/dateTo) query params
+- [x] **BACK-02**: Backend endpoint supports source and apiSystemId filters
+- [x] **BACK-03**: Backend returns game-level and provider-level aggregations in the response
 
 ## v1.x Requirements
 
@@ -61,10 +61,10 @@ Deferred to future releases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-01 | Phase 5 | Pending |
-| BACK-01 | Phase 5 | Pending |
-| BACK-02 | Phase 5 | Pending |
-| BACK-03 | Phase 5 | Pending |
+| FIX-01 | Phase 5 | Complete |
+| BACK-01 | Phase 5 | Complete |
+| BACK-02 | Phase 5 | Complete |
+| BACK-03 | Phase 5 | Complete |
 | FILT-01 | Phase 6 | Pending |
 | FILT-02 | Phase 6 | Pending |
 | FILT-03 | Phase 6 | Pending |
