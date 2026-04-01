@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Calendar, Gamepad2, DollarSign, Trophy, TrendingUp, TrendingDown,
-  FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown
+  FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download
 } from 'lucide-react';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
@@ -34,6 +34,7 @@ export default function ReportesPage() {
   const [games, setGames]     = useState([]);
   const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   // --- Detail table state ---
   const [sortDir, setSortDir] = useState('asc');   // 'asc' | 'desc'
@@ -93,6 +94,35 @@ export default function ReportesPage() {
     setFilters(prev => ({ ...prev, source: value, apiSystemId: '' }));
   };
 
+  const handleDownloadPdf = useCallback(() => {
+    setPdfLoading(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const params = new URLSearchParams();
+    if (filters.dateFrom)    params.set('dateFrom', filters.dateFrom);
+    if (filters.dateTo)      params.set('dateTo', filters.dateTo);
+    if (filters.gameId)      params.set('gameId', filters.gameId);
+    if (filters.source)      params.set('source', filters.source);
+    if (filters.apiSystemId) params.set('apiSystemId', filters.apiSystemId);
+
+    fetch(`${API_URL}/api/monitor/reporte/pdf?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `reporte-${filters.dateFrom || 'hoy'}-${filters.dateTo || 'hoy'}.pdf`;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch(() => toast.error('Error generando PDF'))
+      .finally(() => setPdfLoading(false));
+  }, [filters]);
+
   // --- Sorted + paginated draws ---
   const sortedDraws = useMemo(() => {
     if (!report?.draws) return [];
@@ -142,14 +172,24 @@ export default function ReportesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Reportes de Sorteos</h1>
           <p className="text-sm text-gray-500 mt-0.5">Ventas, premios y balance por período</p>
         </div>
-        <button
-          onClick={fetchReport}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={pdfLoading || loading}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
+          >
+            <Download className={`w-4 h-4 ${pdfLoading ? 'animate-bounce' : ''}`} />
+            {pdfLoading ? 'Generando...' : 'Descargar PDF'}
+          </button>
+          <button
+            onClick={fetchReport}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Filter bar — FILT-01 / FILT-02 / FILT-03 */}
