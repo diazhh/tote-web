@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 1: Schema Foundation** - Add slug, webhookToken, mode to ApiSystem and create WebhookLog model
 - [ ] **Phase 2: Webhook Backend Pipeline** - Endpoint, token auth, discovery mode, adapter routing, idempotency
-- [ ] **Phase 3: Admin Provider Management** - Provider CRUD extensions, token generation UI, mode and adapter badges
+- [x] **Phase 3: Admin Provider Management** - Provider CRUD extensions, token generation UI, mode and adapter badges (completed 2026-04-01)
 - [ ] **Phase 4: Webhook Log Viewer** - Admin log table, status filtering, payload inspector modal
 
 ## Phase Details
@@ -65,7 +65,7 @@ Plans:
 Plans:
 - [x] 03-01-PLAN.md — Backend: extend controller (createSystem/updateSystem/generateToken/getAdapterStatus) + TDD tests for ADMIN-01..06
 - [x] 03-02-PLAN.md — Frontend: mode + adapter badges in system list; extended SystemModal with slug/mode/token panel
-- [ ] 03-03-PLAN.md — Production deploy: git pull, pm2 restart, smoke test, human verification
+- [x] 03-03-PLAN.md — Production deploy: git pull, pm2 restart, smoke test, human verification
 **UI hint**: yes
 
 ### Phase 4: Webhook Log Viewer
@@ -89,5 +89,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Schema Foundation | 1/2 | In Progress|  |
 | 2. Webhook Backend Pipeline | 1/3 | In Progress|  |
-| 3. Admin Provider Management | 1/3 | In Progress|  |
+| 3. Admin Provider Management | 3/3 | Complete   | 2026-04-01 |
 | 4. Webhook Log Viewer | 0/? | Not started | - |
