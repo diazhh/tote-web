@@ -116,7 +116,7 @@ Plans:
 
 Plans:
 - [x] 06-01-PLAN.md — Rebuild reportes/page.js (filter bar, summary cards, breakdown tables, paginated+sortable detail table) + update monitor API client
-- [ ] 06-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
+- [x] 06-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 
 **UI hint**: yes
 
@@ -143,5 +143,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 3. Admin Provider Management | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 4. Webhook Log Viewer | v1.0 | 2/2 | Complete | 2026-04-01 |
 | 5. Backend Reports Foundation | v1.1 | 1/2 | In Progress|  |
-| 6. Reports Dashboard Frontend | v1.1 | 0/? | Not started | - |
+| 6. Reports Dashboard Frontend | v1.1 | 2/2 | Complete   | 2026-04-01 |
 | 7. PDF Export + Production Deploy | v1.1 | 0/? | Not started | - |
