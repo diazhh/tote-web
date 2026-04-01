@@ -112,7 +112,12 @@ Plans:
   4. Summary cards show correct total sales, total prizes, total profit, and ticket count for the active filters
   5. The breakdown tables show per-game and per-provider aggregated totals as separate rows
   6. The detail table lists each draw with date, time, game, winner, sales, prizes, balance, and ticket count; supports pagination and sorting by date/time
-**Plans**: TBD
+**Plans**: 2 plans
+
+Plans:
+- [ ] 06-01-PLAN.md — Rebuild reportes/page.js (filter bar, summary cards, breakdown tables, paginated+sortable detail table) + update monitor API client
+- [ ] 06-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
+
 **UI hint**: yes
 
 #### Phase 7: PDF Export + Production Deploy
