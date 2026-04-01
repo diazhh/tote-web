@@ -47,7 +47,7 @@ Plans:
   6. The sync-api-tickets job deleteMany is scoped to source='EXTERNAL_API' only, protecting PUSH-created tickets (source='WEBHOOK') from deletion
 **Plans**: 3 plans
 Plans:
-- [ ] 02-01-PLAN.md — Add @@unique([drawId, externalTicketId, source]) to Ticket + create adapters directory
+- [x] 02-01-PLAN.md — Add @@unique([drawId, externalTicketId, source]) to Ticket + create adapters directory
 - [ ] 02-02-PLAN.md — Create webhook pipeline files (auth middleware, service, controller, routes)
 - [ ] 02-03-PLAN.md — Wire route in index.js, local smoke test, production deploy
 
@@ -84,6 +84,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Schema Foundation | 1/2 | In Progress|  |
-| 2. Webhook Backend Pipeline | 0/? | Not started | - |
+| 2. Webhook Backend Pipeline | 1/3 | In Progress|  |
 | 3. Admin Provider Management | 0/? | Not started | - |
 | 4. Webhook Log Viewer | 0/? | Not started | - |

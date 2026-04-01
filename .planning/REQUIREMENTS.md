@@ -13,7 +13,7 @@ Requirements for Multi-Provider Webhook System milestone. Each maps to roadmap p
 - [ ] **WHOOK-02**: System logs raw payload to `WebhookLog` when no adapter exists (discovery mode)
 - [ ] **WHOOK-03**: System creates tickets in real-time when provider has a wired adapter
 - [ ] **WHOOK-04**: System rejects requests with invalid or missing tokens (401)
-- [ ] **WHOOK-05**: System prevents duplicate ticket creation via DB unique constraint on `(drawId, externalTicketId)`
+- [x] **WHOOK-05**: System prevents duplicate ticket creation via DB unique constraint on `(drawId, externalTicketId)`
 - [ ] **WHOOK-06**: System uses `crypto.timingSafeEqual` for token comparison
 
 ### Schema
@@ -76,7 +76,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WHOOK-02 | Phase 2 | Pending |
 | WHOOK-03 | Phase 2 | Pending |
 | WHOOK-04 | Phase 2 | Pending |
-| WHOOK-05 | Phase 2 | Pending |
+| WHOOK-05 | Phase 2 | Complete |
 | WHOOK-06 | Phase 2 | Pending |
 | ADMIN-01 | Phase 3 | Pending |
 | ADMIN-02 | Phase 3 | Pending |

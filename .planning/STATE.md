@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 01-schema-foundation/01-01-PLAN.md
-last_updated: "2026-04-01T17:59:12.676Z"
+stopped_at: Completed 02-webhook-backend-pipeline/02-01-PLAN.md
+last_updated: "2026-04-01T18:16:44.543Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 5
+  completed_plans: 3
   percent: 0
 ---
 
@@ -21,12 +21,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Reliable draw lifecycle management — draws execute on schedule, results publish, prizes process correctly.
-**Current focus:** Phase 01 — schema-foundation
+**Current focus:** Phase 02 — webhook-backend-pipeline
 
 ## Current Position
 
-Phase: 2
-Plan: Not started
+Phase: 02 (webhook-backend-pipeline) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -53,6 +53,7 @@ Progress: [░░░░░░░░░░] 0%
 
 *Updated after each plan completion*
 | Phase 01-schema-foundation P01 | 2 | 2 tasks | 2 files |
+| Phase 02-webhook-backend-pipeline P01 | 5 | 1 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Recent decisions affecting current work:
 - [Pre-phase]: Synchronous ticket creation (no queue); log-first then process
 - [Phase 01-schema-foundation]: Two-step db push (nullable slug first, backfill, then @unique) avoids null constraint violation on existing SRQ row
 - [Phase 01-schema-foundation]: isActive and headers Json? added to ApiSystem/WebhookLog in Phase 1 as hard dependencies for Phase 2 middleware and Phase 4 log viewer
+- [Phase 02-webhook-backend-pipeline]: Unique constraint scoped to (drawId, externalTicketId, source) — not just (drawId, externalTicketId) — so same externalTicketId can coexist across different sources
+- [Phase 02-webhook-backend-pipeline]: Local dev duplicate cleanup: 35,450 duplicate EXTERNAL_API tickets removed (kept oldest per group) before constraint applied — production will need same cleanup SQL before migration
 
 ### Pending Todos
 
@@ -79,6 +82,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T17:53:44.263Z
-Stopped at: Completed 01-schema-foundation/01-01-PLAN.md
+Last session: 2026-04-01T18:16:44.539Z
+Stopped at: Completed 02-webhook-backend-pipeline/02-01-PLAN.md
 Resume file: None
