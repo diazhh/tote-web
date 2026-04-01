@@ -22,19 +22,21 @@ export const monitorApi = {
   },
 
   /**
-   * Obtener reporte diario
-   * @param {string} date - YYYY-MM-DD (legacy single day)
-   * @param {string|null} gameId - optional game UUID filter
-   * @param {Object} extraFilters - dateFrom, dateTo, source, apiSystemId (BACK-01/02)
+   * Obtener reporte de sorteos con filtros completos
+   * @param {Object} params
+   * @param {string} [params.dateFrom] - YYYY-MM-DD
+   * @param {string} [params.dateTo]   - YYYY-MM-DD
+   * @param {string} [params.gameId]   - UUID or null
+   * @param {string} [params.source]   - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH
+   * @param {string} [params.apiSystemId] - UUID or null
    */
-  getDailyReport: async (date, gameId = null, extraFilters = {}) => {
+  getDailyReport: async ({ dateFrom, dateTo, gameId, source, apiSystemId } = {}) => {
     const params = new URLSearchParams();
-    if (date) params.append('date', date);
-    if (gameId) params.append('gameId', gameId);
-    if (extraFilters.dateFrom)    params.append('dateFrom',    extraFilters.dateFrom);
-    if (extraFilters.dateTo)      params.append('dateTo',      extraFilters.dateTo);
-    if (extraFilters.source)      params.append('source',      extraFilters.source);
-    if (extraFilters.apiSystemId) params.append('apiSystemId', extraFilters.apiSystemId);
+    if (dateFrom)    params.append('dateFrom',    dateFrom);
+    if (dateTo)      params.append('dateTo',      dateTo);
+    if (gameId)      params.append('gameId',      gameId);
+    if (source)      params.append('source',      source);
+    if (apiSystemId) params.append('apiSystemId', apiSystemId);
     const response = await axios.get(`/monitor/reporte?${params.toString()}`);
     return response.data;
   },
