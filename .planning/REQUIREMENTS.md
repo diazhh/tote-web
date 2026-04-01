@@ -9,12 +9,12 @@ Requirements for Multi-Provider Webhook System milestone. Each maps to roadmap p
 
 ### Webhook Infrastructure
 
-- [ ] **WHOOK-01**: System can receive POST requests at `/api/webhooks/:providerSlug` with token-based auth
-- [ ] **WHOOK-02**: System logs raw payload to `WebhookLog` when no adapter exists (discovery mode)
-- [ ] **WHOOK-03**: System creates tickets in real-time when provider has a wired adapter
-- [ ] **WHOOK-04**: System rejects requests with invalid or missing tokens (401)
+- [x] **WHOOK-01**: System can receive POST requests at `/api/webhooks/:providerSlug` with token-based auth
+- [x] **WHOOK-02**: System logs raw payload to `WebhookLog` when no adapter exists (discovery mode)
+- [x] **WHOOK-03**: System creates tickets in real-time when provider has a wired adapter
+- [x] **WHOOK-04**: System rejects requests with invalid or missing tokens (401)
 - [x] **WHOOK-05**: System prevents duplicate ticket creation via DB unique constraint on `(drawId, externalTicketId)`
-- [ ] **WHOOK-06**: System uses `crypto.timingSafeEqual` for token comparison
+- [x] **WHOOK-06**: System uses `crypto.timingSafeEqual` for token comparison
 
 ### Schema
 
@@ -72,12 +72,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCHEMA-01 | Phase 1 | Complete |
 | SCHEMA-02 | Phase 1 | Complete |
 | SCHEMA-03 | Phase 1 | Complete |
-| WHOOK-01 | Phase 2 | Pending |
-| WHOOK-02 | Phase 2 | Pending |
-| WHOOK-03 | Phase 2 | Pending |
-| WHOOK-04 | Phase 2 | Pending |
+| WHOOK-01 | Phase 2 | Complete |
+| WHOOK-02 | Phase 2 | Complete |
+| WHOOK-03 | Phase 2 | Complete |
+| WHOOK-04 | Phase 2 | Complete |
 | WHOOK-05 | Phase 2 | Complete |
-| WHOOK-06 | Phase 2 | Pending |
+| WHOOK-06 | Phase 2 | Complete |
 | ADMIN-01 | Phase 3 | Pending |
 | ADMIN-02 | Phase 3 | Pending |
 | ADMIN-03 | Phase 3 | Pending |

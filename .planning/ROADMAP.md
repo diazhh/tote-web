@@ -48,7 +48,7 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 02-01-PLAN.md — Add @@unique([drawId, externalTicketId, source]) to Ticket + create adapters directory
-- [ ] 02-02-PLAN.md — Create webhook pipeline files (auth middleware, service, controller, routes)
+- [x] 02-02-PLAN.md — Create webhook pipeline files (auth middleware, service, controller, routes)
 - [ ] 02-03-PLAN.md — Wire route in index.js, local smoke test, production deploy
 
 ### Phase 3: Admin Provider Management

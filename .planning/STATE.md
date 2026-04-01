@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-stopped_at: Completed 02-webhook-backend-pipeline/02-01-PLAN.md
-last_updated: "2026-04-01T18:16:44.543Z"
+stopped_at: Completed 02-webhook-backend-pipeline/02-02-PLAN.md
+last_updated: "2026-04-01T18:20:17.515Z"
 last_activity: 2026-04-01
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 5
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-01)
 ## Current Position
 
 Phase: 02 (webhook-backend-pipeline) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-01
 
@@ -54,6 +54,7 @@ Progress: [░░░░░░░░░░] 0%
 *Updated after each plan completion*
 | Phase 01-schema-foundation P01 | 2 | 2 tasks | 2 files |
 | Phase 02-webhook-backend-pipeline P01 | 5 | 1 tasks | 2 files |
+| Phase 02-webhook-backend-pipeline P02 | 8min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Recent decisions affecting current work:
 - [Phase 01-schema-foundation]: isActive and headers Json? added to ApiSystem/WebhookLog in Phase 1 as hard dependencies for Phase 2 middleware and Phase 4 log viewer
 - [Phase 02-webhook-backend-pipeline]: Unique constraint scoped to (drawId, externalTicketId, source) — not just (drawId, externalTicketId) — so same externalTicketId can coexist across different sources
 - [Phase 02-webhook-backend-pipeline]: Local dev duplicate cleanup: 35,450 duplicate EXTERNAL_API tickets removed (kept oldest per group) before constraint applied — production will need same cleanup SQL before migration
+- [Phase 02-webhook-backend-pipeline]: Token comparison after DB fetch (not in query WHERE) to avoid timing leakage from query plan differences
+- [Phase 02-webhook-backend-pipeline]: Always-200 webhook controller: processing failures in WebhookLog.status, not HTTP status codes
 
 ### Pending Todos
 
@@ -82,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T18:16:44.539Z
-Stopped at: Completed 02-webhook-backend-pipeline/02-01-PLAN.md
+Last session: 2026-04-01T18:20:17.511Z
+Stopped at: Completed 02-webhook-backend-pipeline/02-02-PLAN.md
 Resume file: None
