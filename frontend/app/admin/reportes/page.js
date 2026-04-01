@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
 import { todayInCaracas, formatCaracasDate } from '@/lib/utils/dateUtils';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
 
 const SOURCE_LABELS = {
   TAQUILLA_ONLINE: 'Online',
@@ -45,8 +45,8 @@ export default function ReportesPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     const headers = { Authorization: `Bearer ${token}` };
     Promise.all([
-      fetch(`${API_URL}/api/games`, { headers }).then(r => r.json()),
-      fetch(`${API_URL}/api/providers/systems`, { headers }).then(r => r.json()),
+      fetch(`${API_URL}/games`, { headers }).then(r => r.json()),
+      fetch(`${API_URL}/providers/systems`, { headers }).then(r => r.json()),
     ]).then(([gamesData, systemsData]) => {
       setGames(Array.isArray(gamesData?.data) ? gamesData.data : Array.isArray(gamesData) ? gamesData : []);
       setSystems(Array.isArray(systemsData) ? systemsData : []);
@@ -104,7 +104,7 @@ export default function ReportesPage() {
     if (filters.source)      params.set('source', filters.source);
     if (filters.apiSystemId) params.set('apiSystemId', filters.apiSystemId);
 
-    fetch(`${API_URL}/api/monitor/reporte/pdf?${params.toString()}`, {
+    fetch(`${API_URL}/monitor/reporte/pdf?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(res => {
