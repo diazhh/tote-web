@@ -16,10 +16,32 @@ export default function ProveedoresPage() {
   const [editingSystem, setEditingSystem] = useState(null);
   const [editingConfig, setEditingConfig] = useState(null);
   const [testResult, setTestResult] = useState(null);
+  const [adapterStatuses, setAdapterStatuses] = useState({}); // { [systemId]: { adapterReady: boolean, slug: string } }
+  const [systemTokens, setSystemTokens] = useState({}); // { [systemId]: true } after token generation
 
   useEffect(() => {
     loadData();
   }, []);
+
+  const fetchAdapterStatuses = async (systemsList) => {
+    if (!systemsList || systemsList.length === 0) return;
+    const token = localStorage.getItem('token');
+    const headers = { 'Authorization': `Bearer ${token}` };
+    const results = await Promise.allSettled(
+      systemsList.map(async (system) => {
+        const res = await fetch(`${API_URL}/providers/systems/${system.id}/adapter-status`, { headers });
+        const data = await res.json();
+        return { id: system.id, ...data };
+      })
+    );
+    const statuses = {};
+    results.forEach((result) => {
+      if (result.status === 'fulfilled') {
+        statuses[result.value.id] = result.value;
+      }
+    });
+    setAdapterStatuses(statuses);
+  };
 
   const loadData = async () => {
     try {
@@ -40,7 +62,10 @@ export default function ProveedoresPage() {
       const configurationsData = await configurationsRes.json();
       const gamesData = await gamesRes.json();
 
-      setSystems(Array.isArray(systemsData) ? systemsData : []);
+      const systemsList = Array.isArray(systemsData) ? systemsData : [];
+      setSystems(systemsList);
+      // Fire adapter status fetch in parallel (non-blocking)
+      fetchAdapterStatuses(systemsList);
       setConfigurations(Array.isArray(configurationsData) ? configurationsData : []);
       setGames(Array.isArray(gamesData) ? gamesData : []);
     } catch (error) {
@@ -56,10 +81,10 @@ export default function ProveedoresPage() {
   const handleSaveSystem = async (formData) => {
     try {
       const token = localStorage.getItem('token');
-      const url = editingSystem 
+      const url = editingSystem
         ? `${API_URL}/providers/systems/${editingSystem.id}`
         : `${API_URL}/providers/systems`;
-      
+
       const response = await fetch(url, {
         method: editingSystem ? 'PUT' : 'POST',
         headers: {
@@ -104,10 +129,10 @@ export default function ProveedoresPage() {
   const handleSaveConfiguration = async (formData) => {
     try {
       const token = localStorage.getItem('token');
-      const url = editingConfig 
+      const url = editingConfig
         ? `${API_URL}/providers/configurations/${editingConfig.id}`
         : `${API_URL}/providers/configurations`;
-      
+
       const response = await fetch(url, {
         method: editingConfig ? 'PUT' : 'POST',
         headers: {
@@ -261,15 +286,15 @@ export default function ProveedoresPage() {
                       <div className="flex items-center gap-3">
                         <h3 className="text-lg font-semibold text-gray-900">{config.name}</h3>
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          config.type === 'PLANNING' 
-                            ? 'bg-purple-100 text-purple-700' 
+                          config.type === 'PLANNING'
+                            ? 'bg-purple-100 text-purple-700'
                             : 'bg-green-100 text-green-700'
                         }`}>
                           {config.type}
                         </span>
                         <span className={`px-2 py-1 text-xs font-medium rounded ${
-                          config.isActive 
-                            ? 'bg-green-100 text-green-700' 
+                          config.isActive
+                            ? 'bg-green-100 text-green-700'
                             : 'bg-gray-100 text-gray-700'
                         }`}>
                           {config.isActive ? 'Activa' : 'Inactiva'}
@@ -299,8 +324,8 @@ export default function ProveedoresPage() {
                       <button
                         onClick={() => handleToggleActive(config.id, config.isActive)}
                         className={`p-2 rounded ${
-                          config.isActive 
-                            ? 'text-green-600 hover:bg-green-50' 
+                          config.isActive
+                            ? 'text-green-600 hover:bg-green-50'
                             : 'text-gray-400 hover:bg-gray-50'
                         }`}
                         title={config.isActive ? 'Desactivar' : 'Activar'}
@@ -356,9 +381,36 @@ export default function ProveedoresPage() {
                 <div key={system.id} className="bg-white border border-gray-200 rounded-lg p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">{system.name}</h3>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <h3 className="text-lg font-semibold text-gray-900">{system.name}</h3>
+                        {/* ADMIN-05: mode badge */}
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          system.mode === 'PUSH'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {system.mode || 'PULL'}
+                        </span>
+                        {/* ADMIN-06: adapter status badge */}
+                        {adapterStatuses[system.id] !== undefined ? (
+                          <span className={`px-2 py-1 text-xs font-medium rounded ${
+                            adapterStatuses[system.id].adapterReady
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-orange-100 text-orange-700'
+                          }`}>
+                            {adapterStatuses[system.id].adapterReady ? 'Adapter Ready' : 'Discovery'}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs font-medium rounded bg-gray-50 text-gray-400">
+                            ...
+                          </span>
+                        )}
+                      </div>
                       {system.description && (
                         <p className="mt-1 text-sm text-gray-600">{system.description}</p>
+                      )}
+                      {system.slug && (
+                        <p className="mt-1 text-xs text-gray-400 font-mono">/api/webhooks/{system.slug}</p>
                       )}
                       <p className="mt-2 text-sm text-gray-500">
                         {system.configurations.length} configuración(es)
@@ -402,6 +454,9 @@ export default function ProveedoresPage() {
             setEditingSystem(null);
           }}
           onSave={handleSaveSystem}
+          apiUrl={API_URL}
+          hasToken={!!systemTokens[editingSystem?.id]}
+          onTokenGenerated={(id) => setSystemTokens((prev) => ({ ...prev, [id]: true }))}
         />
       )}
 
@@ -428,48 +483,204 @@ export default function ProveedoresPage() {
   );
 }
 
-function SystemModal({ system, onClose, onSave }) {
+function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerated }) {
+  const generateSlug = (name) =>
+    name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+
   const [formData, setFormData] = useState({
     name: system?.name || '',
-    description: system?.description || ''
+    description: system?.description || '',
+    slug: system?.slug || '',
+    mode: system?.mode || 'PULL',
+    isActive: system?.isActive !== undefined ? system.isActive : true,
+    _slugManuallyEdited: !!system?.slug,
   });
+  const [tokenJustGenerated, setTokenJustGenerated] = useState(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
+
+  // Reset token when modal switches to a different system
+  useEffect(() => {
+    setTokenJustGenerated(null);
+  }, [system]);
+
+  const handleNameChange = (e) => {
+    const name = e.target.value;
+    setFormData((prev) => ({
+      ...prev,
+      name,
+      slug: prev._slugManuallyEdited ? prev.slug : generateSlug(name),
+    }));
+  };
+
+  const handleSlugChange = (e) => {
+    setFormData((prev) => ({ ...prev, slug: e.target.value, _slugManuallyEdited: true }));
+  };
+
+  const handleGenerateToken = async () => {
+    if (!system?.id) return;
+    setGeneratingToken(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${apiUrl}/providers/systems/${system.id}/generate-token`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.webhookToken) {
+        setTokenJustGenerated(data.webhookToken);
+        if (onTokenGenerated) onTokenGenerated(system.id);
+      }
+    } catch (err) {
+      console.error('Error generando token:', err);
+    } finally {
+      setGeneratingToken(false);
+    }
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    // Strip private flag before saving
+    const { _slugManuallyEdited, ...submitData } = formData;
+    onSave(submitData);
   };
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full">
+      <div className="bg-white rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-4">
           {system ? 'Editar Sistema' : 'Nuevo Sistema'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Nombre */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre *
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nombre *</label>
             <input
               type="text"
               value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              onChange={handleNameChange}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               required
             />
           </div>
+
+          {/* Descripcion */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Descripción
-            </label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Descripcion</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
-              rows={3}
+              rows={2}
             />
           </div>
-          <div className="flex justify-end gap-2">
+
+          {/* Slug — ADMIN-02 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Slug *{' '}
+              <span className="text-xs text-gray-400 font-normal">
+                (URL: /api/webhooks/{formData.slug || '...'})
+              </span>
+            </label>
+            <input
+              type="text"
+              value={formData.slug}
+              onChange={handleSlugChange}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
+              placeholder="mi-proveedor"
+              required
+            />
+            {system && (
+              <p className="text-xs text-amber-600 mt-1">
+                Cambiar el slug rompera integraciones existentes que apunten al slug anterior.
+              </p>
+            )}
+          </div>
+
+          {/* Modo — ADMIN-01 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Modo</label>
+            <select
+              value={formData.mode}
+              onChange={(e) => setFormData({ ...formData, mode: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="PULL">PULL — Este sistema consulta al proveedor</option>
+              <option value="PUSH">PUSH — El proveedor envia webhooks</option>
+            </select>
+          </div>
+
+          {/* isActive toggle — only on edit */}
+          {system && (
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="systemIsActive"
+                checked={formData.isActive}
+                onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                className="w-4 h-4 text-blue-600 border-gray-300 rounded"
+              />
+              <label htmlFor="systemIsActive" className="text-sm text-gray-700">
+                Sistema activo
+              </label>
+            </div>
+          )}
+
+          {/* Token panel — ADMIN-03, ADMIN-04 — only for PUSH mode */}
+          {formData.mode === 'PUSH' && (
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-3">Token de Webhook</h3>
+
+              {tokenJustGenerated ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-3">
+                  <p className="text-xs text-yellow-800 font-medium mb-2">
+                    Copia este token ahora — no se mostrara de nuevo
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 text-xs font-mono break-all text-yellow-900">
+                      {tokenJustGenerated}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => navigator.clipboard.writeText(tokenJustGenerated)}
+                      className="shrink-0 px-2 py-1 text-xs bg-yellow-200 text-yellow-900 rounded hover:bg-yellow-300"
+                    >
+                      Copiar
+                    </button>
+                  </div>
+                </div>
+              ) : hasToken ? (
+                <p className="text-sm text-gray-500 font-mono mb-3">
+                  ••••••••••••••••<span className="text-gray-700">(token configurado)</span>
+                </p>
+              ) : (
+                <p className="text-sm text-gray-400 italic mb-3">Sin token generado</p>
+              )}
+
+              {/* Only show generate button for existing systems (need an id) */}
+              {system && (
+                <button
+                  type="button"
+                  onClick={handleGenerateToken}
+                  disabled={generatingToken}
+                  className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {generatingToken
+                    ? 'Generando...'
+                    : hasToken || tokenJustGenerated
+                    ? 'Regenerar Token'
+                    : 'Generar Token'}
+                </button>
+              )}
+              {!system && (
+                <p className="text-xs text-gray-400 italic">
+                  Guarda el sistema primero para generar un token.
+                </p>
+              )}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
               onClick={onClose}
@@ -512,7 +723,7 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-4">
-          {configuration ? 'Editar Configuración' : 'Nueva Configuración'}
+          {configuration ? 'Editar Configuracion' : 'Nueva Configuracion'}
         </h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -575,7 +786,7 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
               className="w-full px-3 py-2 border border-gray-300 rounded-lg"
               required
             >
-              <option value="PLANNING">PLANNING - Planificación de sorteos</option>
+              <option value="PLANNING">PLANNING - Planificacion de sorteos</option>
               <option value="SALES">SALES - Ventas/Tickets</option>
             </select>
           </div>
@@ -604,11 +815,11 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
               required
             />
           </div>
-          
+
           <div className="border-t pt-4 mt-4">
             <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center">
               <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs mr-2">TRIPLETA</span>
-              Configuración Opcional
+              Configuracion Opcional
             </h3>
             <div className="space-y-4">
               <div>
@@ -622,7 +833,7 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
                   placeholder="https://api.ejemplo.com/tripleta/"
                 />
-                <p className="text-xs text-gray-500 mt-1">URL específica para obtener tickets de tripleta</p>
+                <p className="text-xs text-gray-500 mt-1">URL especifica para obtener tickets de tripleta</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -633,9 +844,9 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
                   value={formData.tripletaToken}
                   onChange={(e) => setFormData({ ...formData, tripletaToken: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg font-mono text-sm"
-                  placeholder="Token de autenticación para tripleta"
+                  placeholder="Token de autenticacion para tripleta"
                 />
-                <p className="text-xs text-gray-500 mt-1">Token específico para la API de tripleta</p>
+                <p className="text-xs text-gray-500 mt-1">Token especifico para la API de tripleta</p>
               </div>
             </div>
           </div>
@@ -649,7 +860,7 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
               className="w-4 h-4 text-blue-600 border-gray-300 rounded"
             />
             <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">
-              Configuración activa
+              Configuracion activa
             </label>
           </div>
           <div className="flex justify-end gap-2 pt-4">
@@ -681,7 +892,7 @@ function TestResultModal({ result, onClose }) {
         <div className="space-y-4">
           <div className={`p-4 rounded-lg ${result.success ? 'bg-green-50' : 'bg-red-50'}`}>
             <p className={`font-medium ${result.success ? 'text-green-800' : 'text-red-800'}`}>
-              {result.success ? '✓ Conexión exitosa' : '✗ Error en la conexión'}
+              {result.success ? 'Conexion exitosa' : 'Error en la conexion'}
             </p>
             {result.testUrl && (
               <p className="text-sm text-gray-600 mt-1">URL: {result.testUrl}</p>
