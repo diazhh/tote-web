@@ -28,7 +28,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. WebhookLog model exists and can store a raw payload, provider reference, processing status, and timestamp
   3. WebhookLog.status accepts exactly four values: DISCOVERED, PROCESSED, DUPLICATE, FAILED
   4. Prisma migration runs cleanly against both local and production schema without data loss
-**Plans**: TBD
+**Plans**: 2 plans
+Plans:
+- [ ] 01-01-PLAN.md — Write schema (step 1: nullable slug) + backfill script + execute full 3-step local deployment
+- [ ] 01-02-PLAN.md — SSH production deployment + human health-check verification
 **UI hint**: no
 
 ### Phase 2: Webhook Backend Pipeline
@@ -76,7 +79,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Schema Foundation | 0/? | Not started | - |
+| 1. Schema Foundation | 0/2 | Planning done | - |
 | 2. Webhook Backend Pipeline | 0/? | Not started | - |
 | 3. Admin Provider Management | 0/? | Not started | - |
 | 4. Webhook Log Viewer | 0/? | Not started | - |
