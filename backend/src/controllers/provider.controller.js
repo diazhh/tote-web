@@ -1,15 +1,28 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import crypto from 'node:crypto';
+import { access } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 class ProviderController {
   async getAllSystems(req, res) {
     try {
       const systems = await prisma.apiSystem.findMany({
-        include: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          slug: true,
+          mode: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
           configurations: {
-            include: {
-              game: true
-            }
+            include: { game: true }
           }
         },
         orderBy: { name: 'asc' }
@@ -25,7 +38,7 @@ class ProviderController {
   async getSystemById(req, res) {
     try {
       const { id } = req.params;
-      
+
       const system = await prisma.apiSystem.findUnique({
         where: { id },
         include: {
@@ -50,22 +63,28 @@ class ProviderController {
 
   async createSystem(req, res) {
     try {
-      const { name, description } = req.body;
+      const { name, description, slug, mode, isActive } = req.body;
 
-      if (!name) {
-        return res.status(400).json({ error: 'El nombre es requerido' });
+      if (!name || !slug) {
+        return res.status(400).json({ error: 'El nombre y el slug son requeridos' });
       }
 
       const system = await prisma.apiSystem.create({
         data: {
           name,
-          description
+          description,
+          slug,
+          mode: mode || 'PULL',
+          isActive: isActive !== undefined ? isActive : true
         }
       });
 
       logger.info(`Sistema API creado: ${system.name} (${system.id})`);
       res.status(201).json(system);
     } catch (error) {
+      if (error.code === 'P2002') {
+        return res.status(400).json({ error: 'El slug ya está en uso' });
+      }
       logger.error('Error creando sistema API:', error);
       res.status(500).json({ error: 'Error al crear sistema API' });
     }
@@ -74,21 +93,63 @@ class ProviderController {
   async updateSystem(req, res) {
     try {
       const { id } = req.params;
-      const { name, description } = req.body;
+      const { name, description, slug, mode, isActive } = req.body;
 
-      const system = await prisma.apiSystem.update({
-        where: { id },
-        data: {
-          name,
-          description
-        }
-      });
+      const data = {};
+      if (name !== undefined) data.name = name;
+      if (description !== undefined) data.description = description;
+      if (slug !== undefined) data.slug = slug;
+      if (mode !== undefined) data.mode = mode;
+      if (isActive !== undefined) data.isActive = isActive;
+
+      const system = await prisma.apiSystem.update({ where: { id }, data });
 
       logger.info(`Sistema API actualizado: ${system.name} (${system.id})`);
       res.json(system);
     } catch (error) {
+      if (error.code === 'P2002') {
+        return res.status(400).json({ error: 'El slug ya está en uso' });
+      }
       logger.error('Error actualizando sistema API:', error);
       res.status(500).json({ error: 'Error al actualizar sistema API' });
+    }
+  }
+
+  async generateToken(req, res) {
+    try {
+      const { id } = req.params;
+      const token = crypto.randomBytes(32).toString('hex'); // 64 hex chars
+      const system = await prisma.apiSystem.update({
+        where: { id },
+        data: { webhookToken: token }
+      });
+      logger.info(`Token webhook generado para sistema: ${system.name} (${id})`);
+      res.json({ webhookToken: token, systemId: id });
+    } catch (error) {
+      logger.error('Error generando token webhook:', error);
+      res.status(500).json({ error: 'Error al generar token' });
+    }
+  }
+
+  async getAdapterStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const system = await prisma.apiSystem.findUnique({ where: { id } });
+      if (!system) {
+        return res.status(404).json({ error: 'Sistema no encontrado' });
+      }
+      const adapterPath = path.join(__dirname, '../webhooks/adapters', `${system.slug}.adapter.js`);
+      let adapterReady = false;
+      try {
+        await access(adapterPath);
+        adapterReady = true;
+      } catch {
+        adapterReady = false;
+      }
+      res.json({ adapterReady, slug: system.slug, mode: system.mode });
+    } catch (error) {
+      logger.error('Error verificando adapter status:', error);
+      res.status(500).json({ error: 'Error al verificar adapter' });
     }
   }
 
@@ -111,7 +172,7 @@ class ProviderController {
   async getAllConfigurations(req, res) {
     try {
       const { apiSystemId, gameId, type } = req.query;
-      
+
       const where = {};
       if (apiSystemId) where.apiSystemId = apiSystemId;
       if (gameId) where.gameId = gameId;
@@ -144,7 +205,7 @@ class ProviderController {
   async getConfigurationById(req, res) {
     try {
       const { id } = req.params;
-      
+
       const configuration = await prisma.apiConfiguration.findUnique({
         where: { id },
         include: {
@@ -176,14 +237,14 @@ class ProviderController {
       const { name, apiSystemId, gameId, type, baseUrl, token, tripletaUrl, tripletaToken, isActive } = req.body;
 
       if (!name || !apiSystemId || !gameId || !type || !baseUrl || !token) {
-        return res.status(400).json({ 
-          error: 'Todos los campos son requeridos: name, apiSystemId, gameId, type, baseUrl, token' 
+        return res.status(400).json({
+          error: 'Todos los campos son requeridos: name, apiSystemId, gameId, type, baseUrl, token'
         });
       }
 
       if (!['PLANNING', 'SALES'].includes(type)) {
-        return res.status(400).json({ 
-          error: 'El tipo debe ser PLANNING o SALES' 
+        return res.status(400).json({
+          error: 'El tipo debe ser PLANNING o SALES'
         });
       }
 
@@ -265,7 +326,7 @@ class ProviderController {
   async testConfiguration(req, res) {
     try {
       const { id } = req.params;
-      
+
       const configuration = await prisma.apiConfiguration.findUnique({
         where: { id },
         include: {
@@ -305,9 +366,9 @@ class ProviderController {
       });
     } catch (error) {
       logger.error('Error probando configuración API:', error);
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
-        error: error.message 
+        error: error.message
       });
     }
   }
@@ -315,7 +376,7 @@ class ProviderController {
   async getConfigurationStats(req, res) {
     try {
       const { id } = req.params;
-      
+
       const configuration = await prisma.apiConfiguration.findUnique({
         where: { id },
         include: {
@@ -337,8 +398,8 @@ class ProviderController {
         return sum + mapping.tickets.length;
       }, 0);
 
-      const lastSync = configuration.drawMappings.length > 0 
-        ? configuration.drawMappings[0].createdAt 
+      const lastSync = configuration.drawMappings.length > 0
+        ? configuration.drawMappings[0].createdAt
         : null;
 
       res.json({
