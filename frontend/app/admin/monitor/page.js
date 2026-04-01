@@ -485,7 +485,7 @@ export default function MonitorPage() {
               {/* Tab Reporte */}
               {activeTab === 'reporte' && dailyReport && (
                 <div>
-                  <div className="mb-4 grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-2 sm:gap-4">
                     <div className="bg-blue-50 rounded-lg p-4">
                       <p className="text-sm text-blue-600">Total Vendido</p>
                       <p className="text-xl font-bold text-blue-800">{formatCurrency(dailyReport.totals.totalSales)}</p>
@@ -553,7 +553,7 @@ export default function MonitorPage() {
       {/* Modal de Tickets */}
       {ticketsModal.open && ticketsModal.data && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[80vh] overflow-hidden">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-2 sm:mx-4 max-h-[80vh] overflow-hidden">
             <div className="flex items-center justify-between p-4 border-b">
               <h3 className="text-lg font-semibold">
                 {ticketsModal.type === 'banca' 
@@ -717,7 +717,7 @@ export default function MonitorPage() {
               </button>
             </div>
             <div className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Ticket ID</label>
                   <p className="font-mono text-lg font-bold">{ticketDetailModal.data.externalTicketId || ticketDetailModal.data.id}</p>
@@ -727,7 +727,7 @@ export default function MonitorPage() {
                   <p className="text-lg font-bold text-green-600">{formatCurrency(ticketDetailModal.data.totalAmount)}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Comercial</label>
                   <p className="font-medium">{ticketDetailModal.data.comercialId}</p>
@@ -737,7 +737,7 @@ export default function MonitorPage() {
                   <p className="font-medium">{ticketDetailModal.data.bancaId}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4">
                 <div>
                   <label className="text-xs text-gray-500 uppercase">Grupo</label>
                   <p className="font-medium">{ticketDetailModal.data.grupoId}</p>
