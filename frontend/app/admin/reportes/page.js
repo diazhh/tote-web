@@ -172,7 +172,7 @@ export default function ReportesPage() {
           <h1 className="text-2xl font-bold text-gray-900">Reportes de Sorteos</h1>
           <p className="text-sm text-gray-500 mt-0.5">Ventas, premios y balance por período</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
           <button
             onClick={handleDownloadPdf}
             disabled={pdfLoading || loading}
@@ -194,7 +194,7 @@ export default function ReportesPage() {
 
       {/* Filter bar — FILT-01 / FILT-02 / FILT-03 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
           {/* Date from — FILT-01 */}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
@@ -276,7 +276,7 @@ export default function ReportesPage() {
       </div>
 
       {/* Summary cards — SUMM-01 / FILT-04 */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg shrink-0">
             <DollarSign className="w-5 h-5 text-blue-600" />
@@ -326,7 +326,7 @@ export default function ReportesPage() {
 
       {/* Breakdown tables — SUMM-02 / SUMM-03 */}
       {report && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-4">
           {/* By Game — SUMM-02 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
@@ -469,7 +469,7 @@ export default function ReportesPage() {
                     <button
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs sm:text-sm"
                     >
                       <ChevronLeft className="w-3.5 h-3.5" />
                       Anterior
@@ -477,7 +477,7 @@ export default function ReportesPage() {
                     <button
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
-                      className="flex items-center gap-1 px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="flex items-center gap-1 px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed text-xs sm:text-sm"
                     >
                       Siguiente
                       <ChevronRight className="w-3.5 h-3.5" />
