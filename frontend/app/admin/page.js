@@ -135,7 +135,7 @@ export default function AdminDashboard() {
 
       {/* Próximos Sorteos */}
       <div className="bg-white rounded-lg shadow overflow-x-auto">
-        <div className="px-4 lg:px-6 py-4 border-b border-gray-200 flex items-center justify-between min-w-max">
+        <div className="px-4 lg:px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Próximos Sorteos</h2>
           <Link
             href="/admin/sorteos"
@@ -201,7 +201,7 @@ export default function AdminDashboard() {
           <h2 className="text-lg font-semibold text-gray-900">Juegos</h2>
         </div>
         <div className="p-4 lg:p-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {stats.games.map((game) => (
               <div
                 key={game.id}
