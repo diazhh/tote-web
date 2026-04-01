@@ -98,7 +98,7 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — FIX-01 import fix + backend getDailyReport extension (BACK-01/02/03) + unit tests (TDD)
-- [ ] 05-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
+- [x] 05-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 **UI hint**: no
 
 #### Phase 6: Reports Dashboard Frontend
