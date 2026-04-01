@@ -1,263 +1,463 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { 
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import {
   Calendar, Gamepad2, DollarSign, Trophy, TrendingUp, TrendingDown,
-  FileText, Download, RefreshCw
+  FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown
 } from 'lucide-react';
-import ResponsiveTable from '@/components/common/ResponsiveTable';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
-import axios from '@/lib/api/axios';
-import { getTodayVenezuela } from '@/lib/dateUtils';
-import { formatDrawTime } from '@/lib/utils/dateUtils';
+import { todayInCaracas, formatCaracasDate } from '@/lib/utils/dateUtils';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
+const SOURCE_LABELS = {
+  TAQUILLA_ONLINE: 'Online',
+  EXTERNAL_API:    'SRQ / API',
+  WEBHOOK_PUSH:    'Webhook',
+};
+
+const PAGE_SIZE = 25;
 
 export default function ReportesPage() {
-  const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(getTodayVenezuela());
-  const [games, setGames] = useState([]);
-  const [selectedGame, setSelectedGame] = useState('');
-  const [report, setReport] = useState(null);
+  // --- Filter state ---
+  const [filters, setFilters] = useState({
+    dateFrom:    todayInCaracas(),
+    dateTo:      todayInCaracas(),
+    gameId:      '',
+    source:      '',
+    apiSystemId: '',
+  });
 
+  // --- Data state ---
+  const [report, setReport]   = useState(null);
+  const [games, setGames]     = useState([]);
+  const [systems, setSystems] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // --- Detail table state ---
+  const [sortDir, setSortDir] = useState('asc');   // 'asc' | 'desc'
+  const [page, setPage]       = useState(1);
+
+  // --- Initial load: fetch games + systems for dropdowns ---
   useEffect(() => {
-    fetchGames();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch(`${API_URL}/api/games`, { headers }).then(r => r.json()),
+      fetch(`${API_URL}/api/providers/systems`, { headers }).then(r => r.json()),
+    ]).then(([gamesData, systemsData]) => {
+      setGames(Array.isArray(gamesData?.data) ? gamesData.data : Array.isArray(gamesData) ? gamesData : []);
+      setSystems(Array.isArray(systemsData) ? systemsData : []);
+    }).catch(() => {
+      toast.error('Error cargando filtros');
+    });
   }, []);
 
-  useEffect(() => {
-    if (selectedDate) {
-      fetchReport();
-    }
-  }, [selectedDate, selectedGame]);
-
-  const fetchGames = async () => {
-    try {
-      const response = await axios.get('/games');
-      setGames(response.data.data || []);
-    } catch (error) {
-      toast.error('Error cargando juegos');
-    }
-  };
-
-  const fetchReport = async () => {
+  // --- Fetch report on filter change ---
+  const fetchReport = useCallback(async () => {
     setLoading(true);
+    setPage(1);
     try {
-      const result = await monitorApi.getDailyReport(selectedDate, selectedGame || null);
-      setReport(result.data);
-    } catch (error) {
+      const params = {
+        dateFrom: filters.dateFrom || undefined,
+        dateTo:   filters.dateTo   || undefined,
+        gameId:   filters.gameId   || undefined,
+        source:   filters.source   || undefined,
+        apiSystemId: filters.apiSystemId || undefined,
+      };
+      const result = await monitorApi.getDailyReport(params);
+      if (result?.success) {
+        setReport(result.data);
+      } else {
+        toast.error('Error en la respuesta del servidor');
+      }
+    } catch (err) {
       toast.error('Error cargando reporte');
     } finally {
       setLoading(false);
     }
+  }, [filters]);
+
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
+
+  // --- Handlers ---
+  const setFilter = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-VE', {
-      style: 'currency',
-      currency: 'VES',
-      minimumFractionDigits: 2
-    }).format(amount || 0);
+  // When source changes, reset apiSystemId (they are mutually exclusive display-wise)
+  const handleSourceChange = (value) => {
+    setFilters(prev => ({ ...prev, source: value, apiSystemId: '' }));
   };
 
-  const formatTime = (dateStr) => {
-    const date = new Date(dateStr);
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${hours}:${minutes}`;
+  // --- Sorted + paginated draws ---
+  const sortedDraws = useMemo(() => {
+    if (!report?.draws) return [];
+    return [...report.draws].sort((a, b) => {
+      const aKey = `${a.drawDate}T${a.drawTime}`;
+      const bKey = `${b.drawDate}T${b.drawTime}`;
+      return sortDir === 'asc'
+        ? aKey.localeCompare(bKey)
+        : bKey.localeCompare(aKey);
+    });
+  }, [report?.draws, sortDir]);
+
+  const totalPages    = Math.max(1, Math.ceil(sortedDraws.length / PAGE_SIZE));
+  const paginatedDraws = sortedDraws.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // --- Formatters ---
+  const fmt = (n) =>
+    new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'VES', minimumFractionDigits: 2 }).format(n ?? 0);
+
+  const fmtDate = (isoStr) => {
+    if (!isoStr) return '—';
+    return formatCaracasDate(isoStr.split('T')[0]);
   };
 
-  const getStatusBadge = (status) => {
-    const styles = {
-      SCHEDULED: 'bg-gray-100 text-gray-800',
-      CLOSED: 'bg-yellow-100 text-yellow-800',
-      DRAWN: 'bg-green-100 text-green-800',
-      CANCELLED: 'bg-red-100 text-red-800'
+  const statusBadge = (status) => {
+    const map = {
+      SCHEDULED: 'bg-gray-100 text-gray-700',
+      CLOSED:    'bg-yellow-100 text-yellow-700',
+      DRAWN:     'bg-green-100 text-green-700',
+      CANCELLED: 'bg-red-100 text-red-700',
+      PUBLISHED: 'bg-blue-100 text-blue-700',
     };
     return (
-      <span className={`px-2 py-1 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100'}`}>
+      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${map[status] ?? 'bg-gray-100 text-gray-700'}`}>
         {status}
       </span>
     );
   };
 
+  const totals = report?.totals;
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reportes de Sorteos</h1>
-          <p className="text-gray-600 mt-1">Resumen diario de ventas y premios</p>
+          <p className="text-sm text-gray-500 mt-0.5">Ventas, premios y balance por período</p>
         </div>
         <button
           onClick={fetchReport}
           disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Actualizar
         </button>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {/* Filter bar — FILT-01 / FILT-02 / FILT-03 */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Date from — FILT-01 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <Calendar className="w-4 h-4 inline mr-1" />
-              Fecha
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              <Calendar className="w-3.5 h-3.5 inline mr-1" />
+              Desde
             </label>
             <input
               type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={filters.dateFrom}
+              onChange={e => setFilter('dateFrom', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
+
+          {/* Date to — FILT-01 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              <Gamepad2 className="w-4 h-4 inline mr-1" />
-              Juego (opcional)
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              <Calendar className="w-3.5 h-3.5 inline mr-1" />
+              Hasta
+            </label>
+            <input
+              type="date"
+              value={filters.dateTo}
+              onChange={e => setFilter('dateTo', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+
+          {/* Game filter — FILT-02 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              <Gamepad2 className="w-3.5 h-3.5 inline mr-1" />
+              Juego
             </label>
             <select
-              value={selectedGame}
-              onChange={(e) => setSelectedGame(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              value={filters.gameId}
+              onChange={e => setFilter('gameId', e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
             >
               <option value="">Todos los juegos</option>
-              {games.map((game) => (
-                <option key={game.id} value={game.id}>
-                  {game.name}
-                </option>
+              {games.map(g => (
+                <option key={g.id} value={g.id}>{g.name}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Source / provider filter — FILT-03 */}
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Fuente / Proveedor
+            </label>
+            {/* Source dropdown */}
+            <select
+              value={filters.apiSystemId ? '__provider__' : filters.source}
+              onChange={e => {
+                const val = e.target.value;
+                if (val.startsWith('sys:')) {
+                  setFilters(prev => ({ ...prev, source: '', apiSystemId: val.slice(4) }));
+                } else {
+                  setFilters(prev => ({ ...prev, source: val, apiSystemId: '' }));
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas las fuentes</option>
+              <option value="TAQUILLA_ONLINE">Online</option>
+              <option value="EXTERNAL_API">SRQ / API</option>
+              <option value="WEBHOOK_PUSH">Webhook</option>
+              {systems.length > 0 && (
+                <optgroup label="Proveedor específico">
+                  {systems.map(s => (
+                    <option key={s.id} value={`sys:${s.id}`}>{s.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         </div>
       </div>
 
-      {/* Resumen */}
+      {/* Summary cards — SUMM-01 / FILT-04 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
+          <div className="p-2.5 bg-blue-50 rounded-lg shrink-0">
+            <DollarSign className="w-5 h-5 text-blue-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500">Ventas Totales</p>
+            <p className="text-lg font-bold text-gray-900 truncate">{fmt(totals?.totalSales)}</p>
+            <p className="text-xs text-gray-400">{totals?.drawCount ?? 0} sorteos</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
+          <div className="p-2.5 bg-red-50 rounded-lg shrink-0">
+            <Trophy className="w-5 h-5 text-red-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500">Premios Pagados</p>
+            <p className="text-lg font-bold text-gray-900 truncate">{fmt(totals?.totalPrize)}</p>
+            <p className="text-xs text-gray-400">{totals?.totalTickets ?? 0} tickets</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
+          <div className={`p-2.5 rounded-lg shrink-0 ${(totals?.totalBalance ?? 0) >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+            {(totals?.totalBalance ?? 0) >= 0
+              ? <TrendingUp className="w-5 h-5 text-green-600" />
+              : <TrendingDown className="w-5 h-5 text-red-500" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500">Balance</p>
+            <p className={`text-lg font-bold truncate ${(totals?.totalBalance ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {fmt(totals?.totalBalance)}
+            </p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
+          <div className="p-2.5 bg-purple-50 rounded-lg shrink-0">
+            <FileText className="w-5 h-5 text-purple-600" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500">Tickets</p>
+            <p className="text-lg font-bold text-gray-900 truncate">{totals?.totalTickets ?? 0}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Breakdown tables — SUMM-02 / SUMM-03 */}
       {report && (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-blue-100 rounded-lg">
-                  <DollarSign className="w-6 h-6 text-blue-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Ventas Totales</p>
-                  <p className="text-xl font-bold text-gray-900">{formatCurrency(report.totals.totalSales)}</p>
-                </div>
-              </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* By Game — SUMM-02 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700">Desglose por Juego</h3>
             </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-red-100 rounded-lg">
-                  <Trophy className="w-6 h-6 text-red-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Premios Pagados</p>
-                  <p className="text-xl font-bold text-gray-900">{formatCurrency(report.totals.totalPrize)}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className={`p-3 rounded-lg ${report.totals.totalBalance >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>
-                  {report.totals.totalBalance >= 0 ? (
-                    <TrendingUp className="w-6 h-6 text-green-600" />
-                  ) : (
-                    <TrendingDown className="w-6 h-6 text-red-600" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Balance</p>
-                  <p className={`text-xl font-bold ${report.totals.totalBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(report.totals.totalBalance)}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-purple-100 rounded-lg">
-                  <FileText className="w-6 h-6 text-purple-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Sorteos / Tickets</p>
-                  <p className="text-xl font-bold text-gray-900">
-                    {report.totals.drawCount} / {report.totals.totalTickets}
-                  </p>
-                </div>
-              </div>
-            </div>
+            {report.byGame?.length > 0 ? (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Balance</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Sort.</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {report.byGame.map(row => (
+                    <tr key={row.gameId} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-2.5 font-medium text-gray-800">{row.game}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
+                      <td className="px-4 py-2.5 text-right text-red-600">{fmt(row.totalPrize)}</td>
+                      <td className={`px-4 py-2.5 text-right font-medium ${row.totalBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                        {fmt(row.totalBalance)}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-gray-500">{row.drawCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin datos para el período</p>
+            )}
           </div>
 
-          {/* Tabla de sorteos */}
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="px-4 py-3 border-b border-gray-200">
-              <h3 className="text-lg font-medium text-gray-900">Detalle por Sorteo</h3>
+          {/* By Source — SUMM-03 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700">Desglose por Fuente</h3>
             </div>
-            <ResponsiveTable
-              data={report.draws}
-              columns={[
-                {
-                  key: 'drawTime',
-                  label: 'Hora',
-                  primary: true,
-                  render: (draw) => <span className="font-medium">{formatDrawTime(draw)}</span>
-                },
-                {
-                  key: 'game',
-                  label: 'Juego',
-                  render: (draw) => draw.game
-                },
-                {
-                  key: 'status',
-                  label: 'Estado',
-                  render: (draw) => getStatusBadge(draw.status)
-                },
-                {
-                  key: 'winnerItem',
-                  label: 'Ganador',
-                  render: (draw) => draw.winnerItem ? (
-                    <span className="font-medium">{draw.winnerItem.number} - {draw.winnerItem.name}</span>
-                  ) : <span className="text-gray-400">-</span>
-                },
-                {
-                  key: 'totalSales',
-                  label: 'Ventas',
-                  align: 'right',
-                  render: (draw) => <span className="text-gray-900">{formatCurrency(draw.totalSales)}</span>
-                },
-                {
-                  key: 'totalPrize',
-                  label: 'Premios',
-                  align: 'right',
-                  render: (draw) => <span className="text-red-600">{formatCurrency(draw.totalPrize)}</span>
-                },
-                {
-                  key: 'balance',
-                  label: 'Balance',
-                  align: 'right',
-                  render: (draw) => (
-                    <span className={`font-medium ${draw.balance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(draw.balance)}
-                    </span>
-                  )
-                },
-                {
-                  key: 'ticketCount',
-                  label: 'Tickets',
-                  align: 'right'
-                }
-              ]}
-              emptyMessage="No hay sorteos para mostrar"
-            />
+            {report.bySource?.length > 0 ? (
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Fuente</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {report.bySource.map(row => (
+                    <tr key={row.source} className="hover:bg-gray-50/50">
+                      <td className="px-4 py-2.5 font-medium text-gray-800">
+                        {SOURCE_LABELS[row.source] ?? row.source}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
+                      <td className="px-4 py-2.5 text-right text-gray-500">{row.ticketCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin datos para el período</p>
+            )}
           </div>
-        </>
+        </div>
       )}
 
-      {loading && (
-        <div className="flex justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      {/* Detail table — DETL-01 / DETL-02 / DETL-03 */}
+      {report && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+            <h3 className="text-sm font-semibold text-gray-700">
+              Detalle por Sorteo
+              {sortedDraws.length > 0 && (
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  ({sortedDraws.length} sorteos)
+                </span>
+              )}
+            </h3>
+            {/* Sort toggle — DETL-03 */}
+            <button
+              onClick={() => { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); setPage(1); }}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
+            >
+              Fecha
+              {sortDir === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+
+          {sortedDraws.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 whitespace-nowrap">Fecha</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Hora</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Estado</th>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Ganador</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Balance</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {paginatedDraws.map(draw => (
+                      <tr key={draw.drawId} className="hover:bg-gray-50/50">
+                        <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{fmtDate(draw.drawDate)}</td>
+                        <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{draw.drawTime ?? '—'}</td>
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{draw.game}</td>
+                        <td className="px-4 py-2.5">{statusBadge(draw.status)}</td>
+                        <td className="px-4 py-2.5 text-gray-700">
+                          {draw.winnerItem
+                            ? `${draw.winnerItem.number} — ${draw.winnerItem.name}`
+                            : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-700">{fmt(draw.totalSales)}</td>
+                        <td className="px-4 py-2.5 text-right text-red-600">{fmt(draw.totalPrize)}</td>
+                        <td className={`px-4 py-2.5 text-right font-medium ${draw.balance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {fmt(draw.balance)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-500">{draw.ticketCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Pagination — DETL-02 */}
+              {totalPages > 1 && (
+                <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm">
+                  <span className="text-gray-500">
+                    Página {page} de {totalPages}
+                    {' '}({sortedDraws.length} sorteos)
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page === 1}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page === totalPages}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Siguiente
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="px-4 py-10 text-sm text-gray-400 text-center">
+              {loading ? 'Cargando...' : 'No hay sorteos para los filtros seleccionados'}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Full-page loading indicator */}
+      {loading && !report && (
+        <div className="flex justify-center py-16">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
         </div>
       )}
     </div>
