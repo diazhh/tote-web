@@ -418,7 +418,7 @@ model ApiSystem {
   id            String          @id @default(uuid())
   name          String          // "SRQ", "OtroSistema"
   description   String?
-  slug          String?         // Step 1 of 2: nullable. Will become @unique after backfill.
+  slug          String          @unique
   webhookToken  String?         @unique
   mode          ApiSystemMode   @default(PULL)
   isActive      Boolean         @default(true)
