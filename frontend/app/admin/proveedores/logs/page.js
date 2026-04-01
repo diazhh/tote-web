@@ -42,7 +42,7 @@ function LogInspectorModal({ log, onClose }) {
 
         <div className="space-y-4">
           {/* Metadata */}
-          <div className="grid grid-cols-2 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 text-sm">
             <div><strong>Proveedor:</strong> {log.apiSystem?.name || log.apiSystemId}</div>
             <div><strong>Status:</strong> <StatusBadge status={log.status} /></div>
             <div><strong>Fecha:</strong> {new Date(log.createdAt).toLocaleString('es-VE')}</div>
