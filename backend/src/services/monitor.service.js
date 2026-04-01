@@ -335,30 +335,63 @@ class MonitorService {
   }
 
   /**
-   * Obtener reporte diario de sorteos
-   * @param {Date} date - Fecha del reporte
-   * @param {string} gameId - ID del juego (opcional)
+   * Obtener reporte de sorteos por rango de fechas con filtros opcionales.
+   * Soporta modo legacy (date param) y modo rango (dateFrom/dateTo).
+   *
+   * @param {Object} params
+   * @param {string} [params.date]        - YYYY-MM-DD (legacy, single day)
+   * @param {string} [params.dateFrom]    - YYYY-MM-DD start of range (BACK-01)
+   * @param {string} [params.dateTo]      - YYYY-MM-DD end of range (BACK-01)
+   * @param {string} [params.gameId]      - filter by game UUID
+   * @param {string} [params.source]      - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH (BACK-02)
+   * @param {string} [params.apiSystemId] - filter draws by ApiSystem UUID (BACK-02)
    */
-  async getDailyReport(date, gameId = null) {
+  async getDailyReport({ date = null, dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null } = {}) {
     try {
-      // Filtrar por drawDate (solo fecha, sin hora)
-      const drawDate = new Date(date);
-      if (typeof date === 'string') {
-        // Si es string, asegurar formato correcto
-        const dateStr = date.split('T')[0];
-        drawDate.setTime(new Date(dateStr + 'T00:00:00.000Z').getTime());
-      } else {
-        // Si es Date, extraer solo la fecha
-        const dateStr = date.toISOString().split('T')[0];
-        drawDate.setTime(new Date(dateStr + 'T00:00:00.000Z').getTime());
-      }
+      const where = {};
 
-      const where = {
-        drawDate: drawDate
-      };
+      // Date range vs. legacy single-date
+      if (dateFrom && dateTo) {
+        where.drawDate = {
+          gte: new Date(dateFrom + 'T00:00:00.000Z'),
+          lte: new Date(dateTo   + 'T00:00:00.000Z')
+        };
+      } else if (date) {
+        const dateStr = typeof date === 'string' ? date.split('T')[0] : date.toISOString().split('T')[0];
+        where.drawDate = new Date(dateStr + 'T00:00:00.000Z');
+      }
 
       if (gameId) {
         where.gameId = gameId;
+      }
+
+      // apiSystemId: resolve to draw IDs via ApiDrawMapping (BACK-02)
+      if (apiSystemId) {
+        const mappings = await prisma.apiDrawMapping.findMany({
+          where: { apiConfig: { apiSystemId } },
+          select: { drawId: true }
+        });
+        if (mappings.length === 0) {
+          return {
+            dateFrom, dateTo, gameId: gameId || null,
+            source: source || null, apiSystemId,
+            draws: [], totals: { totalSales: 0, totalPrize: 0, totalBalance: 0, totalTickets: 0, drawCount: 0 },
+            byGame: [], bySource: []
+          };
+        }
+        where.id = { in: mappings.map(m => m.drawId) };
+      }
+
+      // Build tickets include — apply source filter if provided (BACK-02)
+      const ticketsInclude = {
+        include: {
+          details: {
+            include: { gameItem: true }
+          }
+        }
+      };
+      if (source) {
+        ticketsInclude.where = { source };
       }
 
       const draws = await prisma.draw.findMany({
@@ -366,15 +399,7 @@ class MonitorService {
         include: {
           game: true,
           winnerItem: true,
-          tickets: {
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
+          tickets: ticketsInclude
         },
         orderBy: [
           { drawDate: 'asc' },
@@ -384,10 +409,14 @@ class MonitorService {
 
       const report = [];
 
+      // Aggregation buckets (BACK-03)
+      const byGameMap   = {};
+      const bySourceMap = {};
+
       for (const draw of draws) {
         const tickets = draw.tickets || [];
         const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
-        
+
         let totalPrize = 0;
         if (draw.winnerItemId) {
           for (const ticket of tickets) {
@@ -402,39 +431,70 @@ class MonitorService {
         const balance = totalSales - totalPrize;
 
         report.push({
-          drawId: draw.id,
-          game: draw.game.name,
-          drawDate: draw.drawDate,
-          drawTime: draw.drawTime,
-          status: draw.status,
-          winnerItem: draw.winnerItem ? {
-            number: draw.winnerItem.number,
-            name: draw.winnerItem.name
-          } : null,
+          drawId:      draw.id,
+          gameId:      draw.gameId,
+          game:        draw.game.name,
+          drawDate:    draw.drawDate,
+          drawTime:    draw.drawTime,
+          status:      draw.status,
+          winnerItem:  draw.winnerItem ? { number: draw.winnerItem.number, name: draw.winnerItem.name } : null,
           totalSales,
           totalPrize,
           balance,
           ticketCount: tickets.length
         });
+
+        // byGame aggregation (BACK-03)
+        if (!byGameMap[draw.gameId]) {
+          byGameMap[draw.gameId] = {
+            gameId:       draw.gameId,
+            game:         draw.game.name,
+            totalSales:   0,
+            totalPrize:   0,
+            totalBalance: 0,
+            totalTickets: 0,
+            drawCount:    0
+          };
+        }
+        const g = byGameMap[draw.gameId];
+        g.totalSales   += totalSales;
+        g.totalPrize   += totalPrize;
+        g.totalBalance += balance;
+        g.totalTickets += tickets.length;
+        g.drawCount++;
+
+        // bySource aggregation (BACK-03)
+        for (const ticket of tickets) {
+          const src = ticket.source;
+          if (!bySourceMap[src]) {
+            bySourceMap[src] = { source: src, totalSales: 0, ticketCount: 0 };
+          }
+          bySourceMap[src].totalSales  += parseFloat(ticket.totalAmount);
+          bySourceMap[src].ticketCount += 1;
+        }
       }
 
-      // Calcular totales
       const totals = {
-        totalSales: report.reduce((sum, r) => sum + r.totalSales, 0),
-        totalPrize: report.reduce((sum, r) => sum + r.totalPrize, 0),
-        totalBalance: report.reduce((sum, r) => sum + r.balance, 0),
+        totalSales:   report.reduce((sum, r) => sum + r.totalSales,  0),
+        totalPrize:   report.reduce((sum, r) => sum + r.totalPrize,  0),
+        totalBalance: report.reduce((sum, r) => sum + r.balance,     0),
         totalTickets: report.reduce((sum, r) => sum + r.ticketCount, 0),
-        drawCount: report.length
+        drawCount:    report.length
       };
 
       return {
-        date: date.toISOString().split('T')[0],
-        gameId,
-        draws: report,
-        totals
+        dateFrom: dateFrom || (date ? (typeof date === 'string' ? date.split('T')[0] : date.toISOString().split('T')[0]) : null),
+        dateTo:   dateTo   || (date ? (typeof date === 'string' ? date.split('T')[0] : date.toISOString().split('T')[0]) : null),
+        gameId:      gameId      || null,
+        source:      source      || null,
+        apiSystemId: apiSystemId || null,
+        draws:   report,
+        totals,
+        byGame:   Object.values(byGameMap),
+        bySource: Object.values(bySourceMap)
       };
     } catch (error) {
-      logger.error('Error obteniendo reporte diario:', error);
+      logger.error('Error obteniendo reporte:', error);
       throw error;
     }
   }

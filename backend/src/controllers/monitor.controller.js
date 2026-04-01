@@ -38,22 +38,42 @@ class MonitorController {
 
   /**
    * GET /api/monitor/reporte
-   * Obtener reporte diario de sorteos
-   * Query params: date (YYYY-MM-DD), gameId (opcional)
+   * Obtener reporte de sorteos.
+   * Query params:
+   *   date       YYYY-MM-DD (legacy single day — sets dateFrom=dateTo=date)
+   *   dateFrom   YYYY-MM-DD start of range (BACK-01)
+   *   dateTo     YYYY-MM-DD end of range (BACK-01)
+   *   gameId     UUID (optional game filter)
+   *   source     TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH (BACK-02)
+   *   apiSystemId UUID (optional ApiSystem filter — BACK-02)
    */
   async getDailyReport(req, res) {
     try {
-      const { date, gameId } = req.query;
-      // Si se recibe una fecha string (YYYY-MM-DD), interpretarla como fecha de Caracas
-      // Si no se recibe fecha, usar la fecha actual
-      let reportDate;
-      if (date) {
-        // Crear fecha interpretando el string como medianoche en Caracas (UTC-4)
-        reportDate = new Date(date + 'T00:00:00-04:00');
-      } else {
-        reportDate = new Date();
+      const { date, gameId, dateFrom, dateTo, source, apiSystemId } = req.query;
+
+      // Resolve date range — support legacy single-date param
+      let resolvedFrom = dateFrom || null;
+      let resolvedTo   = dateTo   || null;
+
+      if (!resolvedFrom && !resolvedTo && date) {
+        resolvedFrom = date;
+        resolvedTo   = date;
+      } else if (!resolvedFrom && !resolvedTo) {
+        // No date at all — default to today in Venezuela (UTC-4)
+        const today = new Date();
+        today.setUTCHours(today.getUTCHours() - 4); // shift to Caracas
+        const todayStr = today.toISOString().split('T')[0];
+        resolvedFrom = todayStr;
+        resolvedTo   = todayStr;
       }
-      const report = await monitorService.getDailyReport(reportDate, gameId || null);
+
+      const report = await monitorService.getDailyReport({
+        dateFrom:    resolvedFrom,
+        dateTo:      resolvedTo,
+        gameId:      gameId      || null,
+        source:      source      || null,
+        apiSystemId: apiSystemId || null
+      });
       res.json({ success: true, data: report });
     } catch (error) {
       logger.error('Error en getDailyReport:', error);

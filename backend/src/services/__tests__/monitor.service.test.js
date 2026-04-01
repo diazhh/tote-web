@@ -43,6 +43,8 @@ function makeDraw(overrides = {}) {
 // ============================================================
 describe('getDailyReport — date range (BACK-01)', () => {
   beforeEach(() => {
+    mockPrisma.draw.findMany.mockReset();
+    mockPrisma.apiDrawMapping.findMany.mockReset();
     mockPrisma.draw.findMany.mockResolvedValue([]);
     mockPrisma.apiDrawMapping.findMany.mockResolvedValue([]);
   });
@@ -68,6 +70,8 @@ describe('getDailyReport — date range (BACK-01)', () => {
 // ============================================================
 describe('getDailyReport — source filter (BACK-02)', () => {
   beforeEach(() => {
+    mockPrisma.draw.findMany.mockReset();
+    mockPrisma.apiDrawMapping.findMany.mockReset();
     mockPrisma.draw.findMany.mockResolvedValue([]);
     mockPrisma.apiDrawMapping.findMany.mockResolvedValue([]);
   });
@@ -127,6 +131,8 @@ describe('getDailyReport — aggregations (BACK-03)', () => {
   });
 
   beforeEach(() => {
+    mockPrisma.draw.findMany.mockReset();
+    mockPrisma.apiDrawMapping.findMany.mockReset();
     mockPrisma.draw.findMany.mockResolvedValue([draw1, draw2, draw3]);
     mockPrisma.apiDrawMapping.findMany.mockResolvedValue([]);
   });

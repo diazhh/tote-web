@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
 import axios from '@/lib/api/axios';
 import { getTodayVenezuela } from '@/lib/dateUtils';
+import { formatDrawTime } from '@/lib/utils/dateUtils';
 
 export default function ReportesPage() {
   const [loading, setLoading] = useState(false);

@@ -23,11 +23,18 @@ export const monitorApi = {
 
   /**
    * Obtener reporte diario
+   * @param {string} date - YYYY-MM-DD (legacy single day)
+   * @param {string|null} gameId - optional game UUID filter
+   * @param {Object} extraFilters - dateFrom, dateTo, source, apiSystemId (BACK-01/02)
    */
-  getDailyReport: async (date, gameId = null) => {
+  getDailyReport: async (date, gameId = null, extraFilters = {}) => {
     const params = new URLSearchParams();
     if (date) params.append('date', date);
     if (gameId) params.append('gameId', gameId);
+    if (extraFilters.dateFrom)    params.append('dateFrom',    extraFilters.dateFrom);
+    if (extraFilters.dateTo)      params.append('dateTo',      extraFilters.dateTo);
+    if (extraFilters.source)      params.append('source',      extraFilters.source);
+    if (extraFilters.apiSystemId) params.append('apiSystemId', extraFilters.apiSystemId);
     const response = await axios.get(`/monitor/reporte?${params.toString()}`);
     return response.data;
   },
