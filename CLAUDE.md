@@ -102,6 +102,43 @@ Sharp-based image composition in `lib/imageGenerator.js`. Game-specific assets o
 - Draw status queries: filter by `DRAWN` for completed draws locally. **Production still uses `PUBLISHED`** (legacy status) — query both when needed: `status IN ('DRAWN', 'PUBLISHED')`
 - All social channel publishing goes through `services/publication.service.js`
 
+### Webhook System (Multi-Provider)
+
+External betting providers can send bets via webhooks instead of being polled (like SRQ).
+
+**How it works:**
+1. Admin creates a provider in `/admin/proveedores` with mode `PUSH` and generates a token
+2. The provider is given: `POST https://tote.atilax.io/api/webhooks/{slug}` + `X-Webhook-Token` header
+3. When a provider sends a webhook:
+   - If no adapter exists → payload logged as `DISCOVERED` (discovery mode) — inspect in `/admin/proveedores/logs`
+   - If adapter exists → payload normalized → Ticket created in real-time
+
+**Provider modes:**
+- `PULL` — System polls the provider on a schedule (SRQ pattern via `sync-api-tickets` job)
+- `PUSH` — Provider sends webhooks to our endpoint
+
+**Key files:**
+- `middlewares/webhook-auth.middleware.js` — Token auth via `crypto.timingSafeEqual`
+- `services/webhook.service.js` — Discovery mode, adapter routing, ticket creation
+- `controllers/webhook.controller.js` — Thin handler, always returns 200 after auth
+- `routes/webhook.routes.js` — `POST /:providerSlug` with `express.raw()` body capture
+- `webhooks/adapters/{slug}.adapter.js` — Per-provider normalizer (create when provider payload is known)
+
+**Adapter pattern:** To wire a new provider, create `backend/src/webhooks/adapters/{slug}.adapter.js` exporting a `normalize(rawPayload)` function that returns an array of `{ externalTicketId, number, amount, drawId, providerData }`. The service dynamically imports the adapter by slug.
+
+**Database models:**
+- `ApiSystem.slug` — Unique identifier used in the webhook URL path
+- `ApiSystem.webhookToken` — Token for `X-Webhook-Token` header auth
+- `ApiSystem.mode` — `PULL` or `PUSH` (enum `ApiSystemMode`)
+- `WebhookLog` — Stores every received payload with status: `DISCOVERED`, `PROCESSED`, `DUPLICATE`, `FAILED`
+- `Ticket.source = 'WEBHOOK_PUSH'` — Distinguishes webhook tickets from SRQ (`EXTERNAL_API`) and online (`TAQUILLA_ONLINE`)
+
+**Admin UI:**
+- `/admin/proveedores` — Provider CRUD with mode badges (PULL/PUSH), adapter status badges (Ready/Discovery), token generation (show-once)
+- `/admin/proveedores/logs` — Webhook log viewer with filters by provider/status, JSON inspector modal
+
+**SRQ coexistence:** SRQ stays as `mode: PULL` with `slug: 'srq'`. Its existing sync jobs (`sync-api-tickets`, `sync-api-planning`) are unchanged. The `deleteMany` in `api-integration.service.js` only affects `source: 'EXTERNAL_API'` tickets, so `WEBHOOK_PUSH` tickets are safe.
+
 ---
 
 ## Production Environment (VPS 144)
