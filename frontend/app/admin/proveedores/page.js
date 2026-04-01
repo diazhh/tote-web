@@ -684,6 +684,50 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
                   Guarda el sistema primero para generar un token.
                 </p>
               )}
+
+              {/* Endpoint info — show when PUSH provider has slug */}
+              {formData.slug && (hasToken || tokenJustGenerated) && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mt-4">
+                  <h4 className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide">
+                    Datos de integracion para el proveedor
+                  </h4>
+                  <div className="space-y-2 text-xs font-mono">
+                    <div>
+                      <span className="text-gray-500">Metodo:</span>{' '}
+                      <span className="text-green-700 font-bold">POST</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">URL:</span>{' '}
+                      <code className="bg-white px-1.5 py-0.5 rounded border text-blue-700 break-all">
+                        {typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/{formData.slug}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/${formData.slug}`)}
+                        className="ml-2 px-1.5 py-0.5 text-[10px] bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
+                      >
+                        Copiar
+                      </button>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Header:</span>{' '}
+                      <code className="bg-white px-1.5 py-0.5 rounded border text-purple-700">
+                        X-Webhook-Token: {'<token>'}
+                      </code>
+                    </div>
+                    <div>
+                      <span className="text-gray-500">Content-Type:</span>{' '}
+                      <code className="bg-white px-1.5 py-0.5 rounded border text-gray-700">
+                        application/json
+                      </code>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-2">
+                    El proveedor debe enviar las jugadas como JSON en el body del POST.
+                    Sin adapter configurado, el payload se guardara en el log para inspeccion.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
