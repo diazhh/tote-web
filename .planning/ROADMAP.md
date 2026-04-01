@@ -49,7 +49,7 @@ Plans:
 Plans:
 - [x] 02-01-PLAN.md — Add @@unique([drawId, externalTicketId, source]) to Ticket + create adapters directory
 - [x] 02-02-PLAN.md — Create webhook pipeline files (auth middleware, service, controller, routes)
-- [ ] 02-03-PLAN.md — Wire route in index.js, local smoke test, production deploy
+- [x] 02-03-PLAN.md — Wire route in index.js, local smoke test, production deploy
 
 ### Phase 3: Admin Provider Management
 **Goal**: Admin operators can manage providers entirely through the UI — creating PUSH providers with slugs, generating and rotating tokens, and seeing at a glance which providers are in discovery mode versus adapter-ready
