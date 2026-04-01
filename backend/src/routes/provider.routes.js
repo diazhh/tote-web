@@ -25,4 +25,7 @@ router.get('/configurations/:id/stats', providerController.getConfigurationStats
 router.post('/systems/:id/generate-token', providerController.generateToken.bind(providerController));
 router.get('/systems/:id/adapter-status', providerController.getAdapterStatus.bind(providerController));
 
+// Logs de webhook
+router.get('/webhook-logs', providerController.getWebhookLogs.bind(providerController));
+
 export default router;

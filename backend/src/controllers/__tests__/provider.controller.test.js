@@ -9,6 +9,10 @@ const mockPrisma = {
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+  },
+  webhookLog: {
+    findMany: jest.fn(),
+    count: jest.fn(),
   }
 };
 jest.unstable_mockModule('../../lib/prisma.js', () => ({ prisma: mockPrisma }));
@@ -149,5 +153,105 @@ describe('getAdapterStatus', () => {
     const res = mockRes();
     await providerController.getAdapterStatus(req, res);
     expect(res.status).toHaveBeenCalledWith(404);
+  });
+});
+
+// --- LOGS-01 / LOGS-02 / LOGS-03 / LOGS-04: getWebhookLogs ---
+describe('getWebhookLogs', () => {
+  const fakeLogs = [
+    {
+      id: 'log-1',
+      apiSystemId: 'sys-1',
+      rawPayload: '{"ticket":"abc"}',
+      headers: { 'x-webhook-token': '***', host: 'example.com' },
+      status: 'PROCESSED',
+      errorMessage: null,
+      createdAt: new Date('2026-04-01T10:00:00Z'),
+      apiSystem: { id: 'sys-1', name: 'Proveedor A', slug: 'proveedor-a' }
+    },
+    {
+      id: 'log-2',
+      apiSystemId: 'sys-1',
+      rawPayload: 'malformed-not-json',
+      headers: null,
+      status: 'FAILED',
+      errorMessage: 'adapter error',
+      createdAt: new Date('2026-04-01T09:00:00Z'),
+      apiSystem: { id: 'sys-1', name: 'Proveedor A', slug: 'proveedor-a' }
+    }
+  ];
+
+  test('LOGS-01: returns paginated list with apiSystem relation', async () => {
+    mockPrisma.webhookLog.findMany.mockResolvedValue(fakeLogs);
+    mockPrisma.webhookLog.count.mockResolvedValue(2);
+    const req = { query: {} };
+    const res = mockRes();
+    await providerController.getWebhookLogs(req, res);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
+      data: fakeLogs,
+      pagination: expect.objectContaining({
+        page: 1,
+        limit: 50,
+        total: 2,
+        totalPages: 1,
+        hasNext: false,
+        hasPrev: false
+      })
+    }));
+  });
+
+  test('LOGS-02: filters by apiSystemId when provided', async () => {
+    mockPrisma.webhookLog.findMany.mockResolvedValue([]);
+    mockPrisma.webhookLog.count.mockResolvedValue(0);
+    const req = { query: { apiSystemId: 'sys-1' } };
+    const res = mockRes();
+    await providerController.getWebhookLogs(req, res);
+    expect(mockPrisma.webhookLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ apiSystemId: 'sys-1' }) })
+    );
+  });
+
+  test('LOGS-02: filters by status when provided', async () => {
+    mockPrisma.webhookLog.findMany.mockResolvedValue([]);
+    mockPrisma.webhookLog.count.mockResolvedValue(0);
+    const req = { query: { status: 'FAILED' } };
+    const res = mockRes();
+    await providerController.getWebhookLogs(req, res);
+    expect(mockPrisma.webhookLog.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ status: 'FAILED' }) })
+    );
+  });
+
+  test('LOGS-03: rawPayload returned as string (not parsed)', async () => {
+    mockPrisma.webhookLog.findMany.mockResolvedValue([fakeLogs[0]]);
+    mockPrisma.webhookLog.count.mockResolvedValue(1);
+    const req = { query: {} };
+    const res = mockRes();
+    await providerController.getWebhookLogs(req, res);
+    const { data } = res.json.mock.calls[0][0];
+    expect(typeof data[0].rawPayload).toBe('string');
+  });
+
+  test('LOGS-04: headers field included (null or object)', async () => {
+    mockPrisma.webhookLog.findMany.mockResolvedValue(fakeLogs);
+    mockPrisma.webhookLog.count.mockResolvedValue(2);
+    const req = { query: {} };
+    const res = mockRes();
+    await providerController.getWebhookLogs(req, res);
+    const { data } = res.json.mock.calls[0][0];
+    // First log has headers object
+    expect(data[0]).toHaveProperty('headers');
+    // Second log has headers: null
+    expect(data[1].headers).toBeNull();
+  });
+
+  test('returns 500 on prisma error', async () => {
+    mockPrisma.webhookLog.findMany.mockRejectedValue(new Error('DB error'));
+    mockPrisma.webhookLog.count.mockResolvedValue(0);
+    const req = { query: {} };
+    const res = mockRes();
+    await providerController.getWebhookLogs(req, res);
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.json).toHaveBeenCalledWith({ error: 'Error al obtener logs' });
   });
 });

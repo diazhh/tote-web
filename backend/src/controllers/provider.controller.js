@@ -373,6 +373,49 @@ class ProviderController {
     }
   }
 
+  async getWebhookLogs(req, res) {
+    try {
+      const { apiSystemId, status, page = '1', limit = '50' } = req.query;
+      const pageNum = parseInt(page, 10);
+      const limitNum = parseInt(limit, 10);
+      const skip = (pageNum - 1) * limitNum;
+
+      const where = {};
+      if (apiSystemId) where.apiSystemId = apiSystemId;
+      if (status) where.status = status;
+
+      const [logs, total] = await Promise.all([
+        prisma.webhookLog.findMany({
+          where,
+          skip,
+          take: limitNum,
+          orderBy: { createdAt: 'desc' },
+          include: {
+            apiSystem: {
+              select: { id: true, name: true, slug: true }
+            }
+          }
+        }),
+        prisma.webhookLog.count({ where })
+      ]);
+
+      res.json({
+        data: logs,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+          hasNext: skip + logs.length < total,
+          hasPrev: pageNum > 1
+        }
+      });
+    } catch (error) {
+      logger.error('Error obteniendo webhook logs:', error);
+      res.status(500).json({ error: 'Error al obtener logs' });
+    }
+  }
+
   async getConfigurationStats(req, res) {
     try {
       const { id } = req.params;
