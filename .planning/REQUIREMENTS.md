@@ -61,27 +61,27 @@ Deferred to future releases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FIX-01 | -- | Pending |
-| FILT-01 | -- | Pending |
-| FILT-02 | -- | Pending |
-| FILT-03 | -- | Pending |
-| FILT-04 | -- | Pending |
-| SUMM-01 | -- | Pending |
-| SUMM-02 | -- | Pending |
-| SUMM-03 | -- | Pending |
-| DETL-01 | -- | Pending |
-| DETL-02 | -- | Pending |
-| DETL-03 | -- | Pending |
-| EXPO-01 | -- | Pending |
-| BACK-01 | -- | Pending |
-| BACK-02 | -- | Pending |
-| BACK-03 | -- | Pending |
+| FIX-01 | Phase 5 | Pending |
+| BACK-01 | Phase 5 | Pending |
+| BACK-02 | Phase 5 | Pending |
+| BACK-03 | Phase 5 | Pending |
+| FILT-01 | Phase 6 | Pending |
+| FILT-02 | Phase 6 | Pending |
+| FILT-03 | Phase 6 | Pending |
+| FILT-04 | Phase 6 | Pending |
+| SUMM-01 | Phase 6 | Pending |
+| SUMM-02 | Phase 6 | Pending |
+| SUMM-03 | Phase 6 | Pending |
+| DETL-01 | Phase 6 | Pending |
+| DETL-02 | Phase 6 | Pending |
+| DETL-03 | Phase 6 | Pending |
+| EXPO-01 | Phase 7 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-01*
-*Last updated: 2026-04-01 after initial definition*
+*Last updated: 2026-04-01 — traceability filled after roadmap creation*

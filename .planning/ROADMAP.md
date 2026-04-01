@@ -1,23 +1,14 @@
-# Roadmap: Tote-Web v1.0 Multi-Provider Webhook System
+# Roadmap: Tote-Web
 
-## Overview
+## Milestones
 
-This milestone adds a PUSH-based webhook ingestion layer to the existing lottery management platform. The build follows a strict dependency order: schema migration first (everything else reads from these new fields), then the backend webhook pipeline (which validates tokens, logs payloads, and routes to adapters), then the admin UI extensions that let operators onboard providers and generate tokens, and finally the log viewer that surfaces what has arrived. Each phase delivers a complete, independently verifiable capability.
+- ✅ **v1.0 Multi-Provider Webhook System** - Phases 1-4 (shipped 2026-04-01)
+- 🚧 **v1.1 Reports Dashboard** - Phases 5-7 (in progress)
 
 ## Phases
 
-**Phase Numbering:**
-- Integer phases (1, 2, 3): Planned milestone work
-- Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
-
-Decimal phases appear between their surrounding integers in numeric order.
-
-- [ ] **Phase 1: Schema Foundation** - Add slug, webhookToken, mode to ApiSystem and create WebhookLog model
-- [ ] **Phase 2: Webhook Backend Pipeline** - Endpoint, token auth, discovery mode, adapter routing, idempotency
-- [x] **Phase 3: Admin Provider Management** - Provider CRUD extensions, token generation UI, mode and adapter badges (completed 2026-04-01)
-- [x] **Phase 4: Webhook Log Viewer** - Admin log table, status filtering, payload inspector modal (completed 2026-04-01)
-
-## Phase Details
+<details>
+<summary>✅ v1.0 Multi-Provider Webhook System (Phases 1-4) - SHIPPED 2026-04-01</summary>
 
 ### Phase 1: Schema Foundation
 **Goal**: The database schema supports PUSH providers — ApiSystem can describe its mode and carry a token, and WebhookLog can store raw payloads with processing status
@@ -29,10 +20,10 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. WebhookLog.status accepts exactly four values: DISCOVERED, PROCESSED, DUPLICATE, FAILED
   4. Prisma migration runs cleanly against both local and production schema without data loss
 **Plans**: 2 plans
+
 Plans:
 - [x] 01-01-PLAN.md — Write schema (step 1: nullable slug) + backfill script + execute full 3-step local deployment
 - [x] 01-02-PLAN.md — SSH production deployment + human health-check verification
-**UI hint**: no
 
 ### Phase 2: Webhook Backend Pipeline
 **Goal**: Any provider with a valid token can send a POST to `/api/webhooks/:slug` and receive a safe, logged response — discovery mode captures unknown payloads, adapter routing creates tickets when an adapter exists, and the PULL sync cannot clobber PUSH tickets
@@ -46,6 +37,7 @@ Plans:
   5. Token comparison uses crypto.timingSafeEqual so timing attacks cannot distinguish valid from invalid tokens
   6. The sync-api-tickets job deleteMany is scoped to source='EXTERNAL_API' only, protecting PUSH-created tickets (source='WEBHOOK') from deletion
 **Plans**: 3 plans
+
 Plans:
 - [x] 02-01-PLAN.md — Add @@unique([drawId, externalTicketId, source]) to Ticket + create adapters directory
 - [x] 02-02-PLAN.md — Create webhook pipeline files (auth middleware, service, controller, routes)
@@ -62,6 +54,7 @@ Plans:
   4. Admin can regenerate a token for an existing PUSH provider; the old token is immediately invalidated
   5. Each provider in the list shows an adapter status badge: "Ready" if an adapter file exists for its slug, "Discovery" if it does not
 **Plans**: 3 plans
+
 Plans:
 - [x] 03-01-PLAN.md — Backend: extend controller (createSystem/updateSystem/generateToken/getAdapterStatus) + TDD tests for ADMIN-01..06
 - [x] 03-02-PLAN.md — Frontend: mode + adapter badges in system list; extended SystemModal with slug/mode/token panel
@@ -78,19 +71,68 @@ Plans:
   3. Admin can click any log entry to open an inspector modal showing the full raw JSON payload with readable formatting
   4. The inspector modal includes a headers section showing the HTTP request headers that arrived with the payload
 **Plans**: 2 plans
+
 Plans:
 - [x] 04-01-PLAN.md — Backend endpoint (getWebhookLogs + route) + frontend logs page + tab link + TDD tests
 - [x] 04-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 **UI hint**: yes
 
+</details>
+
+---
+
+### 🚧 v1.1 Reports Dashboard (In Progress)
+
+**Milestone Goal:** Fix the broken /admin/reportes page and rebuild it as a comprehensive reporting dashboard with date range, game, and provider filters showing sales, prizes, and profits.
+
+#### Phase 5: Backend Reports Foundation
+**Goal**: The backend is ready to serve comprehensive report data — the crash is fixed and the endpoint supports date range, source, and provider filters plus game-level and provider-level aggregations
+**Depends on**: Phase 4
+**Requirements**: FIX-01, BACK-01, BACK-02, BACK-03
+**Success Criteria** (what must be TRUE):
+  1. /admin/reportes loads in the browser without a client-side crash or white screen
+  2. GET /api/monitor/reporte accepts dateFrom and dateTo query params and returns draws within that range
+  3. GET /api/monitor/reporte accepts source and apiSystemId query params and filters ticket aggregations accordingly
+  4. The endpoint response includes a gameBreakdown array (one entry per game with sales/prizes/profit) and a providerBreakdown array (one entry per source with totals)
+**Plans**: TBD
+**UI hint**: no
+
+#### Phase 6: Reports Dashboard Frontend
+**Goal**: Admin can explore draw financials through a rebuilt reports page — choosing date range, game, and provider, seeing summary cards, and drilling into a paginated sortable detail table
+**Depends on**: Phase 5
+**Requirements**: FILT-01, FILT-02, FILT-03, FILT-04, SUMM-01, SUMM-02, SUMM-03, DETL-01, DETL-02, DETL-03
+**Success Criteria** (what must be TRUE):
+  1. Admin can set a from/to date range and the summary cards and detail table both update to reflect only draws within that range
+  2. Admin can filter by game (all or a specific game) and the entire page reflects only that game's data
+  3. Admin can filter by source (Online, SRQ, Webhook) or by specific provider (ApiSystem), and totals recalculate
+  4. Summary cards show correct total sales, total prizes, total profit, and ticket count for the active filters
+  5. The breakdown tables show per-game and per-provider aggregated totals as separate rows
+  6. The detail table lists each draw with date, time, game, winner, sales, prizes, balance, and ticket count; supports pagination and sorting by date/time
+**Plans**: TBD
+**UI hint**: yes
+
+#### Phase 7: PDF Export + Production Deploy
+**Goal**: Admin can download the current filtered report as a PDF and the feature is live in production
+**Depends on**: Phase 6
+**Requirements**: EXPO-01
+**Success Criteria** (what must be TRUE):
+  1. Admin clicks "Download PDF" and a PDF file downloads to their machine containing the current filter state, summary cards, and detail table
+  2. The PDF reflects the active filters (date range, game, provider) at the moment of download — not a static snapshot of all data
+  3. The feature works correctly in production at 144.126.150.120
+**Plans**: TBD
+**UI hint**: yes
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 
-| Phase | Plans Complete | Status | Completed |
-|-------|----------------|--------|-----------|
-| 1. Schema Foundation | 1/2 | In Progress|  |
-| 2. Webhook Backend Pipeline | 1/3 | In Progress|  |
-| 3. Admin Provider Management | 3/3 | Complete   | 2026-04-01 |
-| 4. Webhook Log Viewer | 2/2 | Complete   | 2026-04-01 |
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Schema Foundation | v1.0 | 2/2 | Complete | 2026-04-01 |
+| 2. Webhook Backend Pipeline | v1.0 | 3/3 | Complete | 2026-04-01 |
+| 3. Admin Provider Management | v1.0 | 3/3 | Complete | 2026-04-01 |
+| 4. Webhook Log Viewer | v1.0 | 2/2 | Complete | 2026-04-01 |
+| 5. Backend Reports Foundation | v1.1 | 0/? | Not started | - |
+| 6. Reports Dashboard Frontend | v1.1 | 0/? | Not started | - |
+| 7. PDF Export + Production Deploy | v1.1 | 0/? | Not started | - |
