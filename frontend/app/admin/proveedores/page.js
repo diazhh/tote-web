@@ -287,7 +287,7 @@ export default function ProveedoresPage() {
           <div className="grid gap-4">
             {Array.isArray(configurations) && configurations.length > 0 ? (
               configurations.map((config) => (
-                <div key={config.id} className="bg-white border border-gray-200 rounded-lg p-6">
+                <div key={config.id} className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
@@ -310,12 +310,12 @@ export default function ProveedoresPage() {
                       <div className="mt-2 space-y-1 text-sm text-gray-600">
                         <p><strong>Sistema:</strong> {config.apiSystem.name}</p>
                         <p><strong>Juego:</strong> {config.game.name}</p>
-                        <p><strong>URL Base:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{config.baseUrl}</code></p>
-                        <p><strong>Token:</strong> <code className="bg-gray-100 px-2 py-1 rounded">{config.token.substring(0, 20)}...</code></p>
+                        <p><strong>URL Base:</strong> <code className="bg-gray-100 px-2 py-1 rounded break-all">{config.baseUrl}</code></p>
+                        <p><strong>Token:</strong> <code className="bg-gray-100 px-2 py-1 rounded break-all">{config.token.substring(0, 20)}...</code></p>
                         {config.tripletaUrl && (
                           <>
-                            <p className="mt-2"><strong>Tripleta URL:</strong> <code className="bg-purple-100 px-2 py-1 rounded">{config.tripletaUrl}</code></p>
-                            <p><strong>Tripleta Token:</strong> <code className="bg-purple-100 px-2 py-1 rounded">{config.tripletaToken?.substring(0, 20)}...</code></p>
+                            <p className="mt-2"><strong>Tripleta URL:</strong> <code className="bg-purple-100 px-2 py-1 rounded break-all">{config.tripletaUrl}</code></p>
+                            <p><strong>Tripleta Token:</strong> <code className="bg-purple-100 px-2 py-1 rounded break-all">{config.tripletaToken?.substring(0, 20)}...</code></p>
                           </>
                         )}
                       </div>
@@ -323,14 +323,14 @@ export default function ProveedoresPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleTestConfiguration(config.id)}
-                        className="p-2 text-blue-600 hover:bg-blue-50 rounded"
+                        className="p-2.5 text-blue-600 hover:bg-blue-50 rounded"
                         title="Probar conexión"
                       >
                         <TestTube className="w-5 h-5" />
                       </button>
                       <button
                         onClick={() => handleToggleActive(config.id, config.isActive)}
-                        className={`p-2 rounded ${
+                        className={`p-2.5 rounded ${
                           config.isActive
                             ? 'text-green-600 hover:bg-green-50'
                             : 'text-gray-400 hover:bg-gray-50'
@@ -344,13 +344,13 @@ export default function ProveedoresPage() {
                           setEditingConfig(config);
                           setShowConfigModal(true);
                         }}
-                        className="p-2 text-gray-600 hover:bg-gray-50 rounded"
+                        className="p-2.5 text-gray-600 hover:bg-gray-50 rounded"
                       >
                         <Edit className="w-5 h-5" />
                       </button>
                       <button
                         onClick={() => handleDeleteConfiguration(config.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        className="p-2.5 text-red-600 hover:bg-red-50 rounded"
                       >
                         <Trash2 className="w-5 h-5" />
                       </button>
@@ -385,7 +385,7 @@ export default function ProveedoresPage() {
           <div className="grid gap-4">
             {Array.isArray(systems) && systems.length > 0 ? (
               systems.map((system) => (
-                <div key={system.id} className="bg-white border border-gray-200 rounded-lg p-6">
+                <div key={system.id} className="bg-white border border-gray-200 rounded-lg p-4 sm:p-6">
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 flex-wrap">
@@ -429,13 +429,13 @@ export default function ProveedoresPage() {
                           setEditingSystem(system);
                           setShowSystemModal(true);
                         }}
-                        className="p-2 text-gray-600 hover:bg-gray-50 rounded"
+                        className="p-2.5 text-gray-600 hover:bg-gray-50 rounded"
                       >
                         <Edit className="w-5 h-5" />
                       </button>
                       <button
                         onClick={() => handleDeleteSystem(system.id)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded"
+                        className="p-2.5 text-red-600 hover:bg-red-50 rounded"
                         disabled={system.configurations.length > 0}
                       >
                         <Trash2 className="w-5 h-5" />
@@ -553,7 +553,7 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg p-4 sm:p-6 max-w-lg w-full mx-2 sm:mx-0 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-4">
           {system ? 'Editar Sistema' : 'Nuevo Sistema'}
         </h2>
@@ -772,7 +772,7 @@ function ConfigurationModal({ configuration, systems, games, onClose, onSave }) 
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg p-4 sm:p-6 max-w-2xl w-full mx-2 sm:mx-0 max-h-[90vh] overflow-y-auto">
         <h2 className="text-xl font-bold mb-4">
           {configuration ? 'Editar Configuracion' : 'Nueva Configuracion'}
         </h2>
