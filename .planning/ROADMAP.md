@@ -45,7 +45,11 @@ Plans:
   4. When an adapter file exists, the payload is normalized and a Ticket is created in real-time; duplicate payloads (same drawId + externalTicketId) create a DUPLICATE log entry rather than a second Ticket
   5. Token comparison uses crypto.timingSafeEqual so timing attacks cannot distinguish valid from invalid tokens
   6. The sync-api-tickets job deleteMany is scoped to source='EXTERNAL_API' only, protecting PUSH-created tickets (source='WEBHOOK') from deletion
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 02-01-PLAN.md — Add @@unique([drawId, externalTicketId, source]) to Ticket + create adapters directory
+- [ ] 02-02-PLAN.md — Create webhook pipeline files (auth middleware, service, controller, routes)
+- [ ] 02-03-PLAN.md — Wire route in index.js, local smoke test, production deploy
 
 ### Phase 3: Admin Provider Management
 **Goal**: Admin operators can manage providers entirely through the UI — creating PUSH providers with slugs, generating and rotating tokens, and seeing at a glance which providers are in discovery mode versus adapter-ready
