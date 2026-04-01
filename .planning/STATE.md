@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.0
+milestone_name: milestone
+status: executing
+stopped_at: Completed 01-schema-foundation/01-01-PLAN.md
+last_updated: "2026-04-01T17:53:44.266Z"
+last_activity: 2026-04-01
+progress:
+  total_phases: 4
+  completed_phases: 0
+  total_plans: 2
+  completed_plans: 1
+  percent: 0
+---
+
 # Project State
 
 ## Project Reference
@@ -5,20 +21,21 @@
 See: .planning/PROJECT.md (updated 2026-04-01)
 
 **Core value:** Reliable draw lifecycle management — draws execute on schedule, results publish, prizes process correctly.
-**Current focus:** Phase 1 — Schema Foundation
+**Current focus:** Phase 01 — schema-foundation
 
 ## Current Position
 
-Phase: 1 of 4 (Schema Foundation)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-04-01 — Roadmap created, 19 v1.0 requirements mapped across 4 phases
+Phase: 01 (schema-foundation) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-01
 
 Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0
 - Average duration: N/A
 - Total execution time: 0 hours
@@ -30,10 +47,12 @@ Progress: [░░░░░░░░░░] 0%
 | - | - | - | - |
 
 **Recent Trend:**
+
 - Last 5 plans: N/A
 - Trend: N/A
 
 *Updated after each plan completion*
+| Phase 01-schema-foundation P01 | 2 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -45,6 +64,8 @@ Recent decisions affecting current work:
 - [Pre-phase]: SRQ stays as-is (PULL); PUSH tickets use source='WEBHOOK' to avoid deleteMany collision
 - [Pre-phase]: Schema extends ApiSystem (not new model); WebhookLog is new
 - [Pre-phase]: Synchronous ticket creation (no queue); log-first then process
+- [Phase 01-schema-foundation]: Two-step db push (nullable slug first, backfill, then @unique) avoids null constraint violation on existing SRQ row
+- [Phase 01-schema-foundation]: isActive and headers Json? added to ApiSystem/WebhookLog in Phase 1 as hard dependencies for Phase 2 middleware and Phase 4 log viewer
 
 ### Pending Todos
 
@@ -58,6 +79,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01
-Stopped at: Roadmap created and written to .planning/ROADMAP.md
+Last session: 2026-04-01T17:53:44.263Z
+Stopped at: Completed 01-schema-foundation/01-01-PLAN.md
 Resume file: None

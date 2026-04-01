@@ -18,9 +18,9 @@ Requirements for Multi-Provider Webhook System milestone. Each maps to roadmap p
 
 ### Schema
 
-- [ ] **SCHEMA-01**: `ApiSystem` model has `slug` (unique), `webhookToken`, and `mode` (PULL/PUSH) fields
-- [ ] **SCHEMA-02**: `WebhookLog` model stores raw payload, headers, provider reference, processing status, and timestamp
-- [ ] **SCHEMA-03**: `WebhookLog.status` enum: DISCOVERED, PROCESSED, DUPLICATE, FAILED
+- [x] **SCHEMA-01**: `ApiSystem` model has `slug` (unique), `webhookToken`, and `mode` (PULL/PUSH) fields
+- [x] **SCHEMA-02**: `WebhookLog` model stores raw payload, headers, provider reference, processing status, and timestamp
+- [x] **SCHEMA-03**: `WebhookLog.status` enum: DISCOVERED, PROCESSED, DUPLICATE, FAILED
 
 ### Admin Provider Management
 
@@ -69,9 +69,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | Phase 1 | Pending |
-| SCHEMA-02 | Phase 1 | Pending |
-| SCHEMA-03 | Phase 1 | Pending |
+| SCHEMA-01 | Phase 1 | Complete |
+| SCHEMA-02 | Phase 1 | Complete |
+| SCHEMA-03 | Phase 1 | Complete |
 | WHOOK-01 | Phase 2 | Pending |
 | WHOOK-02 | Phase 2 | Pending |
 | WHOOK-03 | Phase 2 | Pending |
