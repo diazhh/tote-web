@@ -238,9 +238,10 @@ model SystemConfig {
   key         String    @unique // Clave de configuración (ej: "emergency_stop")
   value       String    // Valor (JSON string)
   description String?
+  updatedBy   String?   // Quién hizo el último cambio
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  
+
   @@index([key])
 }
 
