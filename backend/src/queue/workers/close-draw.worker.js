@@ -5,6 +5,8 @@ import apiIntegrationService from '../../services/api-integration.service.js';
 import adminNotificationService from '../../services/admin-notification.service.js';
 import prewinnerSelectionService from '../../services/prewinner-selection.service.js';
 import pdfReportService from '../../services/pdf-report.service.js';
+import systemConfigService from '../../services/system-config.service.js';
+import drawPauseService from '../../services/draw-pause.service.js';
 import { startOfDay } from 'date-fns';
 
 async function getUsedItemsToday(gameId, referenceDate) {
@@ -50,6 +52,20 @@ export async function closeDrawWorker(jobs) {
   if (draw.status !== 'SCHEDULED') {
     logger.info(`[close-draw] Draw ${drawId} ya en estado ${draw.status}, saltando`);
     return { skipped: true, reason: 'already_processed', currentStatus: draw.status };
+  }
+
+  // Verificar parada de emergencia
+  const isEmergencyStop = await systemConfigService.isEmergencyStop();
+  if (isEmergencyStop) {
+    logger.warn(`[close-draw] 🚨 Draw ${drawId} OMITIDO: parada de emergencia activa`);
+    return { skipped: true, reason: 'emergency_stop' };
+  }
+
+  // Verificar pausa programada del juego
+  const isPaused = await drawPauseService.isGamePausedOnDate(draw.gameId, draw.drawDate);
+  if (isPaused) {
+    logger.warn(`[close-draw] ⏸️ Draw ${drawId} (${draw.game.name}) OMITIDO: juego pausado`);
+    return { skipped: true, reason: 'game_paused' };
   }
 
   const items = draw.game.items;

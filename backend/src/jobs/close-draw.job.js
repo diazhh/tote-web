@@ -2,6 +2,7 @@ import { Cron } from 'croner';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
+import drawPauseService from '../services/draw-pause.service.js';
 import { emitToAll, emitToGame } from '../lib/socket.js';
 import apiIntegrationService from '../services/api-integration.service.js';
 import adminNotificationService from '../services/admin-notification.service.js';
@@ -101,12 +102,28 @@ class CloseDrawJob {
         return; // No hay sorteos para cerrar
       }
 
-      logger.info(`🔒 ${drawsToClose.length} sorteo(s) para cerrar...`);
+      // Filtrar sorteos cuyo juego está pausado
+      const filteredDraws = [];
+      for (const draw of drawsToClose) {
+        const isPaused = await drawPauseService.isGamePausedOnDate(draw.gameId, draw.drawDate);
+        if (isPaused) {
+          logger.warn(`⏸️ Sorteo ${draw.game.name} - ${draw.drawTime} OMITIDO: juego pausado`);
+          continue;
+        }
+        filteredDraws.push(draw);
+      }
+
+      if (filteredDraws.length === 0) {
+        return;
+      }
+
+      const drawsToCloseFiltered = filteredDraws;
+      logger.info(`🔒 ${drawsToCloseFiltered.length} sorteo(s) para cerrar...`);
 
       // Si pg-boss está habilitado, encolar todos los draws en paralelo
       if (process.env.PGBOSS_CLOSE_DRAW === 'true') {
         const boss = getBoss();
-        await Promise.all(drawsToClose.map(draw =>
+        await Promise.all(drawsToCloseFiltered.map(draw =>
           boss.send(QUEUES.CLOSE_DRAW, { drawId: draw.id }, {
             singletonKey: `close-${draw.id}`,
             ...QUEUE_CONFIGS[QUEUES.CLOSE_DRAW],
@@ -116,7 +133,7 @@ class CloseDrawJob {
       }
 
       // Legacy: ejecución directa sin reintentos
-      for (const draw of drawsToClose) {
+      for (const draw of drawsToCloseFiltered) {
         try {
           // TERMINAL: solo cerrar e importar ventas. El ganador lo determina la cascada del Triple.
           if (draw.game.type === 'TERMINAL') {

@@ -3,6 +3,8 @@ import logger from '../../lib/logger.js';
 import { emitToAll, emitToGame } from '../../lib/socket.js';
 import { getBoss } from '../boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
+import systemConfigService from '../../services/system-config.service.js';
+import drawPauseService from '../../services/draw-pause.service.js';
 
 export async function executeDrawWorker(jobs) {
   // pg-boss v10 siempre llama al handler con un array de jobs
@@ -22,6 +24,20 @@ export async function executeDrawWorker(jobs) {
   if (draw.status !== 'CLOSED') {
     logger.info(`[execute-draw] Draw ${drawId} en estado ${draw.status}, saltando`);
     return { skipped: true, reason: 'invalid_state', currentStatus: draw.status };
+  }
+
+  // Verificar parada de emergencia
+  const isEmergencyStop = await systemConfigService.isEmergencyStop();
+  if (isEmergencyStop) {
+    logger.warn(`[execute-draw] 🚨 Draw ${drawId} NO EJECUTADO: parada de emergencia activa`);
+    return { skipped: true, reason: 'emergency_stop' };
+  }
+
+  // Verificar pausa programada del juego
+  const isPaused = await drawPauseService.isGamePausedOnDate(draw.gameId, draw.drawDate);
+  if (isPaused) {
+    logger.warn(`[execute-draw] ⏸️ Draw ${drawId} (${draw.game.name}) NO EJECUTADO: juego pausado`);
+    return { skipped: true, reason: 'game_paused' };
   }
 
   if (!draw.preselectedItemId) {

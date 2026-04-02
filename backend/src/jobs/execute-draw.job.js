@@ -2,6 +2,7 @@ import { Cron } from 'croner';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import systemConfigService from '../services/system-config.service.js';
+import drawPauseService from '../services/draw-pause.service.js';
 import { emitToAll, emitToGame } from '../lib/socket.js';
 import adminNotificationService from '../services/admin-notification.service.js';
 import prizeProcessorService from '../services/prize-processor.service.js';
@@ -89,12 +90,28 @@ class ExecuteDrawJob {
         return; // No hay sorteos para ejecutar
       }
 
-      logger.info(`🎲 ${drawsToExecute.length} sorteo(s) para ejecutar...`);
+      // Filtrar sorteos cuyo juego está pausado
+      const filteredDraws = [];
+      for (const draw of drawsToExecute) {
+        const isPaused = await drawPauseService.isGamePausedOnDate(draw.gameId, draw.drawDate);
+        if (isPaused) {
+          logger.warn(`⏸️ Sorteo ${draw.game.name} - ${draw.drawTime} NO EJECUTADO: juego pausado`);
+          continue;
+        }
+        filteredDraws.push(draw);
+      }
+
+      if (filteredDraws.length === 0) {
+        return;
+      }
+
+      const drawsToExecuteFiltered = filteredDraws;
+      logger.info(`🎲 ${drawsToExecuteFiltered.length} sorteo(s) para ejecutar...`);
 
       // Si pg-boss está habilitado, encolar todos los draws en paralelo
       if (process.env.PGBOSS_EXECUTE_DRAW === 'true') {
         const boss = getBoss();
-        await Promise.all(drawsToExecute.map(draw =>
+        await Promise.all(drawsToExecuteFiltered.map(draw =>
           boss.send(QUEUES.EXECUTE_DRAW, { drawId: draw.id }, {
             singletonKey: `exec-${draw.id}`,
             ...QUEUE_CONFIGS[QUEUES.EXECUTE_DRAW],
@@ -104,7 +121,7 @@ class ExecuteDrawJob {
       }
 
       // Legacy: ejecución directa sin reintentos
-      for (const draw of drawsToExecute) {
+      for (const draw of drawsToExecuteFiltered) {
         try {
           // El número ganador es el preseleccionado (puede haber sido cambiado manualmente)
           const winnerItemId = draw.preselectedItemId;
