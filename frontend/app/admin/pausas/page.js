@@ -49,7 +49,7 @@ export default function PausasPage() {
   };
 
   const fetchGames = async () => {
-    const res = await fetch(`${API_URL}/api/games`, {
+    const res = await fetch(`${API_URL}/games`, {
       headers: getAuthHeaders()
     });
     const data = await res.json();
@@ -59,7 +59,7 @@ export default function PausasPage() {
   };
 
   const fetchPauses = async () => {
-    const res = await fetch(`${API_URL}/api/pauses?isActive=true`, {
+    const res = await fetch(`${API_URL}/pauses?isActive=true`, {
       headers: getAuthHeaders()
     });
     const data = await res.json();
@@ -69,7 +69,7 @@ export default function PausasPage() {
   };
 
   const fetchEmergencyStop = async () => {
-    const res = await fetch(`${API_URL}/api/system/emergency-stop`, {
+    const res = await fetch(`${API_URL}/system/emergency-stop`, {
       headers: getAuthHeaders()
     });
     const data = await res.json();
@@ -88,7 +88,7 @@ export default function PausasPage() {
 
     try {
       setCreating(true);
-      const res = await fetch(`${API_URL}/api/pauses`, {
+      const res = await fetch(`${API_URL}/pauses`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify(newPause)
@@ -116,7 +116,7 @@ export default function PausasPage() {
     if (!confirm('¿Estás seguro de eliminar esta pausa?')) return;
 
     try {
-      const res = await fetch(`${API_URL}/api/pauses/${pauseId}`, {
+      const res = await fetch(`${API_URL}/pauses/${pauseId}`, {
         method: 'DELETE',
         headers: getAuthHeaders()
       });
@@ -148,7 +148,7 @@ export default function PausasPage() {
         ? prompt('Razón de la parada de emergencia:') 
         : null;
 
-      const res = await fetch(`${API_URL}/api/system/emergency-stop/${action}`, {
+      const res = await fetch(`${API_URL}/system/emergency-stop/${action}`, {
         method: 'POST',
         headers: getAuthHeaders(),
         body: JSON.stringify({ reason })
