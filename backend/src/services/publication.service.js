@@ -201,6 +201,17 @@ class PublicationService {
    */
   async publishToWhatsApp(draw, channel) {
     try {
+      // Verificar si la instancia WhatsApp está pausada
+      if (channel.whatsappInstanceId) {
+        const instance = await prisma.whatsappInstance.findUnique({
+          where: { instanceId: channel.whatsappInstanceId }
+        });
+        if (instance?.isActive === false) {
+          logger.info(`⏸️ Instancia WhatsApp ${channel.whatsappInstanceId} está pausada, omitiendo envío`);
+          return { success: false, skipped: true, message: 'Instancia pausada por el administrador' };
+        }
+      }
+
       const recipients = channel.recipients || [];
 
       // Verificar si ya se envió a este canal
