@@ -19,6 +19,9 @@ router.get('/next', drawController.getNextDraw.bind(drawController));
 // GET /api/draws/stats
 router.get('/stats', drawController.getDrawStats.bind(drawController));
 
+// POST /api/draws/generate-daily
+router.post('/generate-daily', drawController.generateDaily.bind(drawController));
+
 // GET /api/draws/:id
 router.get('/:id', drawController.getDrawById.bind(drawController));
 

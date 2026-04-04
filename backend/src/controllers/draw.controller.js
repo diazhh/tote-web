@@ -9,6 +9,7 @@ import publicationService from '../services/publication.service.js';
 import * as imageService from '../services/imageService.js';
 import { prisma } from '../lib/prisma.js';
 import srqService from '../services/srq.service.js';
+import generateDailyDrawsJob from '../jobs/generate-daily-draws.job.js';
 
 export class DrawController {
   /**
@@ -578,6 +579,25 @@ export class DrawController {
         data: result,
         message: `Sincronización completada: ${result.totalDraws} sorteos procesados`,
       });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/draws/generate-daily
+   * Genera sorteos del día (y mañana) manualmente desde el admin
+   */
+  async generateDaily(req, res, next) {
+    try {
+      await generateDailyDrawsJob.execute();
+      // Contar cuántos sorteos hay hoy después de generar
+      const { getVenezuelaDateAsUTC } = await import('../lib/dateUtils.js');
+      const today = getVenezuelaDateAsUTC();
+      const count = await prisma.draw.count({
+        where: { drawDate: today, status: 'SCHEDULED' }
+      });
+      res.json({ success: true, data: { created: count, message: `${count} sorteos programados para hoy` } });
     } catch (error) {
       next(error);
     }
