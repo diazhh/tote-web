@@ -8,18 +8,17 @@ A lottery management system with real-time draw execution, multi-channel result 
 
 Reliable draw lifecycle management — draws execute on schedule, results publish to all channels, and prizes are processed correctly. Everything else builds on this.
 
-## Current Milestone: v1.1 Reports Dashboard
+## Current Milestone: v1.2 Webhook Provider Integration (Virtuales)
 
-**Goal:** Fix the broken reportes page and rebuild it as a comprehensive reporting dashboard with date range, game, and provider filters showing sales, prizes, and profits.
+**Goal:** Build the complete webhook adapter for provider "virtuales" to process real-time bets — from slot-based draw resolution to ticket creation with validation and acceptance/rejection responses.
 
 **Target features:**
-- Fix client-side crash on /admin/reportes
-- Date range filter (from/to) replacing single-day picker
-- Game filter (all or specific game)
-- Provider/source filter (SRQ, PUSH providers, online bets)
-- Summary cards: sales, prizes, profit, ticket count
-- Per-draw detail table with financial breakdown
-- Aggregated views by game, provider, and date
+- Slot-based draw resolution (48 fixed IDs mapping to gameId + drawTime → daily Draw UUID)
+- Animal/number → GameItem mapping from provider payload
+- Ticket creation from webhook payloads with multi-play support
+- Draw status validation (reject bets for closed/drawn/cancelled draws)
+- Acceptance/rejection response contract for the provider
+- Adapter activation and end-to-end testing
 
 ## Requirements
 
@@ -37,18 +36,22 @@ Reliable draw lifecycle management — draws execute on schedule, results publis
 - Admin provider management UI — v1.0
 - Webhook log viewer — v1.0
 - Token generation for webhook auth — v1.0
+- Reports dashboard with date range, game, and provider filters — v1.1
+- PDF export of filtered reports — v1.1
 
 ### Active
 
-- [ ] Fix broken /admin/reportes page
-- [ ] Reports with date range, game, and provider filters
-- [ ] Sales/prizes/profit summary and detail views
+- [ ] Slot-based draw resolution for webhook providers (48 fixed IDs → daily Draw UUID)
+- [ ] Animal/number → GameItem mapping from provider payloads
+- [ ] Ticket creation from webhook payloads with multi-play support
+- [ ] Draw status validation (reject bets for closed/drawn/cancelled draws)
+- [ ] Acceptance/rejection response contract for providers
 
 ### Out of Scope
 
 - Refactoring SRQ into adapter pattern — stays as-is (PULL), adapters are for new PUSH providers
-- Building specific provider adapters — infrastructure only in this milestone
 - Queue-based webhook processing — tickets created real-time when adapter exists
+- Commercial network hierarchy (comercializadora/banca/grupo) for webhook providers — not needed, userId stays null, providerData stores original payload
 
 ## Context
 
@@ -95,4 +98,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-01 after milestone v1.1 initialization*
+*Last updated: 2026-04-07 after milestone v1.2 initialization*

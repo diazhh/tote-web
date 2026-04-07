@@ -1,42 +1,42 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.1
-milestone_name: Reports Dashboard
-status: verifying
-stopped_at: Completed 07-02-PLAN.md
-last_updated: "2026-04-01T21:12:30.012Z"
-last_activity: 2026-04-01
+milestone: v1.2
+milestone_name: Webhook Provider Integration (Virtuales)
+status: defining_requirements
+stopped_at: null
+last_updated: "2026-04-07T17:30:00.000Z"
+last_activity: 2026-04-07
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 6
-  completed_plans: 6
-  percent: 40
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-01)
+See: .planning/PROJECT.md (updated 2026-04-07)
 
 **Core value:** Reliable draw lifecycle management
-**Current focus:** Phase 07 — pdf-export-production-deploy
+**Current focus:** Milestone v1.2 — Webhook Provider Integration (Virtuales)
 
 ## Current Position
 
-Phase: 07
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-04-01
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-07 — Milestone v1.2 started
 
-Progress: [████████░░░░░░░░░░░░] 40% (v1.0 complete, v1.1 starting)
+Progress: [░░░░░░░░░░░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 10 (all v1.0)
+- Total plans completed: 16 (v1.0: 10, v1.1: 6)
 - Average duration: unknown
 - Total execution time: unknown
 
@@ -48,31 +48,23 @@ Progress: [████████░░░░░░░░░░░░] 40% (v1
 | 2. Webhook Backend Pipeline | 3 | Complete |
 | 3. Admin Provider Management | 3 | Complete |
 | 4. Webhook Log Viewer | 2 | Complete |
-| Phase 05 P01 | 3 | 2 tasks | 5 files |
-| Phase 05 P02 | 3 | 1 tasks | 0 files |
-| Phase 06-reports-dashboard-frontend P01 | 3 minutes | 3 tasks | 2 files |
-| Phase 06 P02 | 5 | 2 tasks | 0 files |
-| Phase 07 P01 | 2 minutes | 2 tasks | 3 files |
-| Phase 07-pdf-export-production-deploy P02 | 1 minute | 1 tasks | 0 files |
+| 5. Backend Reports Foundation | 2 | Complete |
+| 6. Reports Dashboard Frontend | 2 | Complete |
+| 7. PDF Export + Production Deploy | 2 | Complete |
 
 ## Accumulated Context
 
 ### Decisions
 
-- /admin/reportes crash: `formatDrawTime` is not imported — fix is import-only, no logic change needed
-- Backend endpoint to extend: `GET /api/monitor/reporte` in `monitor.service.js` (~940 lines)
-- Data models available: `DrawStats`, `ProviderStats` (pre-calculated), `Ticket.source` (TAQUILLA_ONLINE / EXTERNAL_API / WEBHOOK_PUSH)
-- Frontend fetch pattern: raw fetch() (not axios) — stay consistent with existing admin pages
-- PDF export: client-side library preferred (no server-side PDF overhead); consider jsPDF or react-pdf
-- [Phase 05]: mockReset() required in beforeEach to clear Jest mock call history — mockResolvedValue alone does not reset .mock.calls
-- [Phase 05]: ticketsInclude object pattern chosen for conditional tickets.where to keep Prisma include/where as siblings without restructuring the entire query
-- [Phase 05]: No new commits needed — all code was already committed in 05-01; this plan is a pure deployment plan
-- [Phase 05]: Smoke test used a JWT generated with production secret + real admin user ID to verify endpoint response
-- [Phase 06-reports-dashboard-frontend]: getDailyReport uses flat object signature — no legacy date param or extraFilters wrapper
-- [Phase 06-reports-dashboard-frontend]: Source/apiSystemId share one dropdown via sys: prefix on option values
-- [Phase 06]: No new commits needed — all code was already committed in 06-01; this plan is a pure deployment plan
-- [Phase 07]: Dynamic import for PDFKit in ES module controller; fetch+blob for frontend PDF download to carry Authorization header
-- [Phase 07]: No npm install needed on VPS for PDFKit — already present; only git pull + pm2 restart for backend deploy
+- Virtuales provider payload analyzed: `{ ticketId, game, plays: [{ drawSlotId, amount, animal, number }], timestamp }`
+- drawSlotId is a fixed numeric slot (1-48) mapping to gameId + drawTime; comes as string, needs parseInt
+- Slots config created: `webhooks/adapters/virtuales.slots.js` (48 slots across 4 games x 12 hours)
+- Adapter skeleton created: `webhooks/adapters/virtuales.adapter.draft.js` (rename to .js to activate)
+- webhook.service.js updated: normalize() now supports async adapters (await added)
+- No commercial network needed for webhook providers — Ticket.userId stays null, providerData stores original payload
+- Ticket.source = 'WEBHOOK_PUSH' distinguishes webhook tickets from SRQ (EXTERNAL_API) and online (TAQUILLA_ONLINE)
+- Reports already filter by source and apiSystemId — provider tickets naturally grouped without extra infrastructure
+- Provider webhook URL: `https://toteback.atilax.io/api/webhooks/virtuales` (frontend URL fixed to use API_URL instead of window.location.origin)
 
 ### Pending Todos
 
@@ -84,6 +76,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-01T21:11:50.935Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-04-07T17:30:00.000Z
+Stopped at: null
 Resume file: None
