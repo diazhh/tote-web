@@ -107,25 +107,25 @@ Deferred to future releases.
 | DETL-02 | Phase 6 | Complete |
 | DETL-03 | Phase 6 | Complete |
 | EXPO-01 | Phase 7 | Complete |
-| ADAPT-01 | Pending | Pending |
-| ADAPT-02 | Pending | Pending |
-| ADAPT-03 | Pending | Pending |
-| ADAPT-04 | Pending | Pending |
-| VALID-01 | Pending | Pending |
-| VALID-02 | Pending | Pending |
-| VALID-03 | Pending | Pending |
-| VALID-04 | Pending | Pending |
-| RESP-01 | Pending | Pending |
-| RESP-02 | Pending | Pending |
-| RESP-03 | Pending | Pending |
-| DEPL-01 | Pending | Pending |
-| DEPL-02 | Pending | Pending |
+| ADAPT-01 | Phase 8 | Pending |
+| ADAPT-02 | Phase 8 | Pending |
+| ADAPT-03 | Phase 8 | Pending |
+| ADAPT-04 | Phase 8 | Pending |
+| VALID-01 | Phase 8 | Pending |
+| VALID-02 | Phase 8 | Pending |
+| VALID-03 | Phase 8 | Pending |
+| VALID-04 | Phase 8 | Pending |
+| RESP-01 | Phase 9 | Pending |
+| RESP-02 | Phase 9 | Pending |
+| RESP-03 | Phase 9 | Pending |
+| DEPL-01 | Phase 10 | Pending |
+| DEPL-02 | Phase 10 | Pending |
 
 **Coverage:**
 - v1.2 requirements: 13 total
-- Mapped to phases: 0
-- Unmapped: 13 ⚠️
+- Mapped to phases: 13
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-07*
-*Last updated: 2026-04-07 after v1.2 milestone definition*
+*Last updated: 2026-04-07 after v1.2 roadmap created (Phases 8-10)*

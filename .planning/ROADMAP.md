@@ -3,7 +3,8 @@
 ## Milestones
 
 - ✅ **v1.0 Multi-Provider Webhook System** - Phases 1-4 (shipped 2026-04-01)
-- 🚧 **v1.1 Reports Dashboard** - Phases 5-7 (in progress)
+- ✅ **v1.1 Reports Dashboard** - Phases 5-7 (shipped 2026-04-07)
+- 🚧 **v1.2 Webhook Provider Integration (Virtuales)** - Phases 8-10 (in progress)
 
 ## Phases
 
@@ -81,11 +82,10 @@ Plans:
 
 ---
 
-### 🚧 v1.1 Reports Dashboard (In Progress)
+<details>
+<summary>✅ v1.1 Reports Dashboard (Phases 5-7) - SHIPPED 2026-04-07</summary>
 
-**Milestone Goal:** Fix the broken /admin/reportes page and rebuild it as a comprehensive reporting dashboard with date range, game, and provider filters showing sales, prizes, and profits.
-
-#### Phase 5: Backend Reports Foundation
+### Phase 5: Backend Reports Foundation
 **Goal**: The backend is ready to serve comprehensive report data — the crash is fixed and the endpoint supports date range, source, and provider filters plus game-level and provider-level aggregations
 **Depends on**: Phase 4
 **Requirements**: FIX-01, BACK-01, BACK-02, BACK-03
@@ -101,7 +101,7 @@ Plans:
 - [x] 05-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
 **UI hint**: no
 
-#### Phase 6: Reports Dashboard Frontend
+### Phase 6: Reports Dashboard Frontend
 **Goal**: Admin can explore draw financials through a rebuilt reports page — choosing date range, game, and provider, seeing summary cards, and drilling into a paginated sortable detail table
 **Depends on**: Phase 5
 **Requirements**: FILT-01, FILT-02, FILT-03, FILT-04, SUMM-01, SUMM-02, SUMM-03, DETL-01, DETL-02, DETL-03
@@ -117,10 +117,9 @@ Plans:
 Plans:
 - [x] 06-01-PLAN.md — Rebuild reportes/page.js (filter bar, summary cards, breakdown tables, paginated+sortable detail table) + update monitor API client
 - [x] 06-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
-
 **UI hint**: yes
 
-#### Phase 7: PDF Export + Production Deploy
+### Phase 7: PDF Export + Production Deploy
 **Goal**: Admin can download the current filtered report as a PDF and the feature is live in production
 **Depends on**: Phase 6
 **Requirements**: EXPO-01
@@ -133,13 +132,63 @@ Plans:
 Plans:
 - [x] 07-01-PLAN.md — Backend getReportePdf endpoint (PDFKit, streams PDF) + frontend Descargar PDF button (fetch+blob)
 - [x] 07-02-PLAN.md — Production deploy: git push, VPS pull, frontend build, pm2 restart, human verification
-
 **UI hint**: yes
+
+</details>
+
+---
+
+### 🚧 v1.2 Webhook Provider Integration (Virtuales) (In Progress)
+
+**Milestone Goal:** Build the complete webhook adapter for provider "virtuales" to process real-time bets — slot-based draw resolution, animal/number GameItem mapping, ticket creation with multi-play support, draw status validation, and acceptance/rejection response contract.
+
+#### Phase 8: Adapter Implementation
+**Goal**: The virtuales adapter fully processes incoming webhook payloads — resolving draw slots to daily Draw UUIDs, mapping numbers to GameItems, creating multi-play tickets, and rejecting invalid bets with clear reasons
+**Depends on**: Phase 7
+**Requirements**: ADAPT-01, ADAPT-02, ADAPT-03, ADAPT-04, VALID-01, VALID-02, VALID-03, VALID-04
+**Success Criteria** (what must be TRUE):
+  1. A webhook payload with a valid `drawSlotId` (1-48) resolves to the correct daily Draw UUID for the correct game and draw time
+  2. A webhook payload with `number: "05"` creates a Ticket linked to the GameItem whose `number` field equals "05" in the resolved game; the `animal` field is used as optional cross-validation
+  3. A payload with `plays: [{...}, {...}]` creates one Ticket with one TicketDetail per play entry
+  4. A payload with `drawSlotId` sent as a string (e.g., `"12"`) is parsed correctly and resolves the same as the integer `12`
+  5. Payloads targeting a Draw with status `DRAWN`, `CANCELLED`, or `CLOSED` are rejected with a descriptive reason string rather than creating a ticket
+  6. Payloads with a `drawSlotId` outside 1-48 or not present in the slots config are rejected with a clear reason
+  7. Payloads with a `number` that matches no GameItem in the resolved game are rejected with a clear reason
+**Plans**: TBD
+
+Plans:
+- [ ] 08-01-PLAN.md — Implement virtuales adapter (slots resolution + GameItem lookup + multi-play ticket creation + all validations) + unit tests
+
+#### Phase 9: Response Contract
+**Goal**: The webhook endpoint returns structured acceptance/rejection data so providers know whether each bet was processed or why it was refused
+**Depends on**: Phase 8
+**Requirements**: RESP-01, RESP-02, RESP-03
+**Success Criteria** (what must be TRUE):
+  1. A successful ticket creation returns `{ received: true, logId, ticket: { id, status: "ACCEPTED" } }` in the response body
+  2. A rejected bet (any validation failure) returns `{ received: true, logId, ticket: { status: "REJECTED", reason: "..." } }` where reason describes the specific failure
+  3. A payload arriving with no adapter (discovery mode) continues to return `{ received: true, logId }` without a ticket field — existing behavior is unchanged
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01-PLAN.md — Update webhook.service.js + webhook.controller.js to thread ticket result through the response; verify discovery mode unchanged
+
+#### Phase 10: Production Deployment
+**Goal**: The virtuales adapter is live in production, end-to-end tested with the provider sending real payloads, and webhook tickets appear in reports
+**Depends on**: Phase 9
+**Requirements**: DEPL-01, DEPL-02
+**Success Criteria** (what must be TRUE):
+  1. The adapter file is renamed from `virtuales.adapter.draft.js` to `virtuales.adapter.js` on the VPS and the provider list shows the "Ready" badge for virtuales
+  2. The provider sends a real test payload and the system returns `{ received: true, logId, ticket: { id, status: "ACCEPTED" } }` with the ticket visible in the database
+  3. The provider sends a payload for a closed draw and receives `{ received: true, logId, ticket: { status: "REJECTED", reason: "..." } }` — no spurious ticket created
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01-PLAN.md — Production deploy (rename adapter, git pull, pm2 restart) + E2E test with provider + verify tickets appear in reports
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
+Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -147,6 +196,9 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7
 | 2. Webhook Backend Pipeline | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 3. Admin Provider Management | v1.0 | 3/3 | Complete | 2026-04-01 |
 | 4. Webhook Log Viewer | v1.0 | 2/2 | Complete | 2026-04-01 |
-| 5. Backend Reports Foundation | v1.1 | 1/2 | In Progress|  |
-| 6. Reports Dashboard Frontend | v1.1 | 2/2 | Complete   | 2026-04-01 |
-| 7. PDF Export + Production Deploy | v1.1 | 2/2 | Complete   | 2026-04-01 |
+| 5. Backend Reports Foundation | v1.1 | 2/2 | Complete | 2026-04-07 |
+| 6. Reports Dashboard Frontend | v1.1 | 2/2 | Complete | 2026-04-07 |
+| 7. PDF Export + Production Deploy | v1.1 | 2/2 | Complete | 2026-04-07 |
+| 8. Adapter Implementation | v1.2 | 0/1 | Not started | - |
+| 9. Response Contract | v1.2 | 0/1 | Not started | - |
+| 10. Production Deployment | v1.2 | 0/1 | Not started | - |
