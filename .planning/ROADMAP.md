@@ -154,10 +154,11 @@ Plans:
   5. Payloads targeting a Draw with status `DRAWN`, `CANCELLED`, or `CLOSED` are rejected with a descriptive reason string rather than creating a ticket
   6. Payloads with a `drawSlotId` outside 1-48 or not present in the slots config are rejected with a clear reason
   7. Payloads with a `number` that matches no GameItem in the resolved game are rejected with a clear reason
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Implement virtuales adapter (slots resolution + GameItem lookup + multi-play ticket creation + all validations) + unit tests
+- [ ] 08-01-PLAN.md — TDD: Virtuales adapter (draw slot resolution, GameItem mapping, multi-play, all validations) + unit tests
+- [ ] 08-02-PLAN.md — Wire rejection handling + per-detail drawId into webhook.service.js + tests
 
 #### Phase 9: Response Contract
 **Goal**: The webhook endpoint returns structured acceptance/rejection data so providers know whether each bet was processed or why it was refused
@@ -199,6 +200,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 5. Backend Reports Foundation | v1.1 | 2/2 | Complete | 2026-04-07 |
 | 6. Reports Dashboard Frontend | v1.1 | 2/2 | Complete | 2026-04-07 |
 | 7. PDF Export + Production Deploy | v1.1 | 2/2 | Complete | 2026-04-07 |
-| 8. Adapter Implementation | v1.2 | 0/1 | Not started | - |
+| 8. Adapter Implementation | v1.2 | 0/2 | Not started | - |
 | 9. Response Contract | v1.2 | 0/1 | Not started | - |
 | 10. Production Deployment | v1.2 | 0/1 | Not started | - |
