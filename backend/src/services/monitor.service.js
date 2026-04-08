@@ -570,6 +570,7 @@ class MonitorService {
    */
   async getTicketsByItem(drawId, itemId) {
     try {
+      // Two queries: one filtered by item (to find which tickets), one with all details
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
         include: {
@@ -577,7 +578,6 @@ class MonitorService {
           tickets: {
             include: {
               details: {
-                where: { gameItemId: itemId },
                 include: {
                   gameItem: true
                 }
@@ -591,9 +591,11 @@ class MonitorService {
         throw new Error('Sorteo no encontrado');
       }
 
-      // Filtrar solo tickets que tienen detalles del item solicitado
-      const ticketsWithItem = draw.tickets.filter(t => t.details.length > 0);
-      
+      // Filter tickets that have at least one detail matching the requested item
+      const ticketsWithItem = draw.tickets.filter(t =>
+        t.details.some(d => d.gameItemId === itemId)
+      );
+
       const tickets = ticketsWithItem.map(t => ({
         id: t.id,
         externalTicketId: t.externalTicketId,
@@ -606,7 +608,8 @@ class MonitorService {
         details: t.details.map(d => ({
           amount: parseFloat(d.amount),
           number: d.gameItem.number,
-          name: d.gameItem.name
+          name: d.gameItem.name,
+          status: d.status
         })),
         createdAt: t.createdAt
       }));
@@ -624,7 +627,10 @@ class MonitorService {
           multiplier: parseFloat(gameItem.multiplier)
         } : null,
         ticketCount: tickets.length,
-        totalAmount: tickets.reduce((sum, t) => sum + t.amount, 0),
+        totalAmount: tickets.reduce((sum, t) => {
+          const itemDetails = t.details.filter(d => d.number === gameItem?.number);
+          return sum + itemDetails.reduce((s, d) => s + d.amount, 0);
+        }, 0),
         tickets
       };
     } catch (error) {
