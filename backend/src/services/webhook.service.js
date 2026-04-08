@@ -57,7 +57,8 @@ async function createWebhookTicket(normalized, logId) {
 }
 
 /**
- * Annul (delete) a WEBHOOK_PUSH ticket if it was created within the allowed window.
+ * Annul a WEBHOOK_PUSH ticket if it was created within the allowed window.
+ * Sets ticket status to CANCELLED (keeps record in DB for audit).
  * The provider sends the same ticketId without plays to request annulment.
  *
  * @param {string} externalTicketId - The provider's ticket ID
@@ -95,8 +96,15 @@ async function annulWebhookTicket(externalTicketId, logId, slug) {
     return { status: 'rejected', logId, reason: `Ticket too old for annulment (${Math.round(ageSeconds)}s > ${ANNUL_WINDOW_SECONDS}s limit)` };
   }
 
-  // Delete ticket and its details (cascade)
-  await prisma.ticket.delete({ where: { id: ticket.id } });
+  // Mark ticket and details as CANCELLED (keep in DB for audit)
+  await prisma.ticket.update({
+    where: { id: ticket.id },
+    data: { status: 'CANCELLED' },
+  });
+  await prisma.ticketDetail.updateMany({
+    where: { ticketId: ticket.id },
+    data: { status: 'CANCELLED' },
+  });
 
   await prisma.webhookLog.update({
     where: { id: logId },

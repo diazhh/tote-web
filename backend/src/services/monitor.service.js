@@ -384,6 +384,7 @@ class MonitorService {
 
       // Build tickets include — apply source filter if provided (BACK-02)
       const ticketsInclude = {
+        where: { status: { not: 'CANCELLED' } },
         include: {
           details: {
             include: { gameItem: true }
@@ -391,7 +392,7 @@ class MonitorService {
         }
       };
       if (source) {
-        ticketsInclude.where = { source };
+        ticketsInclude.where.source = source;
       }
 
       const draws = await prisma.draw.findMany({
