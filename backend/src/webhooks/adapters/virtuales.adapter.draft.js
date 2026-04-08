@@ -67,8 +67,12 @@ async function resolveDrawId(slotId) {
  * @returns {Promise<object>} - Objeto normalizado o { rejected: true, reason }
  */
 export async function normalize(payload) {
-  // ── Validar estructura básica del payload ──
+  // ── Detectar solicitud de anulación ──
+  // El proveedor envía el mismo ticketId sin plays para anular
   if (!Array.isArray(payload.plays) || payload.plays.length === 0) {
+    if (payload.ticketId) {
+      return { annul: true, externalTicketId: String(payload.ticketId) };
+    }
     return { rejected: true, reason: 'Payload must contain a non-empty plays array' };
   }
 

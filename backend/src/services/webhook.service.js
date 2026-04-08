@@ -57,6 +57,57 @@ async function createWebhookTicket(normalized, logId) {
 }
 
 /**
+ * Annul (delete) a WEBHOOK_PUSH ticket if it was created within the allowed window.
+ * The provider sends the same ticketId without plays to request annulment.
+ *
+ * @param {string} externalTicketId - The provider's ticket ID
+ * @param {string} logId            - WebhookLog.id for this request
+ * @param {string} slug             - Provider slug for logging
+ * @returns {object}                - Result object with status and logId
+ */
+const ANNUL_WINDOW_SECONDS = 190;
+
+async function annulWebhookTicket(externalTicketId, logId, slug) {
+  const ticket = await prisma.ticket.findFirst({
+    where: {
+      externalTicketId,
+      source: 'WEBHOOK_PUSH',
+    },
+    include: { details: true },
+  });
+
+  if (!ticket) {
+    await prisma.webhookLog.update({
+      where: { id: logId },
+      data: { status: 'FAILED', errorMessage: `Annulment failed: ticket "${externalTicketId}" not found` },
+    });
+    logger.warn(`[webhook] Annulment failed — ticket "${externalTicketId}" not found (logId=${logId})`);
+    return { status: 'rejected', logId, reason: `Ticket "${externalTicketId}" not found` };
+  }
+
+  const ageSeconds = (Date.now() - new Date(ticket.createdAt).getTime()) / 1000;
+  if (ageSeconds > ANNUL_WINDOW_SECONDS) {
+    await prisma.webhookLog.update({
+      where: { id: logId },
+      data: { status: 'FAILED', errorMessage: `Annulment failed: ticket "${externalTicketId}" is ${Math.round(ageSeconds)}s old (limit: ${ANNUL_WINDOW_SECONDS}s)` },
+    });
+    logger.warn(`[webhook] Annulment denied — ticket "${externalTicketId}" is ${Math.round(ageSeconds)}s old, limit is ${ANNUL_WINDOW_SECONDS}s (logId=${logId})`);
+    return { status: 'rejected', logId, reason: `Ticket too old for annulment (${Math.round(ageSeconds)}s > ${ANNUL_WINDOW_SECONDS}s limit)` };
+  }
+
+  // Delete ticket and its details (cascade)
+  await prisma.ticket.delete({ where: { id: ticket.id } });
+
+  await prisma.webhookLog.update({
+    where: { id: logId },
+    data: { status: 'PROCESSED', errorMessage: `Annulled ticket "${externalTicketId}" (ticketNumber=${ticket.ticketNumber})` },
+  });
+
+  logger.info(`[webhook] Ticket annulled: "${externalTicketId}" (ticketNumber=${ticket.ticketNumber}, age=${Math.round(ageSeconds)}s) by "${slug}" (logId=${logId})`);
+  return { status: 'annulled', logId, ticketNumber: ticket.ticketNumber };
+}
+
+/**
  * Core webhook dispatch function.
  *
  * Steps (always in this order):
@@ -118,6 +169,12 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
       });
       logger.warn(`[webhook] Payload rejected by adapter "${slug}" (logId=${log.id}): ${normalized.reason}`);
       return { status: 'rejected', logId: log.id, reason: normalized.reason };
+    }
+
+    // Handle annulment request
+    if (normalized && normalized.annul) {
+      const annulResult = await annulWebhookTicket(normalized.externalTicketId, log.id, slug);
+      return annulResult;
     }
 
     const ticket = await createWebhookTicket(normalized, log.id);
