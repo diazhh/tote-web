@@ -131,7 +131,7 @@ describe('ADAPT-03: multi-play ticket', () => {
 
 // ── ADAPT-04: string drawSlotId coercion ─────────────────────────────
 describe('ADAPT-04: string drawSlotId coercion', () => {
-  test('string "12" and integer 12 both resolve to LOTOANIMALITO 19:00:00', async () => {
+  test('string "12" resolves to LOTOANIMALITO 19:00:00', async () => {
     mockPrisma.draw.findFirst.mockResolvedValue({ id: 'draw-uuid-12', status: 'SCHEDULED' });
     mockPrisma.gameItem.findFirst.mockResolvedValue({ id: 'gi-05', multiplier: 30 });
 
