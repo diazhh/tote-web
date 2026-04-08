@@ -365,21 +365,29 @@ class MonitorService {
         where.gameId = gameId;
       }
 
-      // apiSystemId: resolve to draw IDs via ApiDrawMapping (BACK-02)
+      // apiSystemId: resolve differently for PULL vs PUSH providers
+      let pushProviderFilter = false;
       if (apiSystemId) {
-        const mappings = await prisma.apiDrawMapping.findMany({
-          where: { apiConfig: { apiSystemId } },
-          select: { drawId: true }
-        });
-        if (mappings.length === 0) {
-          return {
-            dateFrom, dateTo, gameId: gameId || null,
-            source: source || null, apiSystemId,
-            draws: [], totals: { totalSales: 0, totalPrize: 0, totalBalance: 0, totalTickets: 0, drawCount: 0 },
-            byGame: [], bySource: []
-          };
+        const apiSystem = await prisma.apiSystem.findUnique({ where: { id: apiSystemId }, select: { mode: true } });
+        if (apiSystem?.mode === 'PUSH') {
+          // PUSH providers: filter tickets by source WEBHOOK_PUSH (no ApiDrawMapping)
+          pushProviderFilter = true;
+        } else {
+          // PULL providers: resolve to draw IDs via ApiDrawMapping (BACK-02)
+          const mappings = await prisma.apiDrawMapping.findMany({
+            where: { apiConfig: { apiSystemId } },
+            select: { drawId: true }
+          });
+          if (mappings.length === 0) {
+            return {
+              dateFrom, dateTo, gameId: gameId || null,
+              source: source || null, apiSystemId,
+              draws: [], totals: { totalSales: 0, totalPrize: 0, totalBalance: 0, totalTickets: 0, drawCount: 0 },
+              byGame: [], bySource: []
+            };
+          }
+          where.id = { in: mappings.map(m => m.drawId) };
         }
-        where.id = { in: mappings.map(m => m.drawId) };
       }
 
       // Build tickets include — apply source filter if provided (BACK-02)
@@ -391,7 +399,9 @@ class MonitorService {
           }
         }
       };
-      if (source) {
+      if (pushProviderFilter) {
+        ticketsInclude.where.source = 'WEBHOOK_PUSH';
+      } else if (source) {
         ticketsInclude.where.source = source;
       }
 
