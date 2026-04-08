@@ -81,7 +81,7 @@ export async function normalize(payload) {
 
   for (const play of payload.plays) {
     // ADAPT-04 + VALID-03: parseInt para manejar drawSlotId como string o entero
-    const slotId = parseInt(play.drawSlotId, 10);
+    let slotId = parseInt(play.drawSlotId, 10);
 
     // VALID-03: Validar rango 1-48
     if (isNaN(slotId) || slotId < 1 || slotId > 48 || !SLOTS[slotId]) {
@@ -89,6 +89,13 @@ export async function normalize(payload) {
         rejected: true,
         reason: `Invalid drawSlotId: ${play.drawSlotId} — valid range is 1-48`,
       };
+    }
+
+    // Terminal flag: proveedor mezcla triples y terminales en un mismo ticket.
+    // Cuando terminal=true y el slot es de TRIPLE PANTERA (25-36),
+    // redirigir al slot equivalente de TERMINAL PANTERA (37-48, misma hora).
+    if (play.terminal === true && slotId >= 25 && slotId <= 36) {
+      slotId = slotId + 12; // 25→37, 26→38, ..., 36→48
     }
 
     const slot = SLOTS[slotId];
