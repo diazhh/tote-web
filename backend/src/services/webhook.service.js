@@ -125,7 +125,7 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
     // Check if the log was updated to DUPLICATE by createWebhookTicket
     const currentLog = await prisma.webhookLog.findUnique({ where: { id: log.id } });
     if (currentLog?.status === 'DUPLICATE') {
-      return { status: 'duplicate', logId: log.id, ticketId: ticket.id };
+      return { status: 'duplicate', logId: log.id, ticketId: ticket.id, ticketNumber: ticket.ticketNumber };
     }
 
     await prisma.webhookLog.update({
@@ -133,7 +133,7 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
       data: { status: 'PROCESSED' },
     });
 
-    return { status: 'processed', logId: log.id, ticketId: ticket.id };
+    return { status: 'processed', logId: log.id, ticketId: ticket.id, ticketNumber: ticket.ticketNumber };
   } catch (err) {
     const errorMessage = err.message ?? String(err);
     await prisma.webhookLog.update({

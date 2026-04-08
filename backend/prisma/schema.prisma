@@ -944,6 +944,7 @@ enum TicketSource {
 
 model Ticket {
   id              String        @id @default(uuid())
+  ticketNumber    Int           @default(autoincrement()) @unique // Numero secuencial para proveedores externos
   userId          String?       // Null para tickets externos
   drawId          String
   source          TicketSource  @default(TAQUILLA_ONLINE)
