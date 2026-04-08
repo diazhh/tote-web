@@ -47,6 +47,7 @@ async function createWebhookTicket(normalized, logId) {
           multiplier: d.multiplier,
           prize: 0,
           status: 'ACTIVE',
+          ...(d.drawId ? { drawId: d.drawId } : {}),
         })),
       },
     },
@@ -107,7 +108,18 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
 
   // Step 3: normalize and create ticket
   try {
-    const normalized = adapterModule.normalize(JSON.parse(rawPayload));
+    const normalized = await adapterModule.normalize(JSON.parse(rawPayload));
+
+    // D-04: Check adapter rejection before ticket creation
+    if (normalized && normalized.rejected) {
+      await prisma.webhookLog.update({
+        where: { id: log.id },
+        data: { status: 'FAILED', errorMessage: normalized.reason || 'Rejected by adapter' },
+      });
+      logger.warn(`[webhook] Payload rejected by adapter "${slug}" (logId=${log.id}): ${normalized.reason}`);
+      return { status: 'rejected', logId: log.id, reason: normalized.reason };
+    }
+
     const ticket = await createWebhookTicket(normalized, log.id);
 
     // Check if the log was updated to DUPLICATE by createWebhookTicket
