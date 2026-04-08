@@ -175,6 +175,26 @@ export default function ProveedoresPage() {
     }
   };
 
+  const handleToggleSystem = async (id, currentStatus) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/providers/systems/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ isActive: !currentStatus })
+      });
+
+      if (response.ok) {
+        await loadData();
+      }
+    } catch (error) {
+      console.error('Error actualizando estado del sistema:', error);
+    }
+  };
+
   const handleToggleActive = async (id, currentStatus) => {
     try {
       const token = localStorage.getItem('token');
@@ -398,6 +418,14 @@ export default function ProveedoresPage() {
                         }`}>
                           {system.mode || 'PULL'}
                         </span>
+                        {/* Active/Paused badge */}
+                        <span className={`px-2 py-1 text-xs font-medium rounded ${
+                          system.isActive
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-red-100 text-red-700'
+                        }`}>
+                          {system.isActive ? 'Activo' : 'Pausado'}
+                        </span>
                         {/* ADMIN-06: adapter status badge */}
                         {adapterStatuses[system.id] !== undefined ? (
                           <span className={`px-2 py-1 text-xs font-medium rounded ${
@@ -417,13 +445,24 @@ export default function ProveedoresPage() {
                         <p className="mt-1 text-sm text-gray-600">{system.description}</p>
                       )}
                       {system.slug && (
-                        <p className="mt-1 text-xs text-gray-400 font-mono">/api/webhooks/{system.slug}</p>
+                        <p className="mt-1 text-xs text-gray-400 font-mono">{API_URL}/webhooks/{system.slug}</p>
                       )}
                       <p className="mt-2 text-sm text-gray-500">
                         {system.configurations.length} configuración(es)
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggleSystem(system.id, system.isActive)}
+                        className={`p-2.5 rounded ${
+                          system.isActive
+                            ? 'text-orange-600 hover:bg-orange-50'
+                            : 'text-green-600 hover:bg-green-50'
+                        }`}
+                        title={system.isActive ? 'Pausar proveedor' : 'Activar proveedor'}
+                      >
+                        {system.isActive ? <Power className="w-5 h-5" /> : <PowerOff className="w-5 h-5" />}
+                      </button>
                       <button
                         onClick={() => {
                           setEditingSystem(system);
@@ -586,7 +625,7 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Slug *{' '}
               <span className="text-xs text-gray-400 font-normal">
-                (URL: /api/webhooks/{formData.slug || '...'})
+                (URL: {API_URL}/webhooks/{formData.slug || '...'})
               </span>
             </label>
             <input
@@ -699,11 +738,11 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
                     <div>
                       <span className="text-gray-500">URL:</span>{' '}
                       <code className="bg-white px-1.5 py-0.5 rounded border text-blue-700 break-all">
-                        {typeof window !== 'undefined' ? window.location.origin : ''}/api/webhooks/{formData.slug}
+                        {API_URL}/webhooks/{formData.slug}
                       </code>
                       <button
                         type="button"
-                        onClick={() => navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/${formData.slug}`)}
+                        onClick={() => navigator.clipboard.writeText(`${API_URL}/webhooks/${formData.slug}`)}
                         className="ml-2 px-1.5 py-0.5 text-[10px] bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
                       >
                         Copiar

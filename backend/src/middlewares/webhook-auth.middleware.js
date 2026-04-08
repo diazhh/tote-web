@@ -22,13 +22,17 @@ export async function webhookAuth(req, res, next) {
     const apiSystem = await prisma.apiSystem.findFirst({
       where: {
         slug: req.params.providerSlug,
-        isActive: true,
         mode: 'PUSH',
       },
     });
 
     if (!apiSystem || !apiSystem.webhookToken) {
       return res.status(401).json({ error: 'Invalid token' });
+    }
+
+    // Check if provider is paused (after finding it, so we give a clear message)
+    if (!apiSystem.isActive) {
+      return res.status(200).json({ received: true, ticket: { status: 'REJECTED', reason: 'Provider is paused' } });
     }
 
     const incomingBuf = Buffer.from(incomingToken, 'utf8');
