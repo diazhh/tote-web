@@ -157,8 +157,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — TDD: Virtuales adapter (draw slot resolution, GameItem mapping, multi-play, all validations) + unit tests
-- [ ] 08-02-PLAN.md — Wire rejection handling + per-detail drawId into webhook.service.js + tests
+- [x] 08-01-PLAN.md — TDD: Virtuales adapter (draw slot resolution, GameItem mapping, multi-play, all validations) + unit tests
+- [x] 08-02-PLAN.md — Wire rejection handling + per-detail drawId into webhook.service.js + tests
 
 #### Phase 9: Response Contract
 **Goal**: The webhook endpoint returns structured acceptance/rejection data so providers know whether each bet was processed or why it was refused
