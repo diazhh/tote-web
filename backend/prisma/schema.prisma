@@ -975,6 +975,7 @@ enum TicketDetailStatus {
   ACTIVE
   WON
   LOST
+  CANCELLED
 }
 
 model TicketDetail {
