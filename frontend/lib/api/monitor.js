@@ -74,7 +74,7 @@ export const monitorApi = {
   getTripletasByItem: async (drawId, itemId) => {
     const response = await axios.get(`/monitor/tripletas-by-item/${drawId}/${itemId}`);
     return response.data;
-  }
+  },
   /**
    * Listar tickets con filtros y paginación
    */
