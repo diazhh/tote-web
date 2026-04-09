@@ -346,8 +346,13 @@ class MonitorService {
   async getItemStatsFiltered(drawId, { source = null, apiSystemId = null } = {}) {
     try {
       const ticketWhere = { status: { not: 'CANCELLED' } };
-      if (apiSystemId) ticketWhere.apiSystemId = apiSystemId;
-      else if (source) ticketWhere.source = source;
+      if (apiSystemId) {
+        const sys = await prisma.apiSystem.findUnique({ where: { id: apiSystemId }, select: { mode: true } });
+        if (sys?.mode === 'PUSH') ticketWhere.apiSystemId = apiSystemId;
+        else ticketWhere.source = 'EXTERNAL_API';
+      } else if (source) {
+        ticketWhere.source = source;
+      }
 
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
@@ -1129,7 +1134,9 @@ class MonitorService {
       }
 
       if (apiSystemId) {
-        where.apiSystemId = apiSystemId;
+        const sys = await prisma.apiSystem.findUnique({ where: { id: apiSystemId }, select: { mode: true } });
+        if (sys?.mode === 'PUSH') where.apiSystemId = apiSystemId;
+        else where.source = 'EXTERNAL_API';
       } else if (source) {
         where.source = source;
       }
