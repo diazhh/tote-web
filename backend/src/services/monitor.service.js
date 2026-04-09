@@ -400,7 +400,7 @@ class MonitorService {
         }
       };
       if (pushProviderFilter) {
-        ticketsInclude.where.source = 'WEBHOOK_PUSH';
+        ticketsInclude.where.apiSystemId = apiSystemId;
       } else if (source) {
         ticketsInclude.where.source = source;
       }

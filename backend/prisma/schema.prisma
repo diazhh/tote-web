@@ -429,6 +429,7 @@ model ApiSystem {
   configurations ApiConfiguration[]
   comerciales    ProviderComercial[]
   webhookLogs    WebhookLog[]
+  tickets        Ticket[]
 
   @@index([name])
   @@index([slug])
@@ -956,10 +957,13 @@ model Ticket {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   
+  apiSystemId     String?       // Proveedor que creó el ticket (PUSH/PULL)
+
   user            User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
   draw            Draw          @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  apiSystem       ApiSystem?    @relation(fields: [apiSystemId], references: [id])
   details         TicketDetail[]
-  
+
   @@index([userId])
   @@index([drawId])
   @@index([status])
@@ -969,6 +973,7 @@ model Ticket {
   @@index([userId, status])
   @@index([drawId, source])
   @@index([createdAt])
+  @@index([apiSystemId])
 }
 
 enum TicketDetailStatus {

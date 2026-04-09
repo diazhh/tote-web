@@ -261,15 +261,9 @@ export default function ReportesPage() {
             >
               <option value="">Todas las fuentes</option>
               <option value="TAQUILLA_ONLINE">Online</option>
-              <option value="EXTERNAL_API">SRQ / API</option>
-              <option value="WEBHOOK_PUSH">Webhook</option>
-              {systems.length > 0 && (
-                <optgroup label="Proveedor específico">
-                  {systems.map(s => (
-                    <option key={s.id} value={`sys:${s.id}`}>{s.name}</option>
-                  ))}
-                </optgroup>
-              )}
+              {systems.map(s => (
+                <option key={s.id} value={`sys:${s.id}`}>{s.name}</option>
+              ))}
             </select>
           </div>
         </div>

@@ -14,7 +14,7 @@ const __dirname = path.dirname(__filename);
  * @param {string} logId       - WebhookLog.id to update on DUPLICATE
  * @returns {object}           - Created or existing Ticket record
  */
-async function createWebhookTicket(normalized, logId) {
+async function createWebhookTicket(normalized, logId, apiSystemId) {
   const existing = await prisma.ticket.findFirst({
     where: {
       drawId: normalized.drawId,
@@ -39,6 +39,7 @@ async function createWebhookTicket(normalized, logId) {
       totalAmount: normalized.totalAmount,
       totalPrize: 0,
       status: 'ACTIVE',
+      apiSystemId,
       providerData: normalized.providerData ?? null,
       details: {
         create: normalized.details.map((d) => ({
@@ -185,7 +186,7 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
       return annulResult;
     }
 
-    const ticket = await createWebhookTicket(normalized, log.id);
+    const ticket = await createWebhookTicket(normalized, log.id, apiSystem.id);
 
     // Check if the log was updated to DUPLICATE by createWebhookTicket
     const currentLog = await prisma.webhookLog.findUnique({ where: { id: log.id } });
