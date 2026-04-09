@@ -42,6 +42,17 @@ export const monitorApi = {
   },
 
   /**
+   * Obtener estadísticas por número filtradas por fuente/proveedor
+   */
+  getItemStatsFiltered: async (drawId, { source, apiSystemId } = {}) => {
+    const params = new URLSearchParams();
+    if (source)      params.append('source', source);
+    if (apiSystemId) params.append('apiSystemId', apiSystemId);
+    const response = await axios.get(`/monitor/items/${drawId}/filtered?${params.toString()}`);
+    return response.data;
+  },
+
+  /**
    * Obtener tickets de una banca específica
    */
   getTicketsByBanca: async (drawId, bancaId) => {

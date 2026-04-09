@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Calendar, Gamepad2, DollarSign, Trophy, TrendingUp, TrendingDown,
-  FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download
+  FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, X, Eye
 } from 'lucide-react';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
@@ -39,6 +39,9 @@ export default function ReportesPage() {
   // --- Detail table state ---
   const [sortDir, setSortDir] = useState('asc');   // 'asc' | 'desc'
   const [page, setPage]       = useState(1);
+
+  // --- Draw detail modal (number breakdown) ---
+  const [drawDetail, setDrawDetail] = useState({ open: false, data: null, loading: false });
 
   // --- Initial load: fetch games + systems for dropdowns ---
   useEffect(() => {
@@ -92,6 +95,20 @@ export default function ReportesPage() {
   // When source changes, reset apiSystemId (they are mutually exclusive display-wise)
   const handleSourceChange = (value) => {
     setFilters(prev => ({ ...prev, source: value, apiSystemId: '' }));
+  };
+
+  const handleDrawClick = async (drawId) => {
+    setDrawDetail({ open: true, data: null, loading: true });
+    try {
+      const result = await monitorApi.getItemStatsFiltered(drawId, {
+        source: filters.source || undefined,
+        apiSystemId: filters.apiSystemId || undefined,
+      });
+      setDrawDetail({ open: true, data: result.data, loading: false });
+    } catch {
+      toast.error('Error cargando detalle del sorteo');
+      setDrawDetail({ open: false, data: null, loading: false });
+    }
   };
 
   const handleDownloadPdf = useCallback(() => {
@@ -426,11 +443,12 @@ export default function ReportesPage() {
                       <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
                       <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Balance</th>
                       <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
+                      <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-500 w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {paginatedDraws.map(draw => (
-                      <tr key={draw.drawId} className="hover:bg-gray-50/50">
+                      <tr key={draw.drawId} className="hover:bg-gray-50/50 cursor-pointer" onClick={() => handleDrawClick(draw.drawId)}>
                         <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{fmtDate(draw.drawDate)}</td>
                         <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{draw.drawTime ?? '—'}</td>
                         <td className="px-4 py-2.5 font-medium text-gray-800">{draw.game}</td>
@@ -446,6 +464,9 @@ export default function ReportesPage() {
                           {fmt(draw.balance)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-500">{draw.ticketCount}</td>
+                        <td className="px-4 py-2.5 text-center">
+                          <Eye className="w-4 h-4 text-blue-600 inline" />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -492,6 +513,85 @@ export default function ReportesPage() {
       {loading && !report && (
         <div className="flex justify-center py-16">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+        </div>
+      )}
+
+      {/* Modal: Desglose por Número */}
+      {drawDetail.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[85vh] overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b">
+              <h3 className="text-lg font-semibold">
+                {drawDetail.data ? (
+                  <>
+                    {drawDetail.data.game} — {drawDetail.data.drawTime}
+                    <span className="ml-2 text-sm font-normal text-gray-500">
+                      Total: {fmt(drawDetail.data.totalSales)} | {drawDetail.data.ticketCount} tickets
+                    </span>
+                  </>
+                ) : 'Cargando...'}
+              </h3>
+              <button onClick={() => setDrawDetail({ open: false, data: null, loading: false })} className="text-gray-500 hover:text-gray-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto max-h-[70vh]">
+              {drawDetail.loading ? (
+                <div className="flex justify-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+                </div>
+              ) : drawDetail.data?.items?.length > 0 ? (
+                <>
+                  {drawDetail.data.winnerItem && (
+                    <div className="mb-4 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
+                      Ganador: <span className="font-bold">{drawDetail.data.winnerItem.number} — {drawDetail.data.winnerItem.name}</span>
+                    </div>
+                  )}
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">#</th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nombre</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Apostado</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Tickets</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Premio Pot.</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">% Venta</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {[...drawDetail.data.items]
+                        .sort((a, b) => parseInt(a.number) - parseInt(b.number))
+                        .map(item => {
+                          const isDangerous = drawDetail.data.totalSales > 0 && item.potentialPrize > drawDetail.data.totalSales * 0.7;
+                          return (
+                            <tr key={item.itemId} className={isDangerous ? 'bg-red-50' : 'hover:bg-gray-50/50'}>
+                              <td className="px-3 py-2 font-bold">{item.number}</td>
+                              <td className="px-3 py-2 text-gray-700">{item.name}</td>
+                              <td className="px-3 py-2 text-right font-medium">{fmt(item.totalAmount)}</td>
+                              <td className="px-3 py-2 text-right text-gray-500">{item.ticketCount}</td>
+                              <td className={`px-3 py-2 text-right font-medium ${isDangerous ? 'text-red-600' : 'text-blue-600'}`}>
+                                {fmt(item.potentialPrize)}
+                              </td>
+                              <td className="px-3 py-2 text-right text-gray-500">{item.percentageOfSales}%</td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </>
+              ) : (
+                <p className="text-center text-gray-400 py-8">No hay datos de números para este sorteo</p>
+              )}
+            </div>
+            <div className="p-4 border-t bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setDrawDetail({ open: false, data: null, loading: false })}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

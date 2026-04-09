@@ -335,6 +335,94 @@ class MonitorService {
   }
 
   /**
+   * Obtener estadísticas por número/item para un sorteo, filtrado por fuente/proveedor.
+   * Versión simplificada de getItemStats (sin tripletas) para reportes de proveedores.
+   *
+   * @param {string} drawId
+   * @param {Object} filters
+   * @param {string} [filters.source]      - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH
+   * @param {string} [filters.apiSystemId] - UUID del ApiSystem
+   */
+  async getItemStatsFiltered(drawId, { source = null, apiSystemId = null } = {}) {
+    try {
+      const ticketWhere = { status: { not: 'CANCELLED' } };
+      if (apiSystemId) ticketWhere.apiSystemId = apiSystemId;
+      else if (source) ticketWhere.source = source;
+
+      const draw = await prisma.draw.findUnique({
+        where: { id: drawId },
+        include: {
+          game: true,
+          winnerItem: true,
+          tickets: {
+            where: ticketWhere,
+            include: {
+              details: { include: { gameItem: true } }
+            }
+          }
+        }
+      });
+
+      if (!draw) throw new Error('Sorteo no encontrado');
+
+      const gameItems = await prisma.gameItem.findMany({
+        where: { gameId: draw.gameId, isActive: true },
+        orderBy: { number: 'asc' }
+      });
+
+      const itemMap = new Map();
+      for (const item of gameItems) {
+        itemMap.set(item.id, {
+          itemId: item.id,
+          number: item.number,
+          name: item.name,
+          multiplier: parseFloat(item.multiplier),
+          totalAmount: 0,
+          ticketCount: 0,
+          potentialPrize: 0,
+          percentageOfSales: 0,
+        });
+      }
+
+      let totalSales = 0;
+      for (const ticket of draw.tickets) {
+        for (const detail of ticket.details) {
+          const item = itemMap.get(detail.gameItemId);
+          if (item) {
+            const amount = parseFloat(detail.amount);
+            item.totalAmount += amount;
+            item.ticketCount += 1;
+            totalSales += amount;
+          }
+        }
+      }
+
+      for (const item of itemMap.values()) {
+        item.potentialPrize = item.totalAmount * item.multiplier;
+        item.percentageOfSales = totalSales > 0
+          ? ((item.potentialPrize / totalSales) * 100).toFixed(2)
+          : 0;
+      }
+
+      return {
+        drawId,
+        game: draw.game.name,
+        drawDate: draw.drawDate,
+        drawTime: draw.drawTime,
+        totalSales,
+        ticketCount: draw.tickets.length,
+        winnerItem: draw.winnerItem ? { number: draw.winnerItem.number, name: draw.winnerItem.name } : null,
+        items: Array.from(itemMap.values())
+          .filter(i => i.totalAmount > 0)
+          .sort((a, b) => b.totalAmount - a.totalAmount)
+      };
+    } catch (error) {
+      logger.error('Error obteniendo item stats filtrados:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Obtener reporte de sorteos por rango de fechas con filtros opcionales.
    * Soporta modo legacy (date param) y modo rango (dateFrom/dateTo).
    *

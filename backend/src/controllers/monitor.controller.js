@@ -245,6 +245,25 @@ class MonitorController {
   }
 
   /**
+   * GET /api/monitor/items/:drawId/filtered
+   * Obtener estadísticas por número filtradas por fuente/proveedor
+   */
+  async getItemStatsFiltered(req, res) {
+    try {
+      const { drawId } = req.params;
+      const { source, apiSystemId } = req.query;
+      const stats = await monitorService.getItemStatsFiltered(drawId, {
+        source: source || null,
+        apiSystemId: apiSystemId || null,
+      });
+      res.json({ success: true, data: stats });
+    } catch (error) {
+      logger.error('Error en getItemStatsFiltered:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
    * GET /api/monitor/tickets-by-banca/:drawId/:bancaId
    * Obtener tickets de una banca específica
    */

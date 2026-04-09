@@ -16,6 +16,7 @@ router.use(authorize('ADMIN', 'OPERATOR'));
 router.get('/bancas/:drawId', monitorController.getBancaStats);
 
 // Estadísticas por número/item
+router.get('/items/:drawId/filtered', monitorController.getItemStatsFiltered);
 router.get('/items/:drawId', monitorController.getItemStats);
 
 // Reporte PDF (debe ir ANTES de /reporte para evitar conflicto de rutas)
