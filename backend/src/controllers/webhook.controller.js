@@ -13,8 +13,10 @@ export async function receive(req, res) {
 
     const response = { received: true, logId: result.logId };
 
-    if (result.status === 'processed' || result.status === 'duplicate') {
+    if (result.status === 'processed') {
       response.ticket = { id: result.ticketNumber, status: 'ACCEPTED' };
+    } else if (result.status === 'duplicate') {
+      response.ticket = { id: result.ticketNumber, status: 'DUPLICATE' };
     } else if (result.status === 'annulled') {
       response.ticket = { id: result.ticketNumber, status: 'ANNULLED' };
     } else if (result.status === 'rejected') {
