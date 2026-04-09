@@ -1146,7 +1146,7 @@ class MonitorService {
           where,
           include: {
             draw: { include: { game: true, winnerItem: true } },
-            details: { include: { gameItem: true, draw: { select: { game: { select: { name: true } } } } } },
+            details: { include: { gameItem: true } },
             apiSystem: { select: { name: true } },
           },
           orderBy: { createdAt: 'desc' },
@@ -1182,7 +1182,7 @@ class MonitorService {
             multiplier: parseFloat(d.gameItem.multiplier),
             status: d.status,
             prize: parseFloat(d.prize || 0),
-            game: d.draw?.game ? { name: d.draw.game.name } : { name: t.draw.game.name },
+            game: { name: t.draw.game.name },
           })),
         })),
         total,
