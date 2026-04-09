@@ -17,9 +17,9 @@ const __dirname = path.dirname(__filename);
 async function createWebhookTicket(normalized, logId, apiSystemId) {
   const existing = await prisma.ticket.findFirst({
     where: {
-      drawId: normalized.drawId,
       externalTicketId: normalized.externalTicketId,
       source: 'WEBHOOK_PUSH',
+      apiSystemId,
     },
   });
 
