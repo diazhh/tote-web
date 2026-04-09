@@ -1099,6 +1099,95 @@ class MonitorService {
       throw error;
     }
   }
+  /**
+   * Listar tickets con filtros y paginación.
+   * @param {Object} params
+   * @param {string} [params.dateFrom]    - YYYY-MM-DD
+   * @param {string} [params.dateTo]      - YYYY-MM-DD
+   * @param {string} [params.gameId]      - filter by game UUID
+   * @param {string} [params.source]      - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH
+   * @param {string} [params.apiSystemId] - filter by provider UUID
+   * @param {number} [params.page]        - page number (1-based)
+   * @param {number} [params.pageSize]    - items per page
+   */
+  async getTicketList({ dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, page = 1, pageSize = 50 } = {}) {
+    try {
+      const where = { status: { not: 'CANCELLED' } };
+
+      // Date filter via draw relationship
+      const drawWhere = {};
+      if (dateFrom && dateTo) {
+        drawWhere.drawDate = {
+          gte: new Date(dateFrom + 'T00:00:00.000Z'),
+          lte: new Date(dateTo + 'T00:00:00.000Z'),
+        };
+      }
+      if (gameId) drawWhere.gameId = gameId;
+
+      if (Object.keys(drawWhere).length > 0) {
+        where.draw = drawWhere;
+      }
+
+      if (apiSystemId) {
+        where.apiSystemId = apiSystemId;
+      } else if (source) {
+        where.source = source;
+      }
+
+      const [tickets, total] = await Promise.all([
+        prisma.ticket.findMany({
+          where,
+          include: {
+            draw: { include: { game: true, winnerItem: true } },
+            details: { include: { gameItem: true, draw: { select: { game: { select: { name: true } } } } } },
+            apiSystem: { select: { name: true } },
+          },
+          orderBy: { createdAt: 'desc' },
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        prisma.ticket.count({ where }),
+      ]);
+
+      return {
+        tickets: tickets.map(t => ({
+          id: t.id,
+          ticketNumber: t.ticketNumber,
+          externalTicketId: t.externalTicketId,
+          source: t.source,
+          provider: t.apiSystem?.name || null,
+          totalAmount: parseFloat(t.totalAmount),
+          totalPrize: parseFloat(t.totalPrize),
+          status: t.status,
+          createdAt: t.createdAt,
+          draw: {
+            id: t.draw.id,
+            game: t.draw.game.name,
+            drawDate: t.draw.drawDate,
+            drawTime: t.draw.drawTime,
+            status: t.draw.status,
+          },
+          winnerItem: t.draw.winnerItem ? { number: t.draw.winnerItem.number, name: t.draw.winnerItem.name } : null,
+          details: t.details.map(d => ({
+            number: d.gameItem.number,
+            name: d.gameItem.name,
+            amount: parseFloat(d.amount),
+            multiplier: parseFloat(d.gameItem.multiplier),
+            status: d.status,
+            prize: parseFloat(d.prize || 0),
+            game: d.draw?.game ? { name: d.draw.game.name } : { name: t.draw.game.name },
+          })),
+        })),
+        total,
+        page,
+        pageSize,
+        totalPages: Math.ceil(total / pageSize),
+      };
+    } catch (error) {
+      logger.error('Error obteniendo lista de tickets:', error);
+      throw error;
+    }
+  }
 }
 
 export default new MonitorService();

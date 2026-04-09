@@ -307,6 +307,28 @@ class MonitorController {
       res.status(500).json({ success: false, error: error.message });
     }
   }
+  /**
+   * GET /api/monitor/tickets
+   * Listar tickets con filtros y paginación
+   */
+  async getTicketList(req, res) {
+    try {
+      const { dateFrom, dateTo, gameId, source, apiSystemId, page, pageSize } = req.query;
+      const result = await monitorService.getTicketList({
+        dateFrom: dateFrom || null,
+        dateTo: dateTo || null,
+        gameId: gameId || null,
+        source: source || null,
+        apiSystemId: apiSystemId || null,
+        page: parseInt(page) || 1,
+        pageSize: parseInt(pageSize) || 50,
+      });
+      res.json({ success: true, data: result });
+    } catch (error) {
+      logger.error('Error en getTicketList:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
 }
 
 export default new MonitorController();
