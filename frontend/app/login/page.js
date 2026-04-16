@@ -32,6 +32,8 @@ export default function LoginPage() {
         router.push('/admin');
       } else if (user.role === 'TAQUILLA_ADMIN') {
         router.push('/admin/depositos');
+      } else if (user.role === 'PROVIDER') {
+        router.push('/proveedor');
       } else if (user.role === 'PLAYER') {
         router.push('/dashboard');
       }
@@ -64,6 +66,8 @@ export default function LoginPage() {
         router.push('/admin');
       } else if (user.role === 'TAQUILLA_ADMIN') {
         router.push('/admin/depositos');
+      } else if (user.role === 'PROVIDER') {
+        router.push('/proveedor');
       } else if (user.role === 'PLAYER') {
         router.push('/dashboard');
       }
