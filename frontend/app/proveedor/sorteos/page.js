@@ -1,0 +1,125 @@
+'use client';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { portalFetch } from '@/lib/portal-api';
+
+function todayISO(offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  return d.toISOString().slice(0, 10);
+}
+
+function isDrawComplete(status) {
+  return status === 'DRAWN' || status === 'PUBLISHED';
+}
+
+export default function SorteosPage() {
+  const router = useRouter();
+  const sp = useSearchParams();
+  const [data, setData] = useState({ rows: [], total: 0, page: 1, pageSize: 25 });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  const filters = {
+    dateFrom: sp.get('dateFrom') ?? todayISO(-7),
+    dateTo: sp.get('dateTo') ?? todayISO(0),
+    gameId: sp.get('gameId') ?? '',
+    page: sp.get('page') ?? '1',
+    pageSize: '25',
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    portalFetch('/api/portal/draws', { params: filters })
+      .then(setData)
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, [filters.dateFrom, filters.dateTo, filters.gameId, filters.page]);
+
+  const setFilter = (k, v) => {
+    const next = new URLSearchParams(sp);
+    if (v) next.set(k, v); else next.delete(k);
+    if (k !== 'page') next.set('page', '1');
+    router.replace(`/proveedor/sorteos?${next.toString()}`);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(data.total / data.pageSize));
+
+  return (
+    <div>
+      <h1 className="text-2xl font-bold mb-4 text-gray-900">Sorteos</h1>
+      <div className="flex flex-wrap gap-3 mb-4 items-end">
+        <label className="text-sm text-gray-700">Desde
+          <input type="date" value={filters.dateFrom}
+            onChange={e => setFilter('dateFrom', e.target.value)}
+            className="block border border-gray-300 rounded px-2 py-1 mt-0.5" />
+        </label>
+        <label className="text-sm text-gray-700">Hasta
+          <input type="date" value={filters.dateTo}
+            onChange={e => setFilter('dateTo', e.target.value)}
+            className="block border border-gray-300 rounded px-2 py-1 mt-0.5" />
+        </label>
+      </div>
+
+      {error && <div className="text-red-600 bg-red-50 border border-red-200 rounded p-3 mb-4">{error}</div>}
+
+      {loading ? <div className="text-gray-500">Cargando...</div> : (
+        <>
+          <div className="bg-white border border-gray-200 rounded overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Fecha</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Hora</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Juego</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Estado</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700">Ganador</th>
+                  <th className="text-left px-3 py-2 font-semibold text-gray-700"># Tickets</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map(d => {
+                  const done = isDrawComplete(d.status);
+                  return (
+                    <tr key={d.id} className="border-t hover:bg-gray-50">
+                      <td className="px-3 py-2 text-gray-700">{new Date(d.drawDate).toLocaleDateString('es-VE')}</td>
+                      <td className="px-3 py-2 text-gray-700 font-mono">{d.drawTime?.slice(0,5) ?? '-'}</td>
+                      <td className="px-3 py-2">
+                        <Link className="text-blue-600 hover:underline" href={`/proveedor/sorteos/${d.id}`}>
+                          {d.game?.name ?? '-'}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2 text-gray-600">{d.status}</td>
+                      <td className="px-3 py-2">
+                        {done
+                          ? <strong className="text-gray-900">{d.winnerItem?.number ?? '-'}</strong>
+                          : <span className="text-gray-400">Pendiente</span>}
+                      </td>
+                      <td className="px-3 py-2 text-gray-700">{d.ticketCount ?? '-'}</td>
+                    </tr>
+                  );
+                })}
+                {data.rows.length === 0 && (
+                  <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">Sin resultados</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex justify-between items-center mt-4 text-sm text-gray-700">
+            <div>Total: <strong>{data.total}</strong></div>
+            <div className="flex gap-2 items-center">
+              <button disabled={data.page <= 1}
+                onClick={() => setFilter('page', String(Number(filters.page) - 1))}
+                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50">Anterior</button>
+              <span>Página {data.page} / {totalPages}</span>
+              <button disabled={data.page >= totalPages}
+                onClick={() => setFilter('page', String(Number(filters.page) + 1))}
+                className="px-3 py-1 border border-gray-300 rounded disabled:opacity-50 hover:bg-gray-50">Siguiente</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
