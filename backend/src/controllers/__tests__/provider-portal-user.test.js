@@ -54,6 +54,7 @@ test('createPortalUser rejects short passwords', async () => {
 
 test('createPortalUser creates new User with PROVIDER role + apiSystemId', async () => {
   mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'sys1', mode: 'PUSH', slug: 'virtuales' });
+  mockPrisma.user.findFirst.mockResolvedValue(null);
   mockPrisma.user.findUnique.mockResolvedValue(null);
   mockPrisma.user.create.mockResolvedValue({ id: 'u1', username: 'provider-x', role: 'PROVIDER', apiSystemId: 'sys1', createdAt: new Date() });
 
@@ -64,6 +65,7 @@ test('createPortalUser creates new User with PROVIDER role + apiSystemId', async
   expect(mockPrisma.user.create).toHaveBeenCalledWith(expect.objectContaining({
     data: expect.objectContaining({
       username: 'provider-x',
+      email: 'portal-virtuales@internal.tote',
       role: 'PROVIDER',
       apiSystemId: 'sys1',
       password: 'hashed-pw',
@@ -73,9 +75,32 @@ test('createPortalUser creates new User with PROVIDER role + apiSystemId', async
 });
 
 test('createPortalUser returns 409 when username already exists', async () => {
-  mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'sys1', mode: 'PUSH' });
+  mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'sys1', mode: 'PUSH', slug: 'virtuales' });
+  mockPrisma.user.findFirst.mockResolvedValue(null);
   mockPrisma.user.findUnique.mockResolvedValue({ id: 'existing' });
   const req = mockReq({ id: 'sys1' }, { username: 'taken', password: 'passwordlong' });
+  const res = mockRes();
+  await providerController.createPortalUser(req, res);
+  expect(res.status).toHaveBeenCalledWith(409);
+});
+
+test('createPortalUser returns 409 when apiSystem already has a portal user', async () => {
+  mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'sys1', mode: 'PUSH', slug: 'virtuales' });
+  mockPrisma.user.findFirst.mockResolvedValue({ id: 'existing-portal' });
+  const req = mockReq({ id: 'sys1' }, { username: 'provider-x', password: 'passwordlong' });
+  const res = mockRes();
+  await providerController.createPortalUser(req, res);
+  expect(res.status).toHaveBeenCalledWith(409);
+  expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringMatching(/ya tiene un usuario portal/i) }));
+  expect(mockPrisma.user.create).not.toHaveBeenCalled();
+});
+
+test('createPortalUser returns 409 when prisma throws P2002 unique constraint', async () => {
+  mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'sys1', mode: 'PUSH', slug: 'virtuales' });
+  mockPrisma.user.findFirst.mockResolvedValue(null);
+  mockPrisma.user.findUnique.mockResolvedValue(null);
+  mockPrisma.user.create.mockRejectedValue({ code: 'P2002' });
+  const req = mockReq({ id: 'sys1' }, { username: 'provider-x', password: 'passwordlong' });
   const res = mockRes();
   await providerController.createPortalUser(req, res);
   expect(res.status).toHaveBeenCalledWith(409);

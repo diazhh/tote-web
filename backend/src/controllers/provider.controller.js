@@ -157,7 +157,8 @@ class ProviderController {
   async createPortalUser(req, res) {
     try {
       const { id } = req.params;
-      const { username, password } = req.body || {};
+      let { username, password } = req.body || {};
+      if (typeof username === 'string') username = username.trim().toLowerCase();
 
       if (!username || typeof username !== 'string' || username.length < 3) {
         return res.status(400).json({ error: 'Username inválido (mínimo 3 caracteres)' });
@@ -172,23 +173,39 @@ class ProviderController {
         return res.status(400).json({ error: 'Solo proveedores PUSH pueden tener portal' });
       }
 
-      const existing = await prisma.user.findUnique({ where: { username } });
-      if (existing) return res.status(409).json({ error: 'Username ya existe' });
+      // Enforce one portal user per ApiSystem
+      const existingPortal = await prisma.user.findFirst({
+        where: { apiSystemId: id, role: 'PROVIDER' },
+      });
+      if (existingPortal) {
+        return res.status(409).json({ error: 'Este proveedor ya tiene un usuario portal. Use reset password.' });
+      }
+
+      const existingUsername = await prisma.user.findUnique({ where: { username } });
+      if (existingUsername) return res.status(409).json({ error: 'Username ya existe' });
 
       const hashedPassword = await bcrypt.hash(password, 10);
-      const user = await prisma.user.create({
-        data: {
-          username,
-          password: hashedPassword,
-          role: 'PROVIDER',
-          apiSystemId: id,
-          isActive: true,
-        },
-        select: { id: true, username: true, role: true, apiSystemId: true, createdAt: true },
-      });
-
-      logger.info(`Portal user creado para proveedor ${id}: ${username}`);
-      return res.status(201).json(user);
+      const email = `portal-${system.slug}@internal.tote`;
+      try {
+        const user = await prisma.user.create({
+          data: {
+            username,
+            email,
+            password: hashedPassword,
+            role: 'PROVIDER',
+            apiSystemId: id,
+            isActive: true,
+          },
+          select: { id: true, username: true, role: true, apiSystemId: true, createdAt: true },
+        });
+        logger.info(`Portal user creado para apiSystem ${id}: user=${user.id}`);
+        return res.status(201).json(user);
+      } catch (createErr) {
+        if (createErr.code === 'P2002') {
+          return res.status(409).json({ error: 'Usuario ya existe (colisión de unique)' });
+        }
+        throw createErr;
+      }
     } catch (error) {
       logger.error('Error en createPortalUser:', error);
       return res.status(500).json({ error: 'Error interno' });
