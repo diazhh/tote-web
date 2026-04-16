@@ -15,32 +15,32 @@ datasource db {
 // ============================================
 
 model Game {
-  id            String        @id @default(uuid())
-  name          String        // "LOTOANIMALITO", "TRIPLE PANTERA"
-  type          GameType      // "ANIMALITOS" | "TRIPLE" | "ROULETTE"
-  slug          String        @unique
-  totalNumbers  Int           // 38 para animalitos, 1000 para triple
-  isActive      Boolean       @default(true)
-  description   String?
-  logoUrl       String?       // URL o path del logo del juego
-  config        Json?         // Configuración adicional del juego
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  
+  id           String   @id @default(uuid())
+  name         String // "LOTOANIMALITO", "TRIPLE PANTERA"
+  type         GameType // "ANIMALITOS" | "TRIPLE" | "ROULETTE"
+  slug         String   @unique
+  totalNumbers Int // 38 para animalitos, 1000 para triple
+  isActive     Boolean  @default(true)
+  description  String?
+  logoUrl      String? // URL o path del logo del juego
+  config       Json? // Configuración adicional del juego
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
   // Relación Terminal → Triple (linkedGameId apunta al juego padre)
-  linkedGameId  String?
-  linkedGame    Game?          @relation("LinkedGame", fields: [linkedGameId], references: [id])
-  linkedGames   Game[]         @relation("LinkedGame")
+  linkedGameId String?
+  linkedGame   Game?   @relation("LinkedGame", fields: [linkedGameId], references: [id])
+  linkedGames  Game[]  @relation("LinkedGame")
 
   // Relaciones
-  items         GameItem[]
-  templates     DrawTemplate[]
-  draws         Draw[]
-  pauses        DrawPause[]
-  apiConfigs    ApiConfiguration[]
-  channels      GameChannel[]
-  users         UserGame[]    // Usuarios asociados al juego
-  adminBots     AdminBotGame[] // Bots de admin asignados
+  items      GameItem[]
+  templates  DrawTemplate[]
+  draws      Draw[]
+  pauses     DrawPause[]
+  apiConfigs ApiConfiguration[]
+  channels   GameChannel[]
+  users      UserGame[] // Usuarios asociados al juego
+  adminBots  AdminBotGame[] // Bots de admin asignados
 
   @@index([slug])
   @@index([isActive])
@@ -59,23 +59,23 @@ enum GameType {
 // ============================================
 
 model GameItem {
-  id            String    @id @default(uuid())
-  gameId        String
-  number        String    // "00", "01", "000", "999"
-  name          String    // "BALLENA", "CARNERO", etc.
-  displayOrder  Int       // Para ordenar
-  multiplier    Decimal   @default(30.00) @db.Decimal(10, 2)
-  lastWin       DateTime? // Última vez que ganó
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  
+  id           String    @id @default(uuid())
+  gameId       String
+  number       String // "00", "01", "000", "999"
+  name         String // "BALLENA", "CARNERO", etc.
+  displayOrder Int // Para ordenar
+  multiplier   Decimal   @default(30.00) @db.Decimal(10, 2)
+  lastWin      DateTime? // Última vez que ganó
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
   // Relaciones
-  game                Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  drawsAsPreselected  Draw[]            @relation("PreselectedItem")
-  drawsAsWinner       Draw[]            @relation("WinnerItem")
-  ticketDetails       TicketDetail[]
-  
+  game               Game           @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  drawsAsPreselected Draw[]         @relation("PreselectedItem")
+  drawsAsWinner      Draw[]         @relation("WinnerItem")
+  ticketDetails      TicketDetail[]
+
   @@unique([gameId, number])
   @@index([gameId])
   @@index([gameId, isActive])
@@ -86,20 +86,20 @@ model GameItem {
 // ============================================
 
 model DrawTemplate {
-  id          String    @id @default(uuid())
+  id          String   @id @default(uuid())
   gameId      String
-  name        String    // "Plantilla Lunes-Viernes", "Plantilla Fin de Semana"
+  name        String // "Plantilla Lunes-Viernes", "Plantilla Fin de Semana"
   description String?
-  daysOfWeek  Int[]     // [1,2,3,4,5] (1=Lunes, 7=Domingo)
-  drawTimes   String[]  // ["08:00", "09:00", "10:00"]
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  daysOfWeek  Int[] // [1,2,3,4,5] (1=Lunes, 7=Domingo)
+  drawTimes   String[] // ["08:00", "09:00", "10:00"]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
   // Relaciones
-  game        Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  draws       Draw[]
-  
+  game  Game   @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  draws Draw[]
+
   @@index([gameId])
   @@index([isActive])
 }
@@ -109,49 +109,49 @@ model DrawTemplate {
 // ============================================
 
 model Draw {
-  id                  String        @id @default(uuid())
-  gameId              String
-  templateId          String?
-  drawDate            DateTime      @db.Date // Fecha del sorteo (solo fecha, sin hora)
-  drawTime            String        // Hora del sorteo en formato "HH:MM:SS"
-  scheduledAt         DateTime?     // DEPRECATED: Mantener por compatibilidad temporal, será eliminado
-  status              DrawStatus    @default(SCHEDULED)
-  preselectedItemId   String?       // Número preseleccionado (opcional)
-  winnerItemId        String?       // Número ganador
-  imageUrl            String?       // URL de la imagen generada
-  imageGenerated      Boolean       @default(false) // Si la imagen fue generada
-  imageGeneratedAt    DateTime?     // Cuando se generó la imagen
-  imageError          String?       // Error en generación de imagen
-  videoUrl            String?       // URL del video generado
-  videoGeneratedAt    DateTime?     // Cuando se generó el video
-  videoError          String?       // Error en generación de video
-  closedAt            DateTime?     // Cuando se cerró (5 min antes)
-  drawnAt             DateTime?     // Cuando se ejecutó
-  publishedAt         DateTime?     // Cuando se publicó
-  notes               String?       // Notas adicionales
+  id                String     @id @default(uuid())
+  gameId            String
+  templateId        String?
+  drawDate          DateTime   @db.Date // Fecha del sorteo (solo fecha, sin hora)
+  drawTime          String // Hora del sorteo en formato "HH:MM:SS"
+  scheduledAt       DateTime? // DEPRECATED: Mantener por compatibilidad temporal, será eliminado
+  status            DrawStatus @default(SCHEDULED)
+  preselectedItemId String? // Número preseleccionado (opcional)
+  winnerItemId      String? // Número ganador
+  imageUrl          String? // URL de la imagen generada
+  imageGenerated    Boolean    @default(false) // Si la imagen fue generada
+  imageGeneratedAt  DateTime? // Cuando se generó la imagen
+  imageError        String? // Error en generación de imagen
+  videoUrl          String? // URL del video generado
+  videoGeneratedAt  DateTime? // Cuando se generó el video
+  videoError        String? // Error en generación de video
+  closedAt          DateTime? // Cuando se cerró (5 min antes)
+  drawnAt           DateTime? // Cuando se ejecutó
+  publishedAt       DateTime? // Cuando se publicó
+  notes             String? // Notas adicionales
 
   // Idempotencia — evitan doble procesamiento
-  prizesProcessed     Boolean       @default(false)
-  statsCalculated     Boolean       @default(false)
+  prizesProcessed Boolean @default(false)
+  statsCalculated Boolean @default(false)
 
   // Tracking del pipeline pg-boss
-  pipelineJobId       String?       // ID del job principal en pg-boss
-  pipelineStatus      String?       // PENDING | IN_PROGRESS | COMPLETED | FAILED
+  pipelineJobId  String? // ID del job principal en pg-boss
+  pipelineStatus String? // PENDING | IN_PROGRESS | COMPLETED | FAILED
 
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relaciones
-  game                Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  template            DrawTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  preselectedItem     GameItem?         @relation("PreselectedItem", fields: [preselectedItemId], references: [id], onDelete: SetNull)
-  winnerItem          GameItem?         @relation("WinnerItem", fields: [winnerItemId], references: [id], onDelete: SetNull)
-  publications        DrawPublication[]
-  apiMappings         ApiDrawMapping[]
-  tickets             Ticket[]
-  stats               DrawStats?        // Estadísticas del sorteo
-  providerStats       ProviderStats[]   // Estadísticas por proveedor
-  
+  game            Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  template        DrawTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  preselectedItem GameItem?         @relation("PreselectedItem", fields: [preselectedItemId], references: [id], onDelete: SetNull)
+  winnerItem      GameItem?         @relation("WinnerItem", fields: [winnerItemId], references: [id], onDelete: SetNull)
+  publications    DrawPublication[]
+  apiMappings     ApiDrawMapping[]
+  tickets         Ticket[]
+  stats           DrawStats? // Estadísticas del sorteo
+  providerStats   ProviderStats[] // Estadísticas por proveedor
+
   @@index([gameId])
   @@index([drawDate])
   @@index([status])
@@ -161,10 +161,10 @@ model Draw {
 }
 
 enum DrawStatus {
-  SCHEDULED   // Programado
-  CLOSED      // Cerrado (5 min antes)
-  DRAWN       // Ejecutado (número seleccionado)
-  CANCELLED   // Cancelado
+  SCHEDULED // Programado
+  CLOSED // Cerrado (5 min antes)
+  DRAWN // Ejecutado (número seleccionado)
+  CANCELLED // Cancelado
 }
 
 // ============================================
@@ -172,20 +172,20 @@ enum DrawStatus {
 // ============================================
 
 model DrawPublication {
-  id          String            @id @default(uuid())
-  drawId      String
-  channel     Channel
-  status      PublicationStatus @default(PENDING)
-  sentAt      DateTime?
-  externalId  String?           // ID del mensaje en el canal (Telegram, etc)
-  error       String?
-  retries     Int               @default(0)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  
+  id         String            @id @default(uuid())
+  drawId     String
+  channel    Channel
+  status     PublicationStatus @default(PENDING)
+  sentAt     DateTime?
+  externalId String? // ID del mensaje en el canal (Telegram, etc)
+  error      String?
+  retries    Int               @default(0)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
   // Relaciones
-  draw        Draw              @relation(fields: [drawId], references: [id], onDelete: Cascade)
-  
+  draw Draw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
   @@unique([drawId, channel])
   @@index([drawId])
   @@index([status])
@@ -201,10 +201,10 @@ enum Channel {
 }
 
 enum PublicationStatus {
-  PENDING   // Pendiente
-  SENT      // Enviado
-  FAILED    // Fallido
-  SKIPPED   // Omitido
+  PENDING // Pendiente
+  SENT // Enviado
+  FAILED // Fallido
+  SKIPPED // Omitido
 }
 
 // ============================================
@@ -212,18 +212,18 @@ enum PublicationStatus {
 // ============================================
 
 model DrawPause {
-  id          String    @id @default(uuid())
-  gameId      String
-  startDate   DateTime  // Fecha de inicio
-  endDate     DateTime  // Fecha de fin
-  reason      String?   // Razón de la pausa
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  id        String   @id @default(uuid())
+  gameId    String
+  startDate DateTime // Fecha de inicio
+  endDate   DateTime // Fecha de fin
+  reason    String? // Razón de la pausa
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relaciones
-  game        Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
   @@index([gameId])
   @@index([startDate, endDate])
   @@index([gameId, isActive])
@@ -234,23 +234,23 @@ model DrawPause {
 // ============================================
 
 model SystemConfig {
-  id          String    @id @default(uuid())
-  key         String    @unique // Clave de configuración (ej: "emergency_stop")
-  value       String    // Valor (JSON string)
+  id          String   @id @default(uuid())
+  key         String   @unique // Clave de configuración (ej: "emergency_stop")
+  value       String // Valor (JSON string)
   description String?
-  updatedBy   String?   // Quién hizo el último cambio
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  updatedBy   String? // Quién hizo el último cambio
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([key])
 }
 
 model BetSimulatorConfig {
-  id              String    @id @default(uuid())
-  enabled         Boolean   @default(false)
-  lastExecutedAt  DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  enabled        Boolean   @default(false)
+  lastExecutedAt DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 // ============================================
@@ -258,14 +258,14 @@ model BetSimulatorConfig {
 // ============================================
 
 model ChannelConfig {
-  id          String    @id @default(uuid())
-  name        String    // "Canal Telegram Principal"
-  type        Channel
-  config      Json      // Credenciales y configuración (encriptada)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
+  id        String   @id @default(uuid())
+  name      String // "Canal Telegram Principal"
+  type      Channel
+  config    Json // Credenciales y configuración (encriptada)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@unique([type, name])
   @@index([type, isActive])
 }
@@ -275,34 +275,34 @@ model ChannelConfig {
 // ============================================
 
 model GameChannel {
-  id                    String    @id @default(uuid())
-  gameId                String
-  channelType           Channel   // TELEGRAM, WHATSAPP, etc.
-  name                  String    // "WhatsApp Principal", "Telegram VIP"
-  
+  id          String  @id @default(uuid())
+  gameId      String
+  channelType Channel // TELEGRAM, WHATSAPP, etc.
+  name        String // "WhatsApp Principal", "Telegram VIP"
+
   // Referencias a instancias de cada plataforma
-  whatsappInstanceId    String?   // ID de la instancia de WhatsApp
-  telegramInstanceId    String?   // ID de la instancia de Telegram
-  instagramInstanceId   String?   // ID de la instancia de Instagram
-  facebookInstanceId    String?   // ID de la instancia de Facebook
-  tiktokInstanceId      String?   // ID de la instancia de TikTok
-  
+  whatsappInstanceId  String? // ID de la instancia de WhatsApp
+  telegramInstanceId  String? // ID de la instancia de Telegram
+  instagramInstanceId String? // ID de la instancia de Instagram
+  facebookInstanceId  String? // ID de la instancia de Facebook
+  tiktokInstanceId    String? // ID de la instancia de TikTok
+
   // Configuración específica del canal (para compatibilidad)
-  telegramChatId        String?   // ID del chat/canal de Telegram (para TELEGRAM)
-  
+  telegramChatId String? // ID del chat/canal de Telegram (para TELEGRAM)
+
   // Plantilla de mensaje (Mustache syntax)
-  messageTemplate       String    @default("🎰 *{{gameName}}*\n\n⏰ Hora: {{time}}\n🎯 Resultado: *{{winnerNumber}}*\n🏆 {{winnerName}}\n\n✨ ¡Buena suerte en el próximo sorteo!")
-  
+  messageTemplate String @default("🎰 *{{gameName}}*\n\n⏰ Hora: {{time}}\n🎯 Resultado: *{{winnerNumber}}*\n🏆 {{winnerName}}\n\n✨ ¡Buena suerte en el próximo sorteo!")
+
   // Destinatarios (para canales que requieren lista de números/usuarios)
-  recipients            String[]  @default([]) // Array de números de teléfono o IDs de usuario
-  
-  isActive              Boolean   @default(true)
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-  
+  recipients String[] @default([]) // Array de números de teléfono o IDs de usuario
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   // Relaciones
-  game                  Game      @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
   @@unique([gameId, channelType, name])
   @@index([gameId])
   @@index([channelType])
@@ -319,48 +319,53 @@ model GameChannel {
 // ============================================
 
 model User {
-  id              String    @id @default(uuid())
-  username        String    @unique
-  email           String    @unique
-  password        String    // Hash bcrypt
-  role            UserRole  @default(OPERATOR)
-  telegramUserId  String?   @unique // Para bot de Telegram
-  telegramChatId  String?   // Chat ID para notificaciones directas
-  isActive        Boolean   @default(true)
-  lastLoginAt     DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  
+  id             String    @id @default(uuid())
+  username       String    @unique
+  email          String    @unique
+  password       String // Hash bcrypt
+  role           UserRole  @default(OPERATOR)
+  telegramUserId String?   @unique // Para bot de Telegram
+  telegramChatId String? // Chat ID para notificaciones directas
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
   // Campos para jugadores (PLAYER role)
-  phone                  String?   @unique
-  phoneVerified          Boolean   @default(false)
-  emailVerified          Boolean   @default(false)
-  whatsappVerified       Boolean   @default(false)
-  whatsappNotifications  Boolean   @default(false)
-  balance                Decimal   @default(0) @db.Decimal(12, 2)
-  blockedBalance         Decimal   @default(0) @db.Decimal(12, 2)
-  bonusBalance           Decimal   @default(0) @db.Decimal(12, 2)
+  phone                 String? @unique
+  phoneVerified         Boolean @default(false)
+  emailVerified         Boolean @default(false)
+  whatsappVerified      Boolean @default(false)
+  whatsappNotifications Boolean @default(false)
+  balance               Decimal @default(0) @db.Decimal(12, 2)
+  blockedBalance        Decimal @default(0) @db.Decimal(12, 2)
+  bonusBalance          Decimal @default(0) @db.Decimal(12, 2)
 
   // Relaciones
-  auditLogs       AuditLog[]
-  games           UserGame[]  // Juegos asociados al usuario
-  telegramLinkCode TelegramLinkCode? // Código de vinculación temporal
-  whatsappOtpCode  WhatsAppOtpCode?  // Código OTP de WhatsApp
+  auditLogs             AuditLog[]
+  games                 UserGame[] // Juegos asociados al usuario
+  telegramLinkCode      TelegramLinkCode? // Código de vinculación temporal
+  whatsappOtpCode       WhatsAppOtpCode? // Código OTP de WhatsApp
   emailVerificationCode EmailVerificationCode? // Código de verificación de email
-  passwordResetTokens   PasswordResetToken[]   // Tokens de recuperación de contraseña
-  tickets         Ticket[]
-  deposits        Deposit[]
-  withdrawals     Withdrawal[]
-  pagoMovilAccounts PagoMovilAccount[]
-  pageVisits      PageVisit[]
-  tripleBets      TripleBet[]
-  movements       PlayerMovement[]  // Historial de movimientos (trazabilidad)
-  playerStats     PlayerStats?      // Estadísticas acumuladas
-  
+  passwordResetTokens   PasswordResetToken[] // Tokens de recuperación de contraseña
+  tickets               Ticket[]
+  deposits              Deposit[]
+  withdrawals           Withdrawal[]
+  pagoMovilAccounts     PagoMovilAccount[]
+  pageVisits            PageVisit[]
+  tripleBets            TripleBet[]
+  movements             PlayerMovement[] // Historial de movimientos (trazabilidad)
+  playerStats           PlayerStats? // Estadísticas acumuladas
+
+  // Portal de proveedores: vincula el User con el ApiSystem al que pertenece (solo PROVIDER role)
+  apiSystemId String?
+  apiSystem   ApiSystem? @relation(fields: [apiSystemId], references: [id])
+
   @@index([username])
   @@index([email])
   @@index([isActive])
   @@index([phone])
+  @@index([apiSystemId])
 }
 
 // Relación muchos a muchos entre usuarios y juegos
@@ -370,21 +375,22 @@ model UserGame {
   gameId    String
   notify    Boolean  @default(true) // Si debe recibir notificaciones
   createdAt DateTime @default(now())
-  
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
   @@unique([userId, gameId])
   @@index([userId])
   @@index([gameId])
 }
 
 enum UserRole {
-  ADMIN           // Acceso completo
-  OPERATOR        // Gestión de sorteos
-  VIEWER          // Solo lectura
-  PLAYER          // Usuario jugador (taquilla online)
-  TAQUILLA_ADMIN  // Administrador de taquilla online
+  ADMIN // Acceso completo
+  OPERATOR // Gestión de sorteos
+  VIEWER // Solo lectura
+  PLAYER // Usuario jugador (taquilla online)
+  TAQUILLA_ADMIN // Administrador de taquilla online
+  PROVIDER // Usuario del portal de proveedores
 }
 
 // ============================================
@@ -392,19 +398,19 @@ enum UserRole {
 // ============================================
 
 model AuditLog {
-  id          String    @id @default(uuid())
-  userId      String?
-  action      String    // "DRAW_CREATED", "WINNER_CHANGED", etc.
-  entity      String    // "Draw", "Game", etc.
-  entityId    String
-  changes     Json?     // Cambios realizados
-  ipAddress   String?
-  userAgent   String?
-  createdAt   DateTime  @default(now())
-  
+  id        String   @id @default(uuid())
+  userId    String?
+  action    String // "DRAW_CREATED", "WINNER_CHANGED", etc.
+  entity    String // "Draw", "Game", etc.
+  entityId  String
+  changes   Json? // Cambios realizados
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
   // Relaciones
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@index([entity, entityId])
   @@index([createdAt])
@@ -416,20 +422,21 @@ model AuditLog {
 // ============================================
 
 model ApiSystem {
-  id            String          @id @default(uuid())
-  name          String          // "SRQ", "OtroSistema"
-  description   String?
-  slug          String          @unique
-  webhookToken  String?         @unique
-  mode          ApiSystemMode   @default(PULL)
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id           String        @id @default(uuid())
+  name         String // "SRQ", "OtroSistema"
+  description  String?
+  slug         String        @unique
+  webhookToken String?       @unique
+  mode         ApiSystemMode @default(PULL)
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   configurations ApiConfiguration[]
   comerciales    ProviderComercial[]
   webhookLogs    WebhookLog[]
   tickets        Ticket[]
+  users          User[]
 
   @@index([name])
   @@index([slug])
@@ -437,28 +444,28 @@ model ApiSystem {
 }
 
 enum ApiSystemMode {
-  PULL   // Provider polled by our system (SRQ pattern)
-  PUSH   // Provider sends webhooks to our endpoint
+  PULL // Provider polled by our system (SRQ pattern)
+  PUSH // Provider sends webhooks to our endpoint
 }
 
 enum WebhookLogStatus {
-  DISCOVERED   // Received; no adapter exists yet (discovery mode)
-  PROCESSED    // Adapter ran and ticket was created successfully
-  DUPLICATE    // Payload matched an already-processed event
-  FAILED       // Processing threw an error
+  DISCOVERED // Received; no adapter exists yet (discovery mode)
+  PROCESSED // Adapter ran and ticket was created successfully
+  DUPLICATE // Payload matched an already-processed event
+  FAILED // Processing threw an error
 }
 
 model WebhookLog {
-  id            String           @id @default(uuid())
-  apiSystemId   String
-  rawPayload    String           // Full request body as string (not Json — avoids parse failures on malformed bodies)
-  headers       Json?            // Request headers (for Phase 4 log inspector — LOGS-04)
-  status        WebhookLogStatus @default(DISCOVERED)
-  errorMessage  String?          // Set when status = FAILED; null otherwise
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id           String           @id @default(uuid())
+  apiSystemId  String
+  rawPayload   String // Full request body as string (not Json — avoids parse failures on malformed bodies)
+  headers      Json? // Request headers (for Phase 4 log inspector — LOGS-04)
+  status       WebhookLogStatus @default(DISCOVERED)
+  errorMessage String? // Set when status = FAILED; null otherwise
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
 
-  apiSystem     ApiSystem        @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
+  apiSystem ApiSystem @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
 
   @@index([apiSystemId])
   @@index([status])
@@ -467,24 +474,24 @@ model WebhookLog {
 }
 
 model ApiConfiguration {
-  id            String            @id @default(uuid())
-  name          String            // "SRQ Planificación Juego X"
+  id            String        @id @default(uuid())
+  name          String // "SRQ Planificación Juego X"
   apiSystemId   String
   gameId        String
-  type          ApiConfigType     // "PLANNING" | "SALES"
-  baseUrl       String            // URL base del endpoint
-  token         String            // Token de autenticación
-  tripletaUrl   String?           // URL para tripleta (opcional, específico por juego)
-  tripletaToken String?           // Token para tripleta (opcional, específico por juego)
-  isActive      Boolean           @default(true)
-  createdAt     DateTime          @default(now())
-  updatedAt     DateTime          @updatedAt
-  
+  type          ApiConfigType // "PLANNING" | "SALES"
+  baseUrl       String // URL base del endpoint
+  token         String // Token de autenticación
+  tripletaUrl   String? // URL para tripleta (opcional, específico por juego)
+  tripletaToken String? // Token para tripleta (opcional, específico por juego)
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
   // Relaciones
-  apiSystem     ApiSystem         @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
-  game          Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  drawMappings  ApiDrawMapping[]
-  
+  apiSystem    ApiSystem        @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
+  game         Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  drawMappings ApiDrawMapping[]
+
   @@index([apiSystemId])
   @@index([gameId])
   @@index([type])
@@ -492,22 +499,22 @@ model ApiConfiguration {
 }
 
 enum ApiConfigType {
-  PLANNING  // Para obtener planificación de sorteos
-  SALES     // Para obtener ventas/tickets
+  PLANNING // Para obtener planificación de sorteos
+  SALES // Para obtener ventas/tickets
 }
 
 model ApiDrawMapping {
-  id              String            @id @default(uuid())
-  apiConfigId     String
-  drawId          String
-  externalDrawId  String            // ID del sorteo en el sistema externo
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id             String   @id @default(uuid())
+  apiConfigId    String
+  drawId         String
+  externalDrawId String // ID del sorteo en el sistema externo
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
   // Relaciones
-  apiConfig       ApiConfiguration  @relation(fields: [apiConfigId], references: [id], onDelete: Cascade)
-  draw            Draw              @relation(fields: [drawId], references: [id], onDelete: Cascade)
-  
+  apiConfig ApiConfiguration @relation(fields: [apiConfigId], references: [id], onDelete: Cascade)
+  draw      Draw             @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
   @@unique([externalDrawId])
   @@unique([drawId, apiConfigId])
   @@index([apiConfigId])
@@ -520,67 +527,67 @@ model ApiDrawMapping {
 // ============================================
 
 model ProviderComercial {
-  id            String          @id @default(uuid())
-  externalId    Int             // ID del proveedor externo
-  apiSystemId   String          // ID del ApiSystem (proveedor)
-  name          String?         // Nombre (se llenará después)
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  
-  apiSystem     ApiSystem       @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
-  bancas        ProviderBanca[]
-  
+  id          String   @id @default(uuid())
+  externalId  Int // ID del proveedor externo
+  apiSystemId String // ID del ApiSystem (proveedor)
+  name        String? // Nombre (se llenará después)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  apiSystem ApiSystem       @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
+  bancas    ProviderBanca[]
+
   @@unique([apiSystemId, externalId])
   @@index([apiSystemId])
   @@index([externalId])
 }
 
 model ProviderBanca {
-  id            String              @id @default(uuid())
-  externalId    Int                 // ID del proveedor externo
-  comercialId   String
-  name          String?
-  isActive      Boolean             @default(true)
-  createdAt     DateTime            @default(now())
-  updatedAt     DateTime            @updatedAt
-  
-  comercial     ProviderComercial   @relation(fields: [comercialId], references: [id], onDelete: Cascade)
-  grupos        ProviderGrupo[]
-  
+  id          String   @id @default(uuid())
+  externalId  Int // ID del proveedor externo
+  comercialId String
+  name        String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  comercial ProviderComercial @relation(fields: [comercialId], references: [id], onDelete: Cascade)
+  grupos    ProviderGrupo[]
+
   @@unique([comercialId, externalId])
   @@index([comercialId])
   @@index([externalId])
 }
 
 model ProviderGrupo {
-  id            String          @id @default(uuid())
-  externalId    Int
-  bancaId       String
-  name          String?
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  
-  banca         ProviderBanca   @relation(fields: [bancaId], references: [id], onDelete: Cascade)
-  taquillas     ProviderTaquilla[]
-  
+  id         String   @id @default(uuid())
+  externalId Int
+  bancaId    String
+  name       String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  banca     ProviderBanca      @relation(fields: [bancaId], references: [id], onDelete: Cascade)
+  taquillas ProviderTaquilla[]
+
   @@unique([bancaId, externalId])
   @@index([bancaId])
   @@index([externalId])
 }
 
 model ProviderTaquilla {
-  id            String          @id @default(uuid())
-  externalId    Int
-  grupoId       String
-  name          String?
-  isActive      Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  
-  grupo         ProviderGrupo   @relation(fields: [grupoId], references: [id], onDelete: Cascade)
-  
+  id         String   @id @default(uuid())
+  externalId Int
+  grupoId    String
+  name       String?
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  grupo ProviderGrupo @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+
   @@unique([grupoId, externalId])
   @@index([grupoId])
   @@index([externalId])
@@ -592,49 +599,49 @@ model ProviderTaquilla {
 
 // Instancias de WhatsApp (mantener compatibilidad)
 model WhatsAppInstance {
-  id              String            @id @default(uuid())
-  instanceId      String            @unique // ID único de la instancia (ej: "instance-1")
-  name            String            // Nombre descriptivo
-  phoneNumber     String?           // Número de teléfono conectado
-  status          WhatsAppStatus    @default(DISCONNECTED)
-  qrCode          String?           // Último QR generado
-  qrGeneratedAt   DateTime?         // Cuando se generó el QR
-  connectedAt     DateTime?         // Cuando se conectó por última vez
-  lastSeen        DateTime          @default(now()) // Última actividad
-  sessionData     Json?             // Datos adicionales de la sesión
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id            String         @id @default(uuid())
+  instanceId    String         @unique // ID único de la instancia (ej: "instance-1")
+  name          String // Nombre descriptivo
+  phoneNumber   String? // Número de teléfono conectado
+  status        WhatsAppStatus @default(DISCONNECTED)
+  qrCode        String? // Último QR generado
+  qrGeneratedAt DateTime? // Cuando se generó el QR
+  connectedAt   DateTime? // Cuando se conectó por última vez
+  lastSeen      DateTime       @default(now()) // Última actividad
+  sessionData   Json? // Datos adicionales de la sesión
+  isActive      Boolean        @default(true)
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
   @@index([instanceId])
   @@index([status])
   @@index([isActive])
 }
 
 enum WhatsAppStatus {
-  CONNECTING      // Iniciando conexión
-  QR_READY        // QR generado, esperando escaneo
-  CONNECTED       // Conectado y activo
-  DISCONNECTED    // Desconectado
-  LOGGED_OUT      // Sesión cerrada por el usuario
+  CONNECTING // Iniciando conexión
+  QR_READY // QR generado, esperando escaneo
+  CONNECTED // Conectado y activo
+  DISCONNECTED // Desconectado
+  LOGGED_OUT // Sesión cerrada por el usuario
 }
 
 // Instancias de Telegram
 model TelegramInstance {
-  id              String            @id @default(uuid())
-  instanceId      String            @unique // ID único de la instancia
-  name            String            // Nombre descriptivo
-  botToken        String            // Token del bot de Telegram
-  chatId          String?           // ID del chat/canal por defecto
-  webhookUrl      String?           // URL del webhook (opcional)
-  status          PlatformStatus    @default(DISCONNECTED)
-  connectedAt     DateTime?         // Cuando se conectó por última vez
-  lastSeen        DateTime          @default(now()) // Última actividad
-  config          Json?             // Configuración adicional
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id          String         @id @default(uuid())
+  instanceId  String         @unique // ID único de la instancia
+  name        String // Nombre descriptivo
+  botToken    String // Token del bot de Telegram
+  chatId      String? // ID del chat/canal por defecto
+  webhookUrl  String? // URL del webhook (opcional)
+  status      PlatformStatus @default(DISCONNECTED)
+  connectedAt DateTime? // Cuando se conectó por última vez
+  lastSeen    DateTime       @default(now()) // Última actividad
+  config      Json? // Configuración adicional
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
   @@index([instanceId])
   @@index([status])
   @@index([isActive])
@@ -642,24 +649,24 @@ model TelegramInstance {
 
 // Instancias de Instagram
 model InstagramInstance {
-  id              String            @id @default(uuid())
-  instanceId      String            @unique // ID único de la instancia
-  name            String            // Nombre descriptivo
-  appId           String            // Facebook App ID
-  appSecret       String            // Facebook App Secret (encriptado)
-  accessToken     String?           // Access token de Instagram
-  refreshToken    String?           // Refresh token
-  tokenExpiresAt  DateTime?         // Expiración del token
-  userId          String?           // Instagram User ID
-  username        String?           // Instagram username
-  status          PlatformStatus    @default(DISCONNECTED)
-  connectedAt     DateTime?         // Cuando se conectó por última vez
-  lastSeen        DateTime          @default(now()) // Última actividad
-  config          Json?             // Configuración adicional
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id             String         @id @default(uuid())
+  instanceId     String         @unique // ID único de la instancia
+  name           String // Nombre descriptivo
+  appId          String // Facebook App ID
+  appSecret      String // Facebook App Secret (encriptado)
+  accessToken    String? // Access token de Instagram
+  refreshToken   String? // Refresh token
+  tokenExpiresAt DateTime? // Expiración del token
+  userId         String? // Instagram User ID
+  username       String? // Instagram username
+  status         PlatformStatus @default(DISCONNECTED)
+  connectedAt    DateTime? // Cuando se conectó por última vez
+  lastSeen       DateTime       @default(now()) // Última actividad
+  config         Json? // Configuración adicional
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
   @@index([instanceId])
   @@index([status])
   @@index([isActive])
@@ -667,22 +674,22 @@ model InstagramInstance {
 
 // Instancias de Facebook
 model FacebookInstance {
-  id              String            @id @default(uuid())
-  instanceId      String            @unique // ID único de la instancia
-  name            String            // Nombre descriptivo
-  pageAccessToken String            // Page Access Token (encriptado)
-  appSecret       String            // App Secret (encriptado)
-  webhookToken    String            // Webhook verify token
-  pageId          String            // Facebook Page ID
-  pageName        String?           // Nombre de la página
-  status          PlatformStatus    @default(DISCONNECTED)
-  connectedAt     DateTime?         // Cuando se conectó por última vez
-  lastSeen        DateTime          @default(now()) // Última actividad
-  config          Json?             // Configuración adicional
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id              String         @id @default(uuid())
+  instanceId      String         @unique // ID único de la instancia
+  name            String // Nombre descriptivo
+  pageAccessToken String // Page Access Token (encriptado)
+  appSecret       String // App Secret (encriptado)
+  webhookToken    String // Webhook verify token
+  pageId          String // Facebook Page ID
+  pageName        String? // Nombre de la página
+  status          PlatformStatus @default(DISCONNECTED)
+  connectedAt     DateTime? // Cuando se conectó por última vez
+  lastSeen        DateTime       @default(now()) // Última actividad
+  config          Json? // Configuración adicional
+  isActive        Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
   @@index([instanceId])
   @@index([status])
   @@index([isActive])
@@ -690,25 +697,25 @@ model FacebookInstance {
 
 // Instancias de TikTok
 model TikTokInstance {
-  id              String            @id @default(uuid())
-  instanceId      String            @unique // ID único de la instancia
-  name            String            // Nombre descriptivo
-  clientKey       String            // TikTok Client Key
-  clientSecret    String            // TikTok Client Secret (encriptado)
-  accessToken     String?           // Access token
-  refreshToken    String?           // Refresh token
-  tokenExpiresAt  DateTime?         // Expiración del access token
-  refreshExpiresAt DateTime?        // Expiración del refresh token
-  openId          String?           // TikTok Open ID del usuario
-  scope           String?           // Permisos autorizados
-  status          PlatformStatus    @default(DISCONNECTED)
-  connectedAt     DateTime?         // Cuando se conectó por última vez
-  lastSeen        DateTime          @default(now()) // Última actividad
-  config          Json?             // Configuración adicional
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id               String         @id @default(uuid())
+  instanceId       String         @unique // ID único de la instancia
+  name             String // Nombre descriptivo
+  clientKey        String // TikTok Client Key
+  clientSecret     String // TikTok Client Secret (encriptado)
+  accessToken      String? // Access token
+  refreshToken     String? // Refresh token
+  tokenExpiresAt   DateTime? // Expiración del access token
+  refreshExpiresAt DateTime? // Expiración del refresh token
+  openId           String? // TikTok Open ID del usuario
+  scope            String? // Permisos autorizados
+  status           PlatformStatus @default(DISCONNECTED)
+  connectedAt      DateTime? // Cuando se conectó por última vez
+  lastSeen         DateTime       @default(now()) // Última actividad
+  config           Json? // Configuración adicional
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
   @@index([instanceId])
   @@index([status])
   @@index([isActive])
@@ -716,11 +723,11 @@ model TikTokInstance {
 
 // Estado común para todas las plataformas (excepto WhatsApp que mantiene su enum)
 enum PlatformStatus {
-  CONNECTING      // Iniciando conexión
-  CONNECTED       // Conectado y activo
-  DISCONNECTED    // Desconectado
-  ERROR           // Error de conexión
-  EXPIRED         // Token expirado
+  CONNECTING // Iniciando conexión
+  CONNECTED // Conectado y activo
+  DISCONNECTED // Desconectado
+  ERROR // Error de conexión
+  EXPIRED // Token expirado
 }
 
 // ============================================
@@ -729,32 +736,32 @@ enum PlatformStatus {
 
 // Bot de Telegram para notificaciones a administradores
 model AdminTelegramBot {
-  id              String            @id @default(uuid())
-  name            String            // Nombre descriptivo del bot
-  botToken        String            @unique // Token del bot de Telegram
-  botUsername     String?           // Username del bot (@bot_name)
-  status          PlatformStatus    @default(DISCONNECTED)
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-  
+  id          String         @id @default(uuid())
+  name        String // Nombre descriptivo del bot
+  botToken    String         @unique // Token del bot de Telegram
+  botUsername String? // Username del bot (@bot_name)
+  status      PlatformStatus @default(DISCONNECTED)
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
   // Relaciones
-  gameAssignments AdminBotGame[]    // Juegos asignados a este bot
-  
+  gameAssignments AdminBotGame[] // Juegos asignados a este bot
+
   @@index([status])
   @@index([isActive])
 }
 
 // Relación entre bots de admin y juegos
 model AdminBotGame {
-  id        String           @id @default(uuid())
+  id        String   @id @default(uuid())
   botId     String
   gameId    String
-  createdAt DateTime         @default(now())
-  
-  bot       AdminTelegramBot @relation(fields: [botId], references: [id], onDelete: Cascade)
-  game      Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  
+  createdAt DateTime @default(now())
+
+  bot  AdminTelegramBot @relation(fields: [botId], references: [id], onDelete: Cascade)
+  game Game             @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
   @@unique([botId, gameId])
   @@index([botId])
   @@index([gameId])
@@ -768,7 +775,7 @@ model TelegramLinkCode {
   expiresAt DateTime // Expira en 10 minutos
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([code])
   @@index([expiresAt])
@@ -778,13 +785,13 @@ model TelegramLinkCode {
 model WhatsAppOtpCode {
   id        String   @id @default(uuid())
   userId    String   @unique
-  phone     String   // Número al que se envió el OTP
-  code      String   // Código de 6 dígitos
+  phone     String // Número al que se envió el OTP
+  code      String // Código de 6 dígitos
   expiresAt DateTime // Expira en 10 minutos
   attempts  Int      @default(0) // Intentos de verificación
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([code])
   @@index([expiresAt])
@@ -798,12 +805,12 @@ model EmailVerificationCode {
   id        String   @id @default(uuid())
   userId    String   @unique
   email     String
-  code      String   // Código de 6 dígitos
+  code      String // Código de 6 dígitos
   expiresAt DateTime
   attempts  Int      @default(0)
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([email, code])
   @@index([expiresAt])
@@ -817,7 +824,7 @@ model PasswordResetToken {
   used      Boolean  @default(false)
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([token])
   @@index([expiresAt])
@@ -829,68 +836,68 @@ model PasswordResetToken {
 
 // Cuentas Pago Móvil del Sistema (para recibir pagos)
 model SystemPagoMovil {
-  id          String    @id @default(uuid())
-  bankCode    String    // Código del banco (0102, 0134, etc.)
-  bankName    String    // Nombre del banco
-  phone       String    // Número de teléfono
-  cedula      String    // Cédula del titular
-  holderName  String    // Nombre del titular
-  isActive    Boolean   @default(true)
-  priority    Int       @default(0) // Para ordenar cuál mostrar primero
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  deposits    Deposit[]
-  
+  id         String   @id @default(uuid())
+  bankCode   String // Código del banco (0102, 0134, etc.)
+  bankName   String // Nombre del banco
+  phone      String // Número de teléfono
+  cedula     String // Cédula del titular
+  holderName String // Nombre del titular
+  isActive   Boolean  @default(true)
+  priority   Int      @default(0) // Para ordenar cuál mostrar primero
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  deposits Deposit[]
+
   @@index([isActive])
   @@index([priority])
 }
 
 // Cuentas Pago Móvil del Usuario (para recibir retiros)
 model PagoMovilAccount {
-  id          String    @id @default(uuid())
-  userId      String
-  bankCode    String
-  bankName    String
-  phone       String
-  cedula      String
-  holderName  String
-  isDefault   Boolean   @default(false)
-  isActive    Boolean   @default(true)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  userId     String
+  bankCode   String
+  bankName   String
+  phone      String
+  cedula     String
+  holderName String
+  isDefault  Boolean  @default(false)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   withdrawals Withdrawal[]
-  
+
   @@index([userId])
   @@index([userId, isDefault])
 }
 
 enum DepositStatus {
-  PENDING     // Esperando validación
-  APPROVED    // Aprobado, saldo acreditado
-  REJECTED    // Rechazado
+  PENDING // Esperando validación
+  APPROVED // Aprobado, saldo acreditado
+  REJECTED // Rechazado
 }
 
 model Deposit {
-  id                  String        @id @default(uuid())
-  userId              String
-  systemPagoMovilId   String
-  amount              Decimal       @db.Decimal(12, 2)
-  reference           String        // Referencia del pago móvil
-  phone               String        // Teléfono desde donde se hizo el pago
-  bankCode            String        // Banco origen
-  status              DepositStatus @default(PENDING)
-  notes               String?       // Notas del admin
-  processedBy         String?       // ID del admin que procesó
-  processedAt         DateTime?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  
-  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  systemPagoMovil     SystemPagoMovil @relation(fields: [systemPagoMovilId], references: [id])
-  
+  id                String        @id @default(uuid())
+  userId            String
+  systemPagoMovilId String
+  amount            Decimal       @db.Decimal(12, 2)
+  reference         String // Referencia del pago móvil
+  phone             String // Teléfono desde donde se hizo el pago
+  bankCode          String // Banco origen
+  status            DepositStatus @default(PENDING)
+  notes             String? // Notas del admin
+  processedBy       String? // ID del admin que procesó
+  processedAt       DateTime?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  systemPagoMovil SystemPagoMovil @relation(fields: [systemPagoMovilId], references: [id])
+
   @@index([userId])
   @@index([status])
   @@index([reference])
@@ -898,29 +905,29 @@ model Deposit {
 }
 
 enum WithdrawalStatus {
-  PENDING     // Solicitado, saldo bloqueado
-  PROCESSING  // En proceso de pago
-  COMPLETED   // Pagado
-  REJECTED    // Rechazado, saldo desbloqueado
-  CANCELLED   // Cancelado por usuario
+  PENDING // Solicitado, saldo bloqueado
+  PROCESSING // En proceso de pago
+  COMPLETED // Pagado
+  REJECTED // Rechazado, saldo desbloqueado
+  CANCELLED // Cancelado por usuario
 }
 
 model Withdrawal {
-  id                  String            @id @default(uuid())
-  userId              String
-  pagoMovilAccountId  String
-  amount              Decimal           @db.Decimal(12, 2)
-  status              WithdrawalStatus  @default(PENDING)
-  reference           String?           // Referencia del pago realizado
-  notes               String?
-  processedBy         String?
-  processedAt         DateTime?
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
-  
-  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  pagoMovilAccount    PagoMovilAccount  @relation(fields: [pagoMovilAccountId], references: [id])
-  
+  id                 String           @id @default(uuid())
+  userId             String
+  pagoMovilAccountId String
+  amount             Decimal          @db.Decimal(12, 2)
+  status             WithdrawalStatus @default(PENDING)
+  reference          String? // Referencia del pago realizado
+  notes              String?
+  processedBy        String?
+  processedAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pagoMovilAccount PagoMovilAccount @relation(fields: [pagoMovilAccountId], references: [id])
+
   @@index([userId])
   @@index([status])
   @@index([createdAt])
@@ -931,49 +938,50 @@ model Withdrawal {
 // ============================================
 
 enum TicketStatus {
-  ACTIVE      // Ticket activo, sorteo no ha ocurrido
-  WON         // Ticket ganador
-  LOST        // Ticket perdedor
-  CANCELLED   // Cancelado (reembolsado)
+  ACTIVE // Ticket activo, sorteo no ha ocurrido
+  WON // Ticket ganador
+  LOST // Ticket perdedor
+  CANCELLED // Cancelado (reembolsado)
 }
 
 enum TicketSource {
-  TAQUILLA_ONLINE   // Jugado por usuario en la plataforma
-  EXTERNAL_API      // Importado de proveedor externo (SRQ, etc)
-  WEBHOOK_PUSH      // Received via webhook from a PUSH provider (Phase 2+)
+  TAQUILLA_ONLINE // Jugado por usuario en la plataforma
+  EXTERNAL_API // Importado de proveedor externo (SRQ, etc)
+  WEBHOOK_PUSH // Received via webhook from a PUSH provider (Phase 2+)
 }
 
 model Ticket {
-  id              String        @id @default(uuid())
-  ticketNumber    Int           @default(autoincrement()) @unique // Numero secuencial para proveedores externos
-  userId          String?       // Null para tickets externos
-  drawId          String
-  source          TicketSource  @default(TAQUILLA_ONLINE)
-  externalTicketId String?      // ID del ticket en el sistema externo (para SRQ)
-  totalAmount     Decimal       @db.Decimal(12, 2)
-  totalPrize      Decimal       @default(0) @db.Decimal(12, 2)
-  status          TicketStatus  @default(ACTIVE)
-  providerData    Json?         // Datos del proveedor (comercial, banca, grupo, taquilla)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  
-  apiSystemId     String?       // Proveedor que creó el ticket (PUSH/PULL)
+  id               String       @id @default(uuid())
+  ticketNumber     Int          @unique @default(autoincrement()) // Numero secuencial para proveedores externos
+  userId           String? // Null para tickets externos
+  drawId           String
+  source           TicketSource @default(TAQUILLA_ONLINE)
+  externalTicketId String? // ID del ticket en el sistema externo (para SRQ)
+  totalAmount      Decimal      @db.Decimal(12, 2)
+  totalPrize       Decimal      @default(0) @db.Decimal(12, 2)
+  status           TicketStatus @default(ACTIVE)
+  providerData     Json? // Datos del proveedor (comercial, banca, grupo, taquilla)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
-  user            User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  draw            Draw          @relation(fields: [drawId], references: [id], onDelete: Cascade)
-  apiSystem       ApiSystem?    @relation(fields: [apiSystemId], references: [id])
-  details         TicketDetail[]
+  apiSystemId String? // Proveedor que creó el ticket (PUSH/PULL)
 
+  user      User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  draw      Draw           @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  apiSystem ApiSystem?     @relation(fields: [apiSystemId], references: [id])
+  details   TicketDetail[]
+
+  @@unique([drawId, externalTicketId, source])
   @@index([userId])
   @@index([drawId])
   @@index([status])
   @@index([source])
   @@index([externalTicketId])
-  @@unique([drawId, externalTicketId, source])
   @@index([userId, status])
   @@index([drawId, source])
   @@index([createdAt])
   @@index([apiSystemId])
+  @@index([apiSystemId, createdAt])
 }
 
 enum TicketDetailStatus {
@@ -984,19 +992,19 @@ enum TicketDetailStatus {
 }
 
 model TicketDetail {
-  id          String              @id @default(uuid())
-  ticketId    String
-  gameItemId  String
-  drawId      String?             // Sorteo específico de este detalle (para tickets multi-sorteo)
-  amount      Decimal             @db.Decimal(12, 2)
-  multiplier  Decimal             @db.Decimal(10, 2) // Multiplicador al momento de la jugada
-  prize       Decimal             @default(0) @db.Decimal(12, 2)
-  status      TicketDetailStatus  @default(ACTIVE)
-  createdAt   DateTime            @default(now())
-  
-  ticket      Ticket              @relation(fields: [ticketId], references: [id], onDelete: Cascade)
-  gameItem    GameItem            @relation(fields: [gameItemId], references: [id])
-  
+  id         String             @id @default(uuid())
+  ticketId   String
+  gameItemId String
+  drawId     String? // Sorteo específico de este detalle (para tickets multi-sorteo)
+  amount     Decimal            @db.Decimal(12, 2)
+  multiplier Decimal            @db.Decimal(10, 2) // Multiplicador al momento de la jugada
+  prize      Decimal            @default(0) @db.Decimal(12, 2)
+  status     TicketDetailStatus @default(ACTIVE)
+  createdAt  DateTime           @default(now())
+
+  ticket   Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  gameItem GameItem @relation(fields: [gameItemId], references: [id])
+
   @@index([ticketId])
   @@index([gameItemId])
   @@index([drawId])
@@ -1007,33 +1015,33 @@ model TicketDetail {
 // ============================================
 
 enum TripletaStatus {
-  ACTIVE      // Activa, esperando resultados
-  WON         // Ganadora
-  LOST        // Perdedora
-  EXPIRED     // Expirada sin ganar
+  ACTIVE // Activa, esperando resultados
+  WON // Ganadora
+  LOST // Perdedora
+  EXPIRED // Expirada sin ganar
 }
 
 model TripleBet {
-  id              String          @id @default(uuid())
-  userId          String
-  gameId          String
-  item1Id         String          // Primer número seleccionado
-  item2Id         String          // Segundo número seleccionado
-  item3Id         String          // Tercer número seleccionado
-  amount          Decimal         @db.Decimal(12, 2)
-  multiplier      Decimal         @db.Decimal(10, 2) // Multiplicador configurado al momento de la apuesta
-  drawsCount      Int             // Cantidad de sorteos que aplica
-  startDrawId     String          // Sorteo inicial (siguiente al momento de la apuesta)
-  endDrawId       String?         // Sorteo final (se calcula al crear)
-  winnerDrawId    String?         // Sorteo en el que ganó (si aplica)
-  prize           Decimal         @default(0) @db.Decimal(12, 2)
-  status          TripletaStatus  @default(ACTIVE)
-  expiresAt       DateTime        // Fecha de expiración (basada en el último sorteo)
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
-  
-  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id           String         @id @default(uuid())
+  userId       String
+  gameId       String
+  item1Id      String // Primer número seleccionado
+  item2Id      String // Segundo número seleccionado
+  item3Id      String // Tercer número seleccionado
+  amount       Decimal        @db.Decimal(12, 2)
+  multiplier   Decimal        @db.Decimal(10, 2) // Multiplicador configurado al momento de la apuesta
+  drawsCount   Int // Cantidad de sorteos que aplica
+  startDrawId  String // Sorteo inicial (siguiente al momento de la apuesta)
+  endDrawId    String? // Sorteo final (se calcula al crear)
+  winnerDrawId String? // Sorteo en el que ganó (si aplica)
+  prize        Decimal        @default(0) @db.Decimal(12, 2)
+  status       TripletaStatus @default(ACTIVE)
+  expiresAt    DateTime // Fecha de expiración (basada en el último sorteo)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([gameId])
   @@index([status])
@@ -1047,31 +1055,31 @@ model TripleBet {
 // ============================================
 
 enum MovementType {
-  DEPOSIT         // Recarga de saldo
-  WITHDRAWAL      // Retiro de saldo
-  BET             // Jugada (descuento de saldo)
-  PRIZE           // Premio ganado
-  REFUND          // Reembolso (cancelación de ticket)
-  ADJUSTMENT      // Ajuste manual por admin
-  BONUS           // Bonificación
+  DEPOSIT // Recarga de saldo
+  WITHDRAWAL // Retiro de saldo
+  BET // Jugada (descuento de saldo)
+  PRIZE // Premio ganado
+  REFUND // Reembolso (cancelación de ticket)
+  ADJUSTMENT // Ajuste manual por admin
+  BONUS // Bonificación
 }
 
 model PlayerMovement {
-  id              String        @id @default(uuid())
-  userId          String
-  type            MovementType
-  amount          Decimal       @db.Decimal(12, 2)  // Positivo = entrada, Negativo = salida
-  balanceBefore   Decimal       @db.Decimal(12, 2)  // Saldo antes del movimiento
-  balanceAfter    Decimal       @db.Decimal(12, 2)  // Saldo después del movimiento
-  description     String?                           // Descripción del movimiento
-  referenceType   String?                           // Tipo de referencia: TICKET, DEPOSIT, WITHDRAWAL, TRIPLETA
-  referenceId     String?                           // ID de la referencia
-  metadata        Json?                             // Datos adicionales (sorteo, juego, etc)
-  createdBy       String?                           // Admin que hizo el ajuste (si aplica)
-  createdAt       DateTime      @default(now())
-  
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id            String       @id @default(uuid())
+  userId        String
+  type          MovementType
+  amount        Decimal      @db.Decimal(12, 2) // Positivo = entrada, Negativo = salida
+  balanceBefore Decimal      @db.Decimal(12, 2) // Saldo antes del movimiento
+  balanceAfter  Decimal      @db.Decimal(12, 2) // Saldo después del movimiento
+  description   String? // Descripción del movimiento
+  referenceType String? // Tipo de referencia: TICKET, DEPOSIT, WITHDRAWAL, TRIPLETA
+  referenceId   String? // ID de la referencia
+  metadata      Json? // Datos adicionales (sorteo, juego, etc)
+  createdBy     String? // Admin que hizo el ajuste (si aplica)
+  createdAt     DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([type])
   @@index([createdAt])
@@ -1084,34 +1092,34 @@ model PlayerMovement {
 // ============================================
 
 model DrawStats {
-  id              String        @id @default(uuid())
-  drawId          String        @unique
-  
+  id     String @id @default(uuid())
+  drawId String @unique
+
   // Ventas
-  totalSales      Decimal       @default(0) @db.Decimal(12, 2)  // Total vendido
-  ticketCount     Int           @default(0)                      // Cantidad de tickets
-  detailCount     Int           @default(0)                      // Cantidad de jugadas
-  
+  totalSales  Decimal @default(0) @db.Decimal(12, 2) // Total vendido
+  ticketCount Int     @default(0) // Cantidad de tickets
+  detailCount Int     @default(0) // Cantidad de jugadas
+
   // Premios
-  totalPrize      Decimal       @default(0) @db.Decimal(12, 2)  // Total en premios
-  winnerCount     Int           @default(0)                      // Cantidad de ganadores
-  
+  totalPrize  Decimal @default(0) @db.Decimal(12, 2) // Total en premios
+  winnerCount Int     @default(0) // Cantidad de ganadores
+
   // Balance
-  grossProfit     Decimal       @default(0) @db.Decimal(12, 2)  // Ganancia bruta (ventas - premios)
-  profitMargin    Decimal       @default(0) @db.Decimal(10, 2)  // Margen de ganancia %
-  
+  grossProfit  Decimal @default(0) @db.Decimal(12, 2) // Ganancia bruta (ventas - premios)
+  profitMargin Decimal @default(0) @db.Decimal(10, 2) // Margen de ganancia %
+
   // Tripletas
-  tripletaSales   Decimal       @default(0) @db.Decimal(12, 2)  // Ventas de tripletas
-  tripletaPrize   Decimal       @default(0) @db.Decimal(12, 2)  // Premios de tripletas
-  tripletaCount   Int           @default(0)                      // Cantidad de tripletas activas
-  
+  tripletaSales Decimal @default(0) @db.Decimal(12, 2) // Ventas de tripletas
+  tripletaPrize Decimal @default(0) @db.Decimal(12, 2) // Premios de tripletas
+  tripletaCount Int     @default(0) // Cantidad de tripletas activas
+
   // Timestamps
-  calculatedAt    DateTime      @default(now())                  // Última vez que se calculó
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  
-  draw            Draw          @relation(fields: [drawId], references: [id], onDelete: Cascade)
-  
+  calculatedAt DateTime @default(now()) // Última vez que se calculó
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  draw Draw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
   @@index([drawId])
   @@index([calculatedAt])
 }
@@ -1128,32 +1136,32 @@ enum ProviderStatsLevel {
 }
 
 model ProviderStats {
-  id              String              @id @default(uuid())
-  level           ProviderStatsLevel  // Nivel de la entidad
-  entityId        String              // ID de la entidad (taquilla, grupo, banca, comercial)
-  externalId      Int                 // ID externo de la entidad
-  drawId          String              // Sorteo al que pertenecen las estadísticas
-  
+  id         String             @id @default(uuid())
+  level      ProviderStatsLevel // Nivel de la entidad
+  entityId   String // ID de la entidad (taquilla, grupo, banca, comercial)
+  externalId Int // ID externo de la entidad
+  drawId     String // Sorteo al que pertenecen las estadísticas
+
   // Ventas
-  totalSales      Decimal             @default(0) @db.Decimal(12, 2)
-  ticketCount     Int                 @default(0)
-  detailCount     Int                 @default(0)
-  
+  totalSales  Decimal @default(0) @db.Decimal(12, 2)
+  ticketCount Int     @default(0)
+  detailCount Int     @default(0)
+
   // Premios
-  totalPrize      Decimal             @default(0) @db.Decimal(12, 2)
-  winnerCount     Int                 @default(0)
-  
+  totalPrize  Decimal @default(0) @db.Decimal(12, 2)
+  winnerCount Int     @default(0)
+
   // Balance
-  grossProfit     Decimal             @default(0) @db.Decimal(12, 2)
-  profitMargin    Decimal             @default(0) @db.Decimal(10, 2)
-  
+  grossProfit  Decimal @default(0) @db.Decimal(12, 2)
+  profitMargin Decimal @default(0) @db.Decimal(10, 2)
+
   // Timestamps
-  calculatedAt    DateTime            @default(now())
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  
-  draw            Draw                @relation(fields: [drawId], references: [id], onDelete: Cascade)
-  
+  calculatedAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  draw Draw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
   @@unique([level, entityId, drawId])
   @@index([level, entityId])
   @@index([drawId])
@@ -1166,34 +1174,34 @@ model ProviderStats {
 // ============================================
 
 model PlayerStats {
-  id              String        @id @default(uuid())
-  userId          String        @unique
-  
+  id     String @id @default(uuid())
+  userId String @unique
+
   // Tickets
-  totalTickets    Int           @default(0)
-  wonTickets      Int           @default(0)
-  lostTickets     Int           @default(0)
-  
+  totalTickets Int @default(0)
+  wonTickets   Int @default(0)
+  lostTickets  Int @default(0)
+
   // Tripletas
-  totalTripletas  Int           @default(0)
-  wonTripletas    Int           @default(0)
-  lostTripletas   Int           @default(0)
-  
+  totalTripletas Int @default(0)
+  wonTripletas   Int @default(0)
+  lostTripletas  Int @default(0)
+
   // Montos
-  totalBet        Decimal       @default(0) @db.Decimal(12, 2)  // Total apostado
-  totalPrize      Decimal       @default(0) @db.Decimal(12, 2)  // Total ganado
-  totalDeposits   Decimal       @default(0) @db.Decimal(12, 2)  // Total depositado
-  totalWithdrawals Decimal      @default(0) @db.Decimal(12, 2)  // Total retirado
-  
+  totalBet         Decimal @default(0) @db.Decimal(12, 2) // Total apostado
+  totalPrize       Decimal @default(0) @db.Decimal(12, 2) // Total ganado
+  totalDeposits    Decimal @default(0) @db.Decimal(12, 2) // Total depositado
+  totalWithdrawals Decimal @default(0) @db.Decimal(12, 2) // Total retirado
+
   // Timestamps
-  lastBetAt       DateTime?                                      // Última apuesta
-  lastWinAt       DateTime?                                      // Última ganancia
-  calculatedAt    DateTime      @default(now())
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  
-  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  lastBetAt    DateTime? // Última apuesta
+  lastWinAt    DateTime? // Última ganancia
+  calculatedAt DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
 }
 
@@ -1202,49 +1210,49 @@ model PlayerStats {
 // ============================================
 
 enum PageType {
-  LANDING         // Página de inicio
+  LANDING // Página de inicio
   ADMIN_DASHBOARD // Dashboard principal de admin
-  ADMIN_SORTEOS   // Módulo de sorteos
-  ADMIN_JUEGOS    // Módulo de juegos
-  ADMIN_USUARIOS  // Módulo de usuarios
+  ADMIN_SORTEOS // Módulo de sorteos
+  ADMIN_JUEGOS // Módulo de juegos
+  ADMIN_USUARIOS // Módulo de usuarios
   ADMIN_JUGADORES // Módulo de jugadores
   ADMIN_DEPOSITOS // Módulo de depósitos
-  ADMIN_RETIROS   // Módulo de retiros
-  ADMIN_TICKETS   // Módulo de tickets
-  ADMIN_REPORTES  // Módulo de reportes
-  ADMIN_TELEGRAM  // Módulo de Telegram
-  ADMIN_WHATSAPP  // Módulo de WhatsApp
-  ADMIN_FACEBOOK  // Módulo de Facebook
+  ADMIN_RETIROS // Módulo de retiros
+  ADMIN_TICKETS // Módulo de tickets
+  ADMIN_REPORTES // Módulo de reportes
+  ADMIN_TELEGRAM // Módulo de Telegram
+  ADMIN_WHATSAPP // Módulo de WhatsApp
+  ADMIN_FACEBOOK // Módulo de Facebook
   ADMIN_INSTAGRAM // Módulo de Instagram
-  ADMIN_TIKTOK    // Módulo de TikTok
-  ADMIN_BOTS      // Módulo de bots admin
-  ADMIN_PAUSAS    // Módulo de pausas
-  ADMIN_CONFIG    // Módulo de configuración
-  ADMIN_PERFIL    // Perfil de usuario
-  ADMIN_CUENTAS   // Cuentas del sistema
+  ADMIN_TIKTOK // Módulo de TikTok
+  ADMIN_BOTS // Módulo de bots admin
+  ADMIN_PAUSAS // Módulo de pausas
+  ADMIN_CONFIG // Módulo de configuración
+  ADMIN_PERFIL // Perfil de usuario
+  ADMIN_CUENTAS // Cuentas del sistema
   ADMIN_PAGO_MOVIL // Pago móvil
   PLAYER_DASHBOARD // Dashboard de jugador
-  PLAYER_JUGAR    // Página de jugar
-  PLAYER_BALANCE  // Balance histórico
-  PLAYER_CUENTAS  // Cuentas de pago móvil
+  PLAYER_JUGAR // Página de jugar
+  PLAYER_BALANCE // Balance histórico
+  PLAYER_CUENTAS // Cuentas de pago móvil
   PLAYER_DEPOSITOS // Depósitos del jugador
-  PLAYER_RETIROS  // Retiros del jugador
+  PLAYER_RETIROS // Retiros del jugador
 }
 
 model PageVisit {
-  id          String    @id @default(uuid())
-  userId      String?   // Opcional, puede ser anónimo
-  pageType    PageType
-  pagePath    String    // Ruta completa de la página
-  userAgent   String?   // User agent del navegador
-  ipAddress   String?   // IP del visitante
-  referrer    String?   // De dónde viene
-  sessionId   String?   // ID de sesión para agrupar visitas
-  duration    Int?      // Duración en segundos (si se registra)
-  createdAt   DateTime  @default(now())
-  
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  
+  id        String   @id @default(uuid())
+  userId    String? // Opcional, puede ser anónimo
+  pageType  PageType
+  pagePath  String // Ruta completa de la página
+  userAgent String? // User agent del navegador
+  ipAddress String? // IP del visitante
+  referrer  String? // De dónde viene
+  sessionId String? // ID de sesión para agrupar visitas
+  duration  Int? // Duración en segundos (si se registra)
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   @@index([userId])
   @@index([pageType])
   @@index([createdAt])
