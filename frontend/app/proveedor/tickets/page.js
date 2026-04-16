@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Eye } from 'lucide-react';
 import { portalFetch } from '@/lib/portal-api';
 
 function todayISO(offsetDays = 0) {
@@ -91,6 +92,7 @@ export default function TicketsPage() {
                   <th className="text-left px-3 py-2 font-semibold text-gray-700">Monto</th>
                   <th className="text-left px-3 py-2 font-semibold text-gray-700">Estado</th>
                   <th className="text-left px-3 py-2 font-semibold text-gray-700"># Jugadas</th>
+                  <th className="text-center px-3 py-2 font-semibold text-gray-700">Acciones</th>
                 </tr>
               </thead>
               <tbody>
@@ -115,10 +117,17 @@ export default function TicketsPage() {
                       </span>
                     </td>
                     <td className="px-3 py-2 text-gray-700">{t.details?.length ?? 0}</td>
+                    <td className="px-3 py-2 text-center">
+                      <Link href={`/proveedor/tickets/${t.id}`}
+                        className="inline-flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                        title="Ver detalle">
+                        <Eye className="w-4 h-4" />
+                      </Link>
+                    </td>
                   </tr>
                 ))}
                 {data.rows.length === 0 && (
-                  <tr><td colSpan={6} className="px-3 py-8 text-center text-gray-400">Sin resultados</td></tr>
+                  <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400">Sin resultados</td></tr>
                 )}
               </tbody>
             </table>
