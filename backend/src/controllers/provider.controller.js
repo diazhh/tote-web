@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import bcrypt from 'bcrypt';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -150,6 +151,90 @@ class ProviderController {
     } catch (error) {
       logger.error('Error verificando adapter status:', error);
       res.status(500).json({ error: 'Error al verificar adapter' });
+    }
+  }
+
+  async createPortalUser(req, res) {
+    try {
+      const { id } = req.params;
+      const { username, password } = req.body || {};
+
+      if (!username || typeof username !== 'string' || username.length < 3) {
+        return res.status(400).json({ error: 'Username inválido (mínimo 3 caracteres)' });
+      }
+      if (!password || typeof password !== 'string' || password.length < 10) {
+        return res.status(400).json({ error: 'Password debe tener al menos 10 caracteres' });
+      }
+
+      const system = await prisma.apiSystem.findUnique({ where: { id } });
+      if (!system) return res.status(404).json({ error: 'Proveedor no encontrado' });
+      if (system.mode !== 'PUSH') {
+        return res.status(400).json({ error: 'Solo proveedores PUSH pueden tener portal' });
+      }
+
+      const existing = await prisma.user.findUnique({ where: { username } });
+      if (existing) return res.status(409).json({ error: 'Username ya existe' });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await prisma.user.create({
+        data: {
+          username,
+          password: hashedPassword,
+          role: 'PROVIDER',
+          apiSystemId: id,
+          isActive: true,
+        },
+        select: { id: true, username: true, role: true, apiSystemId: true, createdAt: true },
+      });
+
+      logger.info(`Portal user creado para proveedor ${id}: ${username}`);
+      return res.status(201).json(user);
+    } catch (error) {
+      logger.error('Error en createPortalUser:', error);
+      return res.status(500).json({ error: 'Error interno' });
+    }
+  }
+
+  async resetPortalUserPassword(req, res) {
+    try {
+      const { id } = req.params;
+      const { password } = req.body || {};
+      if (!password || typeof password !== 'string' || password.length < 10) {
+        return res.status(400).json({ error: 'Password debe tener al menos 10 caracteres' });
+      }
+
+      const system = await prisma.apiSystem.findUnique({ where: { id } });
+      if (!system) return res.status(404).json({ error: 'Proveedor no encontrado' });
+      if (system.mode !== 'PUSH') {
+        return res.status(400).json({ error: 'Solo proveedores PUSH pueden tener portal' });
+      }
+
+      const user = await prisma.user.findFirst({
+        where: { apiSystemId: id, role: 'PROVIDER' },
+      });
+      if (!user) return res.status(404).json({ error: 'No hay usuario portal para este proveedor' });
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await prisma.user.update({ where: { id: user.id }, data: { password: hashedPassword } });
+      logger.info(`Password reseteado para portal user ${user.id} (proveedor ${id})`);
+      return res.status(200).json({ success: true });
+    } catch (error) {
+      logger.error('Error en resetPortalUserPassword:', error);
+      return res.status(500).json({ error: 'Error interno' });
+    }
+  }
+
+  async getPortalUser(req, res) {
+    try {
+      const { id } = req.params;
+      const user = await prisma.user.findFirst({
+        where: { apiSystemId: id, role: 'PROVIDER' },
+        select: { id: true, username: true, isActive: true, createdAt: true },
+      });
+      return res.json({ exists: !!user, user: user || null });
+    } catch (error) {
+      logger.error('Error en getPortalUser:', error);
+      return res.status(500).json({ error: 'Error interno' });
     }
   }
 
