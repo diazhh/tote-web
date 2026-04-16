@@ -529,6 +529,200 @@ export default function ProveedoresPage() {
   );
 }
 
+function PortalUserSection({ systemId }) {
+  const [status, setStatus] = useState({ loading: true, exists: false, user: null });
+  const [mode, setMode] = useState('idle'); // 'idle' | 'creating' | 'resetting'
+  const [form, setForm] = useState({ username: '', password: '' });
+  const [msg, setMsg] = useState('');
+
+  const load = async () => {
+    setStatus({ loading: true, exists: false, user: null });
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/providers/systems/${systemId}/portal-user`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      const data = await res.json();
+      setStatus({ loading: false, exists: !!data.exists, user: data.user || null });
+    } catch {
+      setStatus({ loading: false, exists: false, user: null });
+    }
+  };
+
+  useEffect(() => {
+    if (systemId) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [systemId]);
+
+  const onCreate = async () => {
+    setMsg('');
+    if (!form.username || form.username.length < 3) {
+      setMsg('Username mínimo 3 caracteres');
+      return;
+    }
+    if (!form.password || form.password.length < 10) {
+      setMsg('Password mínimo 10 caracteres');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/providers/systems/${systemId}/portal-user`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(form),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg(data.error || 'Error creando usuario');
+        return;
+      }
+      setMsg(`Usuario creado: ${data.username || form.username}`);
+      setMode('idle');
+      setForm({ username: '', password: '' });
+      load();
+    } catch (err) {
+      setMsg('Error de red creando usuario');
+    }
+  };
+
+  const onReset = async () => {
+    setMsg('');
+    if (!form.password || form.password.length < 10) {
+      setMsg('Password mínimo 10 caracteres');
+      return;
+    }
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/providers/systems/${systemId}/portal-user/password`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ password: form.password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMsg(data.error || 'Error reseteando contraseña');
+        return;
+      }
+      setMsg('Contraseña reseteada exitosamente');
+      setMode('idle');
+      setForm({ username: '', password: '' });
+    } catch (err) {
+      setMsg('Error de red reseteando contraseña');
+    }
+  };
+
+  if (status.loading) {
+    return (
+      <div className="border-t pt-4 mt-4">
+        <h3 className="text-sm font-semibold text-gray-900 mb-3">Acceso al portal</h3>
+        <div className="text-sm text-gray-500 py-2">Cargando acceso al portal...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-t pt-4 mt-4">
+      <h3 className="text-sm font-semibold text-gray-900 mb-3">Acceso al portal</h3>
+
+      {!status.exists && mode === 'idle' && (
+        <div className="space-y-2">
+          <p className="text-sm text-gray-600">Sin usuario portal configurado.</p>
+          <button
+            type="button"
+            onClick={() => { setMode('creating'); setMsg(''); }}
+            className="px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+          >
+            Crear usuario portal
+          </button>
+        </div>
+      )}
+
+      {!status.exists && mode === 'creating' && (
+        <div className="space-y-2 border border-gray-200 p-3 rounded-lg bg-gray-50">
+          <input
+            placeholder="Username"
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+          />
+          <input
+            placeholder="Password (mínimo 10 caracteres)"
+            type="text"
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onCreate}
+              className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+            >
+              Crear
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('idle'); setForm({ username: '', password: '' }); setMsg(''); }}
+              className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {status.exists && status.user && (
+        <div className="space-y-2">
+          <p className="text-sm">
+            Usuario: <strong className="font-mono">{status.user.username}</strong>
+            {!status.user.isActive && (
+              <span className="ml-2 text-red-600 text-xs">(desactivado)</span>
+            )}
+          </p>
+          {mode === 'idle' && (
+            <button
+              type="button"
+              onClick={() => { setMode('resetting'); setMsg(''); }}
+              className="px-3 py-2 text-sm bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+            >
+              Resetear contraseña
+            </button>
+          )}
+          {mode === 'resetting' && (
+            <div className="space-y-2 border border-gray-200 p-3 rounded-lg bg-gray-50">
+              <input
+                placeholder="Nueva password (mínimo 10)"
+                type="text"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700"
+                >
+                  Resetear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setMode('idle'); setForm({ username: '', password: '' }); setMsg(''); }}
+                  className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {msg && <p className="text-sm mt-2 text-blue-700">{msg}</p>}
+    </div>
+  );
+}
+
 function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerated }) {
   const generateSlug = (name) =>
     name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
@@ -768,6 +962,11 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
                 </div>
               )}
             </div>
+          )}
+
+          {/* Portal user management — only for existing PUSH systems (C2) */}
+          {system?.id && formData.mode === 'PUSH' && (
+            <PortalUserSection systemId={system.id} />
           )}
 
           <div className="flex justify-end gap-2 pt-2">
