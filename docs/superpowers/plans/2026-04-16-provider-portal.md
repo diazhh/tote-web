@@ -140,7 +140,21 @@ Nothing to commit — `db push` doesn't create migration files (that folder is g
 
 ---
 
-### Task A3: Backfill existing WEBHOOK_PUSH tickets
+### Tasks A3 + A4: SKIPPED — already implemented
+
+**Why skipped:** After Task A1 landed, verification against production and local code revealed:
+
+1. `Ticket.apiSystemId` column was already part of the schema before this feature (pre-existing work).
+2. `backend/src/services/webhook.service.js` already sets `apiSystemId` at ticket creation (see `createWebhookTicket` — lines 17, 22, 42, 140). Task A4's goal is already done.
+3. Production query confirms: 41 `WEBHOOK_PUSH` tickets exist, 0 have `NULL apiSystemId`. There is nothing to backfill.
+
+Additionally, the originally planned A3 script had two spec defects that would have shipped dead code:
+- `providerData.providerSlug` is never stored by adapters (they write the raw provider payload).
+- `WebhookLog` has no `ticketId` column (the spec assumed one).
+
+The backfill script commit (`93638d0`) was reverted in commit `790364d` to keep history clean. Proceed to Phase B.
+
+### Task A3 — ORIGINAL (kept for historical reference, do NOT execute)
 
 **Files:**
 - Create: `backend/src/scripts/backfill-ticket-apisystem.js`
