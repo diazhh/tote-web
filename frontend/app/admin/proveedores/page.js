@@ -538,7 +538,7 @@ function PortalUserSection({ systemId }) {
   const load = async () => {
     setStatus({ loading: true, exists: false, user: null });
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const res = await fetch(`${API_URL}/providers/systems/${systemId}/portal-user`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -565,7 +565,7 @@ function PortalUserSection({ systemId }) {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const res = await fetch(`${API_URL}/providers/systems/${systemId}/portal-user`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -592,7 +592,7 @@ function PortalUserSection({ systemId }) {
       return;
     }
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const res = await fetch(`${API_URL}/providers/systems/${systemId}/portal-user/password`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },

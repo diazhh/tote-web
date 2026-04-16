@@ -14,7 +14,7 @@ export default function ProviderLayout({ children }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     const userRaw = localStorage.getItem('user');
     let user = null;
     try { user = userRaw ? JSON.parse(userRaw) : null; } catch {}
@@ -29,8 +29,9 @@ export default function ProviderLayout({ children }) {
   }, [router]);
 
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem('accessToken');
     localStorage.removeItem('user');
+    document.cookie = 'accessToken=; path=/; max-age=0';
     router.replace('/login');
   };
 
