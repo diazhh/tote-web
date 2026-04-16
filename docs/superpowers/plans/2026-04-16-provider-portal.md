@@ -85,8 +85,9 @@ git commit -m "feat(schema): add PROVIDER role and apiSystemId FKs on User/Ticke
 
 ### Task A2: Generate and apply migration locally
 
-**Files:**
-- Create: `backend/prisma/migrations/<timestamp>_add_provider_portal_and_ticket_apisystem/migration.sql` (Prisma auto-generates)
+**Files:** none (schema was committed in A1; this task only applies it to DB)
+
+**Workflow note:** this project uses `prisma db push` (not `prisma migrate`). The `prisma/migrations/` folder is gitignored and not versioned. `db push` applies schema changes directly — additive-only changes (our case) are safe; any destructive change will make `db push` prompt, which we refuse in production.
 
 - [ ] **Step 1: Ensure docker Postgres is up**
 
@@ -98,23 +99,32 @@ docker ps --format "table {{.Names}}\t{{.Status}}" | grep tote_postgres
 
 Expected: `tote_postgres ... Up ...`
 
-- [ ] **Step 2: Generate migration**
+- [ ] **Step 2: Apply schema to local DB via `db push`**
 
 ```bash
 cd backend
-npx prisma migrate dev --name add_provider_portal_and_ticket_apisystem
+npx prisma db push
 ```
 
-Expected: "Your database is now in sync with your schema" and a new folder under `backend/prisma/migrations/`.
+Expected: output contains "Your database is now in sync with your Prisma schema" and lists only ADDITIVE changes:
+- `Added the required column 'apiSystemId' to the 'User' table` (nullable, so actually "Added the optional column")
+- new enum value `PROVIDER`
+- new index on `Ticket(apiSystemId, createdAt)`
+
+**If the output mentions ANY "would cause data loss", "drop column", or asks to confirm `--accept-data-loss`:** STOP. Do NOT proceed. Report BLOCKED — our change set is purely additive; any destructive prompt means something else drifted.
 
 - [ ] **Step 3: Verify schema in DB**
 
 ```bash
 docker exec tote_postgres psql -U tote_user -d tote_db -c "\d \"User\"" | grep apiSystemId
-docker exec tote_postgres psql -U tote_user -d tote_db -c "\d \"Ticket\"" | grep apiSystemId
+docker exec tote_postgres psql -U tote_user -d tote_db -c "\d \"Ticket\"" | grep -i "apisystemid"
+docker exec tote_postgres psql -U tote_user -d tote_db -c "SELECT unnest(enum_range(NULL::\"UserRole\"))"
 ```
 
-Expected: both commands show `apiSystemId | text`.
+Expected:
+- User table shows `apiSystemId | text`
+- Ticket table shows `apiSystemId` column and both indexes
+- Enum list includes `PROVIDER`
 
 - [ ] **Step 4: Regenerate Prisma client**
 
@@ -124,13 +134,9 @@ npx prisma generate
 
 Expected: "Generated Prisma Client".
 
-- [ ] **Step 5: Commit migration folder**
+- [ ] **Step 5: No commit**
 
-```bash
-cd /Users/diazhh/Documents/GitHub/tote-web
-git add backend/prisma/migrations/
-git commit -m "feat(db): migration add_provider_portal_and_ticket_apisystem"
-```
+Nothing to commit — `db push` doesn't create migration files (that folder is gitignored). The schema change was committed in Task A1.
 
 ---
 
@@ -2385,15 +2391,17 @@ ssh 144 "cd /var/proyectos/tote-web && git fetch origin && git checkout diazhh &
 
 Expected: "Fast-forward" or "Already up to date" + correct branch.
 
-- [ ] **Step 4: Backend — install deps, migrate, regenerate client**
+- [ ] **Step 4: Backend — install deps, apply schema, regenerate client**
+
+**Production-safety note:** this project uses `prisma db push` (not migrations). `db push` WITHOUT the `--accept-data-loss` flag will refuse to run if it detects any destructive change, making it safe for our additive-only schema changes. Do NOT add `--accept-data-loss` under any circumstance.
 
 ```bash
 ssh 144 "cd /var/proyectos/tote-web/backend && npm ci"
-ssh 144 "cd /var/proyectos/tote-web/backend && npx prisma migrate deploy"
+ssh 144 "cd /var/proyectos/tote-web/backend && npx prisma db push"
 ssh 144 "cd /var/proyectos/tote-web/backend && npx prisma generate"
 ```
 
-Expected: migration applied, no drift, client regenerated.
+Expected: `db push` reports only additive changes (`PROVIDER` enum value, `User.apiSystemId` column + FK + index, composite `Ticket(apiSystemId, createdAt)` index). If the command exits non-zero with a "data loss" error, STOP and investigate — production schema has drifted from the version tested locally.
 
 - [ ] **Step 5: Run backfill in production**
 
@@ -2456,13 +2464,26 @@ ssh 144 "cd /var/proyectos/tote-web && git log --oneline -5"
 ssh 144 "cd /var/proyectos/tote-web && git checkout <pre-deploy-sha>"
 ```
 
-- [ ] **Step 2: Roll back the migration**
+- [ ] **Step 2: Roll back the schema changes**
+
+Project uses `db push`, not migrations. Revert schema by dropping only what this feature added:
+- `User.apiSystemId` column + its index (ADDED by this feature)
+- `Ticket(apiSystemId, createdAt)` composite index (ADDED by this feature)
+
+**Do NOT drop `Ticket.apiSystemId` column or its single-column index — those pre-existed.** Leaving the `PROVIDER` enum value in `UserRole` is harmless (Postgres enum values can't be removed without recreating the type; no User rows should have `role='PROVIDER'` after this rollback since the column is dropped).
 
 ```bash
-# Mark as rolled back (Prisma)
-ssh 144 "cd /var/proyectos/tote-web/backend && npx prisma migrate resolve --rolled-back add_provider_portal_and_ticket_apisystem"
-# Then manually revert the schema changes: drop the index and columns
-ssh 144 "PGPASSWORD='ToteSecure2024*' psql -U tote_user -h localhost -p 5433 tote_db -c 'DROP INDEX IF EXISTS \"User_apiSystemId_idx\"; ALTER TABLE \"User\" DROP COLUMN IF EXISTS \"apiSystemId\"; DROP INDEX IF EXISTS \"Ticket_apiSystemId_createdAt_idx\"; ALTER TABLE \"Ticket\" DROP COLUMN IF EXISTS \"apiSystemId\";'"
+ssh 144 "PGPASSWORD='ToteSecure2024*' psql -U tote_user -h localhost -p 5433 tote_db -c '
+  DROP INDEX IF EXISTS \"User_apiSystemId_idx\";
+  ALTER TABLE \"User\" DROP COLUMN IF EXISTS \"apiSystemId\";
+  DROP INDEX IF EXISTS \"Ticket_apiSystemId_createdAt_idx\";
+'"
+```
+
+After dropping columns/indexes, reset `backend/prisma/schema.prisma` to the pre-feature state (via `git checkout <pre-deploy-sha> -- backend/prisma/schema.prisma`) and regenerate the client:
+
+```bash
+ssh 144 "cd /var/proyectos/tote-web/backend && npx prisma generate"
 ```
 
 - [ ] **Step 3: If data corruption — restore backup**
