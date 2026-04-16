@@ -158,7 +158,8 @@ class AuthService {
           telegramUserId: true,
           isActive: true,
           lastLoginAt: true,
-          createdAt: true
+          createdAt: true,
+          apiSystemId: true
         }
       });
 
