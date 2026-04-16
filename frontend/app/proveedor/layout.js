@@ -22,7 +22,7 @@ export default function ProviderLayout({ children }) {
       router.replace('/login');
       return;
     }
-    fetch(`${API_URL}/api/portal/me`, { headers: { 'Authorization': `Bearer ${token}` } })
+    fetch(new URL('/api/portal/me', API_URL).toString(), { headers: { 'Authorization': `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : Promise.reject(r))
       .then(data => { setMe(data); setReady(true); })
       .catch(() => router.replace('/login'));
