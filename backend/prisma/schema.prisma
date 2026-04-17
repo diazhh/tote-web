@@ -965,6 +965,7 @@ model Ticket {
   updatedAt        DateTime     @updatedAt
 
   apiSystemId String? // Proveedor que creó el ticket (PUSH/PULL)
+  prizeDrawId String? // Sorteo donde se pagó el premio (solo tripletas externas; null = mismo sorteo de venta)
 
   user      User?          @relation(fields: [userId], references: [id], onDelete: Cascade)
   draw      Draw           @relation(fields: [drawId], references: [id], onDelete: Cascade)
@@ -974,6 +975,7 @@ model Ticket {
   @@unique([drawId, externalTicketId, source])
   @@index([userId])
   @@index([drawId])
+  @@index([prizeDrawId])
   @@index([status])
   @@index([source])
   @@index([externalTicketId])

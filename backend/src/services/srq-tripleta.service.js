@@ -122,12 +122,13 @@ class SRQTripletaService {
                 }
               });
 
-              // Actualizar el ticket
+              // Actualizar el ticket — prizeDrawId registra el sorteo donde se completaron las condiciones
               await tx.ticket.update({
                 where: { id: ticket.id },
                 data: {
                   status: 'WON',
-                  totalPrize: prize
+                  totalPrize: prize,
+                  prizeDrawId: drawId
                 }
               });
             });

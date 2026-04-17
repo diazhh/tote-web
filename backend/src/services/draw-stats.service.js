@@ -37,15 +37,29 @@ class DrawStatsService {
       let winnerCount = 0;
 
       for (const ticket of draw.tickets) {
+        const isExternalTripleta = ticket.source === 'EXTERNAL_API' &&
+          ticket.providerData?.type === 'TRIPLETA';
+
         ticketCount++;
         totalSales += parseFloat(ticket.totalAmount || 0);
-        totalPrize += parseFloat(ticket.totalPrize || 0);
         detailCount += ticket.details.length;
 
-        if (ticket.status === 'WON') {
-          winnerCount++;
+        // Tripletas externas: su premio se atribuye al sorteo donde ganaron (prizeDrawId),
+        // no al sorteo de venta. Se suman abajo con la consulta por prizeDrawId.
+        if (!isExternalTripleta) {
+          totalPrize += parseFloat(ticket.totalPrize || 0);
+          if (ticket.status === 'WON') winnerCount++;
         }
       }
+
+      // Premios de tripletas externas que completaron su condición EN este sorteo
+      const tripletaWon = await client.ticket.aggregate({
+        where: { prizeDrawId: drawId, status: 'WON' },
+        _sum:   { totalPrize: true },
+        _count: { id: true }
+      });
+      totalPrize  += parseFloat(tripletaWon._sum.totalPrize || 0);
+      winnerCount += tripletaWon._count.id;
 
       // Calcular estadísticas de tripletas activas en este sorteo
       const tripletas = await client.tripleBet.findMany({

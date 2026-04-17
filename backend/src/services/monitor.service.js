@@ -485,12 +485,7 @@ class MonitorService {
 
       // Build tickets include — apply source filter if provided (BACK-02)
       const ticketsInclude = {
-        where: { status: { not: 'CANCELLED' } },
-        include: {
-          details: {
-            include: { gameItem: true }
-          }
-        }
+        where: { status: { not: 'CANCELLED' } }
       };
       if (pushProviderFilter) {
         ticketsInclude.where.apiSystemId = apiSystemId;
@@ -511,6 +506,22 @@ class MonitorService {
         ]
       });
 
+      // Premios de tripletas externas agrupados por el sorteo donde ganaron (prizeDrawId).
+      // Solo aplica cuando no hay filtro de fuente o el filtro es EXTERNAL_API.
+      const tripletaPrizeByDraw = {};
+      const includesTripletaPrizes = !source || source === 'EXTERNAL_API';
+      if (includesTripletaPrizes && draws.length > 0) {
+        const drawIds = draws.map(d => d.id);
+        const tripletaWinners = await prisma.ticket.findMany({
+          where: { prizeDrawId: { in: drawIds }, status: 'WON' },
+          select: { prizeDrawId: true, totalPrize: true }
+        });
+        for (const t of tripletaWinners) {
+          tripletaPrizeByDraw[t.prizeDrawId] =
+            (tripletaPrizeByDraw[t.prizeDrawId] || 0) + parseFloat(t.totalPrize);
+        }
+      }
+
       const report = [];
 
       // Aggregation buckets (BACK-03)
@@ -521,16 +532,12 @@ class MonitorService {
         const tickets = draw.tickets || [];
         const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
 
-        let totalPrize = 0;
-        if (draw.winnerItemId) {
-          for (const ticket of tickets) {
-            for (const detail of ticket.details) {
-              if (detail.gameItemId === draw.winnerItemId) {
-                totalPrize += parseFloat(detail.amount) * parseFloat(detail.gameItem.multiplier);
-              }
-            }
-          }
-        }
+        // Premios: sumar ticket.totalPrize de tickets no-tripleta (ya pagados por prize-processor)
+        // más premios de tripletas externas que completaron su condición en este sorteo.
+        const regularPrize = tickets
+          .filter(t => !(t.source === 'EXTERNAL_API' && t.providerData?.type === 'TRIPLETA'))
+          .reduce((sum, t) => sum + parseFloat(t.totalPrize), 0);
+        const totalPrize = regularPrize + (tripletaPrizeByDraw[draw.id] || 0);
 
         const balance = totalSales - totalPrize;
 
