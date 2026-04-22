@@ -69,8 +69,17 @@ class ConciliacionService {
 
       // 3. Identify SRQ system and load comercializadora names
       const srqTickets = tickets.filter(t => t.apiSystem?.slug === 'srq');
+      // Coerce comercialID (stored as JSON number today, but parseInt defends
+      // against future payloads that serialize it as a string).
       const comercialExternalIds = [
-        ...new Set(srqTickets.map(t => t.providerData?.comercialID).filter(id => id != null)),
+        ...new Set(
+          srqTickets
+            .map(t => {
+              const v = t.providerData?.comercialID;
+              return v == null ? null : parseInt(v, 10);
+            })
+            .filter(id => id != null && !Number.isNaN(id))
+        ),
       ];
 
       let comercialNames = {}; // externalId → name
@@ -120,8 +129,9 @@ class ConciliacionService {
           p.premio += parseFloat(ticket.totalPrize  || 0);
 
           if (isSRQ) {
-            const cid = ticket.providerData?.comercialID;
-            if (cid != null) {
+            const rawCid = ticket.providerData?.comercialID;
+            const cid = rawCid == null ? null : parseInt(rawCid, 10);
+            if (cid != null && !Number.isNaN(cid)) {
               if (!p.comerciales[cid]) {
                 p.comerciales[cid] = {
                   comercialId:   cid,
