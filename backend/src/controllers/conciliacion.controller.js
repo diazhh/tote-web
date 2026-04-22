@@ -9,11 +9,10 @@ class ConciliacionController {
   async getReport(req, res) {
     try {
       const { dateFrom, dateTo } = req.query;
-      const gameIds = req.query['gameIds[]']
-        ? (Array.isArray(req.query['gameIds[]'])
-            ? req.query['gameIds[]']
-            : [req.query['gameIds[]']])
-        : [];
+      // Express's `qs` parser strips the `[]` suffix, so gameIds[]=a&gameIds[]=b
+      // lands on req.query.gameIds. Fallback covers older parsers that preserve it.
+      const raw = req.query.gameIds ?? req.query['gameIds[]'];
+      const gameIds = raw == null ? [] : (Array.isArray(raw) ? raw : [raw]);
 
       const data = await conciliacionService.getConciliacion({ dateFrom, dateTo, gameIds });
       res.json({ success: true, data });
