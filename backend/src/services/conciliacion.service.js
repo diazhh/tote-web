@@ -16,8 +16,11 @@ class ConciliacionService {
       // Production has legacy 'PUBLISHED' status alongside 'DRAWN' — use raw SQL
       // with ::text cast to bypass Prisma's DrawStatus enum validator (local schema
       // dropped PUBLISHED).
+      // Make the range inclusive on both ends by treating dateTo as end-of-day UTC.
+      // Venezuela draws won't ever store DrawDate at 00:00 UTC so exclusive upper
+      // bound would silently drop same-day queries.
       const fromDate = dateFrom ? new Date(dateFrom + 'T00:00:00.000Z') : null;
-      const toDate   = dateTo   ? new Date(dateTo   + 'T00:00:00.000Z') : null;
+      const toDate   = dateTo   ? new Date(dateTo   + 'T23:59:59.999Z') : null;
 
       if (!fromDate || !toDate) {
         throw new Error('dateFrom and dateTo are required');
