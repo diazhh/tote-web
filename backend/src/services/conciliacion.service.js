@@ -2,43 +2,64 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 
+/**
+ * Identifies how a ticket should be grouped for the Conciliación report.
+ * Production invariants (verified 2026-04-22):
+ *   - Legacy SRQ tickets have source='EXTERNAL_API' and apiSystemId=NULL
+ *   - PUSH provider tickets have source='WEBHOOK_PUSH' and a populated apiSystemId + apiSystem.name
+ *   - Online tickets have source='TAQUILLA_ONLINE' and apiSystemId=NULL
+ */
+function classifyTicket(ticket) {
+  if (ticket.source === 'TAQUILLA_ONLINE') {
+    return { key: '__online__', providerName: 'Online', isSRQ: false };
+  }
+  if (ticket.source === 'EXTERNAL_API') {
+    // SRQ is the only PULL provider in the system. Its tickets have apiSystemId=NULL in production.
+    return { key: '__srq__', providerName: 'SRQ', isSRQ: true };
+  }
+  if (ticket.source === 'WEBHOOK_PUSH') {
+    const key = ticket.apiSystemId || '__push_unknown__';
+    const providerName = ticket.apiSystem?.name || 'Desconocido';
+    return { key, providerName, isSRQ: false };
+  }
+  return { key: '__other__', providerName: 'Otro', isSRQ: false };
+}
+
 class ConciliacionService {
   /**
    * Get conciliación report.
    * @param {Object} params
-   * @param {string} params.dateFrom  - YYYY-MM-DD
-   * @param {string} params.dateTo    - YYYY-MM-DD
+   * @param {string} params.dateFrom   - YYYY-MM-DD
+   * @param {string} params.dateTo     - YYYY-MM-DD
    * @param {string[]} [params.gameIds] - optional game UUID filter
    */
   async getConciliacion({ dateFrom, dateTo, gameIds = [] } = {}) {
     try {
-      // 1. Resolve draws in range
-      // Production has legacy 'PUBLISHED' status alongside 'DRAWN' — use raw SQL
-      // with ::text cast to bypass Prisma's DrawStatus enum validator (local schema
-      // dropped PUBLISHED).
-      // Make the range inclusive on both ends by treating dateTo as end-of-day UTC.
-      // Venezuela draws won't ever store DrawDate at 00:00 UTC so exclusive upper
-      // bound would silently drop same-day queries.
-      const fromDate = dateFrom ? new Date(dateFrom + 'T00:00:00.000Z') : null;
-      const toDate   = dateTo   ? new Date(dateTo   + 'T23:59:59.999Z') : null;
-
-      if (!fromDate || !toDate) {
+      if (!dateFrom || !dateTo) {
         throw new Error('dateFrom and dateTo are required');
       }
 
-      const drawsRaw = await prisma.$queryRaw`
-        SELECT d.id, d."gameId", g.id AS "game_id", g.name AS "game_name"
-        FROM "Draw" d
-        JOIN "Game" g ON g.id = d."gameId"
-        WHERE d.status::text IN ('DRAWN', 'PUBLISHED')
-          AND d."drawDate" >= ${fromDate}
-          AND d."drawDate" <= ${toDate}
-      `;
+      // Match monitor.service.js date semantics: drawDate is @db.Date, and both endpoints
+      // are compared with 00:00 UTC. This is an inclusive range over dates.
+      const fromDate = new Date(dateFrom + 'T00:00:00.000Z');
+      const toDate   = new Date(dateTo   + 'T00:00:00.000Z');
 
-      // Apply gameIds filter in JS (avoids dynamic-IN complexity in raw SQL)
-      const draws = gameIds.length > 0
-        ? drawsRaw.filter(r => gameIds.includes(r.gameId))
-        : drawsRaw;
+      // 1. Resolve draws in range.
+      // Match monitor.service.js: NO status filter. Draws in CLOSED/SCHEDULED state
+      // still have real ticket sales (reventa en curso) that must appear in the report.
+      const where = { drawDate: { gte: fromDate, lte: toDate } };
+      if (gameIds.length > 0) {
+        where.gameId = { in: gameIds };
+      }
+
+      const draws = await prisma.draw.findMany({
+        where,
+        select: {
+          id:     true,
+          gameId: true,
+          game:   { select: { id: true, name: true } },
+        },
+      });
 
       if (draws.length === 0) return [];
 
@@ -46,52 +67,71 @@ class ConciliacionService {
       const drawsByGame = {};
       for (const d of draws) {
         if (!drawsByGame[d.gameId]) {
-          drawsByGame[d.gameId] = {
-            game: { id: d.game_id, name: d.game_name },
-            drawIds: [],
-          };
+          drawsByGame[d.gameId] = { game: d.game, drawIds: new Set() };
         }
-        drawsByGame[d.gameId].drawIds.push(d.id);
+        drawsByGame[d.gameId].drawIds.add(d.id);
       }
 
       const allDrawIds = draws.map(d => d.id);
 
-      // 2. Fetch all tickets (one query)
+      // 2. Fetch tickets for the draws (excluding CANCELLED, matching monitor.service.js).
       const tickets = await prisma.ticket.findMany({
-        where: { drawId: { in: allDrawIds } },
+        where: {
+          drawId: { in: allDrawIds },
+          status: { not: 'CANCELLED' },
+        },
         select: {
-          drawId:      true,
-          source:      true,
-          apiSystemId: true,
-          totalAmount: true,
-          totalPrize:  true,
+          drawId:       true,
+          source:       true,
+          apiSystemId:  true,
+          totalAmount:  true,
+          totalPrize:   true,
+          status:       true,
           providerData: true,
-          apiSystem: { select: { id: true, name: true, slug: true } },
+          apiSystem:    { select: { id: true, name: true, slug: true } },
         },
       });
 
-      // 3. Identify SRQ system and load comercializadora names
-      const srqTickets = tickets.filter(t => t.apiSystem?.slug === 'srq');
-      // Coerce comercialID (stored as JSON number today, but parseInt defends
-      // against future payloads that serialize it as a string).
+      // 3. Tripleta prize attribution (external SRQ tripletas).
+      // An external tripleta's prize is attributed to the draw where the 3-match condition
+      // completed (prizeDrawId), not to the draw where it was bought (drawId). Pull those
+      // winners separately and fold their prize into the aggregate per target draw.
+      const tripletaWinners = await prisma.ticket.findMany({
+        where: {
+          prizeDrawId: { in: allDrawIds },
+          status:      'WON',
+        },
+        select: {
+          prizeDrawId:  true,
+          totalPrize:   true,
+          providerData: true,
+        },
+      });
+
+      // 4. Load SRQ ApiSystem id once and collect comercializadora names.
+      // Legacy SRQ tickets carry apiSystemId=NULL, so we look up the SRQ system by slug.
+      const srqSystem = await prisma.apiSystem.findFirst({
+        where: { slug: 'srq' },
+        select: { id: true },
+      });
+
+      const srqTickets = tickets.filter(t => t.source === 'EXTERNAL_API');
       const comercialExternalIds = [
         ...new Set(
-          srqTickets
-            .map(t => {
-              const v = t.providerData?.comercialID;
-              return v == null ? null : parseInt(v, 10);
-            })
-            .filter(id => id != null && !Number.isNaN(id))
+          [...srqTickets, ...tripletaWinners]
+            .map(t => t.providerData?.comercialID)
+            .filter(v => v != null)
+            .map(v => parseInt(v, 10))
+            .filter(n => !Number.isNaN(n))
         ),
       ];
 
       let comercialNames = {}; // externalId → name
-      if (comercialExternalIds.length > 0 && srqTickets.length > 0) {
-        const srqSystemId = srqTickets[0].apiSystem.id;
+      if (srqSystem?.id && comercialExternalIds.length > 0) {
         const comerciales = await prisma.providerComercial.findMany({
           where: {
-            apiSystemId: srqSystemId,
-            externalId: { in: comercialExternalIds },
+            apiSystemId: srqSystem.id,
+            externalId:  { in: comercialExternalIds },
           },
           select: { externalId: true, name: true },
         });
@@ -100,36 +140,41 @@ class ConciliacionService {
         );
       }
 
-      // 4. Aggregate per game
+      // 5. Aggregate per game.
       const result = [];
 
       for (const [gameId, { game, drawIds }] of Object.entries(drawsByGame)) {
-        const drawIdSet = new Set(drawIds);
-        const gameTickets = tickets.filter(t => drawIdSet.has(t.drawId));
+        const gameTickets = tickets.filter(t => drawIds.has(t.drawId));
 
         // Group by provider key
         const providerMap = {};
 
         for (const ticket of gameTickets) {
-          const isOnline = ticket.source === 'TAQUILLA_ONLINE';
-          const key      = isOnline ? '__online__' : (ticket.apiSystemId || '__unknown__');
-          const isSRQ    = ticket.apiSystem?.slug === 'srq';
+          const { key, providerName, isSRQ } = classifyTicket(ticket);
 
           if (!providerMap[key]) {
             providerMap[key] = {
               apiSystemId:  ticket.apiSystemId || null,
-              providerName: isOnline ? 'Online' : (ticket.apiSystem?.name || 'Desconocido'),
+              providerName,
               source:       ticket.source,
               venta:        0,
               premio:       0,
               isSRQ,
-              comerciales: {},
+              comerciales:  {},
             };
           }
 
           const p = providerMap[key];
-          p.venta  += parseFloat(ticket.totalAmount || 0);
-          p.premio += parseFloat(ticket.totalPrize  || 0);
+          p.venta += parseFloat(ticket.totalAmount || 0);
+
+          // Exclude external tripletas from regular prize sum — their prize is attributed
+          // separately below via the prizeDrawId join (mirrors monitor.service.js).
+          const isExternalTripleta =
+            ticket.source === 'EXTERNAL_API' &&
+            ticket.providerData?.type === 'TRIPLETA';
+          if (!isExternalTripleta) {
+            p.premio += parseFloat(ticket.totalPrize || 0);
+          }
 
           if (isSRQ) {
             const rawCid = ticket.providerData?.comercialID;
@@ -139,16 +184,55 @@ class ConciliacionService {
                 p.comerciales[cid] = {
                   comercialId:   cid,
                   comercialName: comercialNames[cid] || `Comercial ${cid}`,
-                  venta:  0,
-                  premio: 0,
+                  venta:         0,
+                  premio:        0,
                 };
               }
-              p.comerciales[cid].venta  += parseFloat(ticket.totalAmount || 0);
-              p.comerciales[cid].premio += parseFloat(ticket.totalPrize  || 0);
+              p.comerciales[cid].venta += parseFloat(ticket.totalAmount || 0);
+              if (!isExternalTripleta) {
+                p.comerciales[cid].premio += parseFloat(ticket.totalPrize || 0);
+              }
             }
           }
         }
 
+        // Attribute tripleta prizes whose prizeDrawId falls into this game's draws.
+        // These prizes are always SRQ (external tripletas) — route them to the SRQ bucket.
+        const tripletaPrizesForGame = tripletaWinners.filter(w => drawIds.has(w.prizeDrawId));
+        if (tripletaPrizesForGame.length > 0) {
+          if (!providerMap['__srq__']) {
+            providerMap['__srq__'] = {
+              apiSystemId:  null,
+              providerName: 'SRQ',
+              source:       'EXTERNAL_API',
+              venta:        0,
+              premio:       0,
+              isSRQ:        true,
+              comerciales:  {},
+            };
+          }
+          const srq = providerMap['__srq__'];
+          for (const w of tripletaPrizesForGame) {
+            const prize = parseFloat(w.totalPrize || 0);
+            srq.premio += prize;
+
+            const rawCid = w.providerData?.comercialID;
+            const cid = rawCid == null ? null : parseInt(rawCid, 10);
+            if (cid != null && !Number.isNaN(cid)) {
+              if (!srq.comerciales[cid]) {
+                srq.comerciales[cid] = {
+                  comercialId:   cid,
+                  comercialName: comercialNames[cid] || `Comercial ${cid}`,
+                  venta:         0,
+                  premio:        0,
+                };
+              }
+              srq.comerciales[cid].premio += prize;
+            }
+          }
+        }
+
+        // Finalize providers array
         let gameVenta = 0, gamePremio = 0;
 
         const providers = Object.values(providerMap).map(p => {
