@@ -179,6 +179,7 @@ import adminJobsRoutes from './routes/admin-jobs.routes.js';
 import testSpecialImagesRoutes from './routes/test-special-images.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
 import portalRoutes from './routes/portal.routes.js';
+import conciliacionRoutes from './routes/conciliacion.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -228,6 +229,7 @@ app.use('/api/player', playerQueryRoutes);
 app.use('/api/page-visits', pageVisitRoutes);
 app.use('/api/providers', providerRoutes);
 app.use('/api/portal', portalRoutes);
+app.use('/api/conciliacion', conciliacionRoutes);
 app.use('/api/tripleta', tripletaRoutes);
 app.use('/api/whatsapp-otp', whatsappOtpRoutes);
 app.use('/api/email-verification', emailVerificationRoutes);
