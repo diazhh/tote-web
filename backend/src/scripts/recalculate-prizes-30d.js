@@ -15,14 +15,17 @@ async function main() {
   const since = new Date();
   since.setDate(since.getDate() - 30);
 
-  const draws = await prisma.draw.findMany({
-    where: {
-      status: { in: ['DRAWN', 'PUBLISHED'] },
-      drawDate: { gte: since },
-    },
-    include: { game: { select: { name: true } } },
-    orderBy: { drawDate: 'asc' },
-  });
+  // Raw query to bypass Prisma enum validator — local schema dropped PUBLISHED
+  // but production DB still has ~2600 rows with that legacy status.
+  const drawsRaw = await prisma.$queryRaw`
+    SELECT d.id, d."drawDate", g.name AS "gameName"
+    FROM "Draw" d
+    JOIN "Game" g ON g.id = d."gameId"
+    WHERE d.status::text IN ('DRAWN', 'PUBLISHED')
+      AND d."drawDate" >= ${since}
+    ORDER BY d."drawDate" ASC
+  `;
+  const draws = drawsRaw.map(r => ({ id: r.id, drawDate: r.drawDate, game: { name: r.gameName } }));
 
   console.log(`Found ${draws.length} draws\n`);
 
