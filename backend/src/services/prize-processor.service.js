@@ -3,9 +3,17 @@ import logger from '../lib/logger.js';
 import playerNotificationService from './player-notification.service.js';
 
 class PrizeProcessorService {
-  async processPrizesForDraw(drawId) {
+  /**
+   * Process prizes for a draw.
+   * @param {string} drawId
+   * @param {Object} [opts]
+   * @param {boolean} [opts.skipStatusCheck=false]  - Allow PUBLISHED status (for reprocessing)
+   * @param {boolean} [opts.skipBalanceUpdate=false] - Skip crediting user.balance (for reprocessing)
+   */
+  async processPrizesForDraw(drawId, opts = {}) {
+    const { skipStatusCheck = false, skipBalanceUpdate = false } = opts;
     try {
-      logger.info('Starting prize processing for draw', { drawId });
+      logger.info('Starting prize processing for draw', { drawId, opts });
 
       return await prisma.$transaction(async (tx) => {
         const draw = await tx.draw.findUnique({
@@ -20,7 +28,7 @@ class PrizeProcessorService {
           throw new Error('Sorteo no encontrado');
         }
 
-        if (draw.status !== 'DRAWN') {
+        if (!skipStatusCheck && draw.status !== 'DRAWN') {
           throw new Error('El sorteo debe estar en estado DRAWN para procesar premios');
         }
 
@@ -28,52 +36,70 @@ class PrizeProcessorService {
           throw new Error('El sorteo no tiene un número ganador definido');
         }
 
+        // ── Aproximación config ────────────────────────────────────────────
+        const aproxCfg = (draw.game.config || {}).aproximacion;
+        const hasAprox = aproxCfg?.enabled === true;
+        const aproxMultiplier = hasAprox ? parseFloat(aproxCfg.multiplier) : 0;
+        const neighborIds = new Set();
+
+        if (hasAprox && draw.winnerItem) {
+          const winNum = parseInt(draw.winnerItem.number, 10);
+          const max    = 999;
+          const n1Str  = String(winNum === 0 ? max : winNum - 1).padStart(3, '0');
+          const n2Str  = String(winNum === max ? 0 : winNum + 1).padStart(3, '0');
+          const neighbors = await tx.gameItem.findMany({
+            where: { gameId: draw.game.id, number: { in: [n1Str, n2Str] } },
+            select: { id: true },
+          });
+          neighbors.forEach(n => neighborIds.add(n.id));
+        }
+        // ──────────────────────────────────────────────────────────────────
+
         // Obtener SOLO los detalles de tickets que pertenecen a este sorteo
-        // Un ticket puede tener detalles de múltiples sorteos
         // EXCLUIR tickets de tripleta externa (se verifican con lógica especial)
         const allTicketDetails = await tx.ticketDetail.findMany({
           where: {
-            ticket: {
-              drawId
-            },
+            ticket: { drawId },
             status: 'ACTIVE'
           },
           include: {
             gameItem: true,
-            ticket: {
-              include: {
-                user: true
-              }
-            }
+            ticket: { include: { user: true } }
           }
         });
 
         // Filtrar en código: excluir solo tripletas externas
         const ticketDetails = allTicketDetails.filter(detail => {
           const ticket = detail.ticket;
-          // Excluir solo si es EXTERNAL_API Y tiene type='TRIPLETA'
-          if (ticket.source === 'EXTERNAL_API' && 
-              ticket.providerData && 
+          if (ticket.source === 'EXTERNAL_API' &&
+              ticket.providerData &&
               ticket.providerData.type === 'TRIPLETA') {
             return false;
           }
           return true;
         });
 
-        logger.info('Found ticket details to process', { 
-          drawId, 
-          detailCount: ticketDetails.length 
+        logger.info('Found ticket details to process', {
+          drawId,
+          detailCount: ticketDetails.length
         });
 
         let totalPrizesAwarded = 0;
         const processedTickets = new Set();
         const winningTickets = new Set();
 
-        // Procesar cada detalle individualmente
         for (const detail of ticketDetails) {
-          const isWinner = detail.gameItemId === draw.winnerItemId;
-          const prize = isWinner ? parseFloat(detail.amount) * parseFloat(detail.multiplier) : 0;
-          
+          const isExact = detail.gameItemId === draw.winnerItemId;
+          const isAprox = hasAprox && neighborIds.has(detail.gameItemId);
+          const isWinner = isExact || isAprox;
+
+          let prize = 0;
+          if (isExact) {
+            prize = parseFloat(detail.amount) * parseFloat(detail.multiplier);
+          } else if (isAprox) {
+            prize = parseFloat(detail.amount) * aproxMultiplier;
+          }
+
           await tx.ticketDetail.update({
             where: { id: detail.id },
             data: {
@@ -85,14 +111,14 @@ class PrizeProcessorService {
           if (isWinner) {
             totalPrizesAwarded += prize;
             winningTickets.add(detail.ticketId);
-            
+
             logger.info('Winning detail found', {
               ticketId: detail.ticketId,
               detailId: detail.id,
               gameItemNumber: detail.gameItem.number,
               amount: detail.amount,
-              multiplier: detail.multiplier,
-              prize
+              prize,
+              type: isExact ? 'exact' : 'aproximacion',
             });
           }
 
@@ -101,60 +127,50 @@ class PrizeProcessorService {
 
         // Actualizar cada ticket: recalcular su premio total y status
         for (const ticketId of processedTickets) {
-          // Obtener todos los detalles del ticket (puede tener detalles de otros sorteos)
           const allDetails = await tx.ticketDetail.findMany({
             where: { ticketId }
           });
 
-          // Calcular premio total del ticket (suma de todos sus detalles)
           const ticketTotalPrize = allDetails.reduce((sum, d) => sum + parseFloat(d.prize || 0), 0);
-          
-          // Determinar status del ticket:
-          // - Si tiene algún detalle ganador -> WON
-          // - Si todos los detalles están procesados (no ACTIVE) y ninguno ganó -> LOST
-          // - Si aún tiene detalles ACTIVE -> ACTIVE (sigue participando en otros sorteos)
+
           const hasWinningDetail = allDetails.some(d => d.status === 'WON');
-          const hasActiveDetail = allDetails.some(d => d.status === 'ACTIVE');
-          
+          const hasActiveDetail  = allDetails.some(d => d.status === 'ACTIVE');
+
           let ticketStatus;
           if (hasWinningDetail) {
             ticketStatus = 'WON';
           } else if (hasActiveDetail) {
-            ticketStatus = 'ACTIVE'; // Sigue participando en otros sorteos
+            ticketStatus = 'ACTIVE';
           } else {
-            ticketStatus = 'LOST'; // Todos los detalles procesados y ninguno ganó
+            ticketStatus = 'LOST';
           }
 
           await tx.ticket.update({
             where: { id: ticketId },
-            data: {
-              status: ticketStatus,
-              totalPrize: ticketTotalPrize
-            }
+            data: { status: ticketStatus, totalPrize: ticketTotalPrize }
           });
 
-          // Si el ticket ganó en ESTE sorteo, acreditar premio al usuario
-          if (winningTickets.has(ticketId)) {
+          if (!skipBalanceUpdate && winningTickets.has(ticketId)) {
             const ticket = await tx.ticket.findUnique({
               where: { id: ticketId },
               include: { user: true }
             });
 
-            // Calcular premio de ESTE sorteo específicamente
+            // Prize for THIS draw (exact + aproximación)
             const thisDrawPrize = ticketDetails
-              .filter(d => d.ticketId === ticketId && d.gameItemId === draw.winnerItemId)
-              .reduce((sum, d) => sum + parseFloat(d.amount) * parseFloat(d.multiplier), 0);
+              .filter(d => d.ticketId === ticketId &&
+                (d.gameItemId === draw.winnerItemId || neighborIds.has(d.gameItemId)))
+              .reduce((sum, d) => {
+                if (d.gameItemId === draw.winnerItemId) {
+                  return sum + parseFloat(d.amount) * parseFloat(d.multiplier);
+                }
+                return sum + parseFloat(d.amount) * aproxMultiplier;
+              }, 0);
 
-            // Solo acreditar balance si el ticket tiene usuario (TAQUILLA_ONLINE)
-            // Los tickets externos (EXTERNAL_API) no tienen usuario
             if (ticket.userId) {
               await tx.user.update({
                 where: { id: ticket.userId },
-                data: {
-                  balance: {
-                    increment: thisDrawPrize
-                  }
-                }
+                data: { balance: { increment: thisDrawPrize } }
               });
 
               logger.info('Prize awarded to user', {
@@ -164,7 +180,6 @@ class PrizeProcessorService {
                 prize: thisDrawPrize
               });
 
-              // Notificar al jugador por WhatsApp (fire-and-forget)
               playerNotificationService.notifyPrizeWon(ticket.userId, thisDrawPrize, draw);
             } else {
               logger.info('Prize calculated for external ticket', {
@@ -177,9 +192,7 @@ class PrizeProcessorService {
         }
 
         const winnersCount = winningTickets.size;
-        const losersCount = processedTickets.size - winnersCount;
-
-        // Draw status stays in DRAWN — no status update needed
+        const losersCount  = processedTickets.size - winnersCount;
 
         const summary = {
           drawId,
@@ -193,9 +206,8 @@ class PrizeProcessorService {
         };
 
         logger.info('Prize processing completed', summary);
-
         return summary;
-      }, { timeout: 30000 }); // 30s: procesar muchos tickets puede tardar más de 5s
+      }, { timeout: 30000 });
     } catch (error) {
       logger.error('Error processing prizes:', error);
       throw error;
@@ -206,29 +218,16 @@ class PrizeProcessorService {
     try {
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          winnerItem: true
-        }
+        include: { game: true, winnerItem: true }
       });
 
-      if (!draw) {
-        throw new Error('Sorteo no encontrado');
-      }
+      if (!draw) throw new Error('Sorteo no encontrado');
 
       const tickets = await prisma.ticket.findMany({
         where: { drawId },
         include: {
-          details: {
-            where: { status: 'WON' }
-          },
-          user: {
-            select: {
-              id: true,
-              username: true,
-              email: true
-            }
-          }
+          details: { where: { status: 'WON' } },
+          user: { select: { id: true, username: true, email: true } }
         }
       });
 
