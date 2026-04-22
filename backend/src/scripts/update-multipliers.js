@@ -47,14 +47,24 @@ async function main() {
   total += await updateGame('triple-pantera',   n => parseInt(n, 10) % 100 === 0 ? 1000 : 600);
   total += await updateGame('terminal-pantera', () => 70);
 
+  const triple = await prisma.game.findUnique({
+    where: { slug: 'triple-pantera' },
+    select: { config: true },
+  });
+  const currentConfig = triple?.config || {};
+  const nextConfig = { ...currentConfig, aproximacion: { enabled: true, multiplier: 5 } };
+
   if (!DRY_RUN) {
     await prisma.game.update({
       where: { slug: 'triple-pantera' },
-      data: { config: { aproximacion: { enabled: true, multiplier: 5 } } },
+      data: { config: nextConfig },
     });
     console.log('\n✅ Triple Pantera config.aproximacion → { enabled: true, multiplier: 5 }');
+    console.log(`   (preserved existing keys: ${Object.keys(currentConfig).filter(k => k !== 'aproximacion').join(', ') || 'none'})`);
   } else {
-    console.log('\n🔍 Would set Triple Pantera config.aproximacion = { enabled: true, multiplier: 5 }');
+    console.log('\n🔍 Would merge aproximacion into existing Game.config:');
+    console.log(`   existing keys: ${Object.keys(currentConfig).join(', ') || 'none'}`);
+    console.log(`   resulting config: ${JSON.stringify(nextConfig)}`);
   }
 
   console.log(`\nTotal items changed: ${total}`);
