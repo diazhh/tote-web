@@ -75,6 +75,7 @@ model GameItem {
   drawsAsPreselected Draw[]         @relation("PreselectedItem")
   drawsAsWinner      Draw[]         @relation("WinnerItem")
   ticketDetails      TicketDetail[]
+  drawQuotas         DrawItemQuota[]
 
   @@unique([gameId, number])
   @@index([gameId])
@@ -151,6 +152,7 @@ model Draw {
   tickets         Ticket[]
   stats           DrawStats? // Estadísticas del sorteo
   providerStats   ProviderStats[] // Estadísticas por proveedor
+  itemQuotas      DrawItemQuota[]
 
   @@index([gameId])
   @@index([drawDate])
@@ -1260,4 +1262,20 @@ model PageVisit {
   @@index([createdAt])
   @@index([sessionId])
   @@index([pageType, createdAt])
+}
+
+model DrawItemQuota {
+  id         String   @id @default(uuid())
+  drawId     String
+  gameItemId String
+  maxAmount  Decimal  @db.Decimal(12, 2)
+  createdBy  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  draw     Draw     @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  gameItem GameItem @relation(fields: [gameItemId], references: [id], onDelete: Cascade)
+
+  @@unique([drawId, gameItemId])
+  @@index([drawId])
 }
