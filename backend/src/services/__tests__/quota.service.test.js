@@ -96,3 +96,53 @@ describe('quota.service — getDrawQuotas', () => {
     await expect(getDrawQuotas('missing')).rejects.toThrow(/not found/i);
   });
 });
+
+describe('quota.service — setQuota', () => {
+  let setQuota;
+  beforeAll(async () => {
+    ({ setQuota } = await import('../quota.service.js'));
+  });
+  beforeEach(() => jest.clearAllMocks());
+
+  test('upserts by (drawId, gameItemId) with maxAmount and createdBy', async () => {
+    mockPrisma.drawItemQuota.upsert.mockResolvedValue({
+      id: 'q-1', drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 20000, createdBy: 'user-1',
+    });
+    const result = await setQuota({ drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 20000, userId: 'user-1' });
+
+    expect(mockPrisma.drawItemQuota.upsert).toHaveBeenCalledWith({
+      where: { drawId_gameItemId: { drawId: 'draw-1', gameItemId: 'item-30' } },
+      create: { drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 20000, createdBy: 'user-1' },
+      update: { maxAmount: 20000 },
+    });
+    expect(result.maxAmount).toBe(20000);
+  });
+
+  test('rejects non-positive maxAmount', async () => {
+    await expect(setQuota({ drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 0 })).rejects.toThrow(/positive/i);
+    await expect(setQuota({ drawId: 'draw-1', gameItemId: 'item-30', maxAmount: -100 })).rejects.toThrow(/positive/i);
+  });
+});
+
+describe('quota.service — removeQuota', () => {
+  let removeQuota;
+  beforeAll(async () => {
+    ({ removeQuota } = await import('../quota.service.js'));
+  });
+  beforeEach(() => jest.clearAllMocks());
+
+  test('deletes by unique key', async () => {
+    mockPrisma.drawItemQuota.delete.mockResolvedValue({ id: 'q-1' });
+    await removeQuota({ drawId: 'draw-1', gameItemId: 'item-30' });
+    expect(mockPrisma.drawItemQuota.delete).toHaveBeenCalledWith({
+      where: { drawId_gameItemId: { drawId: 'draw-1', gameItemId: 'item-30' } },
+    });
+  });
+
+  test('is idempotent — swallows "record not found" errors', async () => {
+    const err = new Error('Record not found');
+    err.code = 'P2025';
+    mockPrisma.drawItemQuota.delete.mockRejectedValue(err);
+    await expect(removeQuota({ drawId: 'draw-1', gameItemId: 'item-30' })).resolves.toBeUndefined();
+  });
+});

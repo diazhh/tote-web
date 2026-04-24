@@ -66,3 +66,36 @@ export async function getDrawQuotas(drawId) {
     };
   });
 }
+
+/**
+ * Set or update a quota for (drawId, gameItemId).
+ * @param {object} params
+ * @param {string} params.drawId
+ * @param {string} params.gameItemId
+ * @param {number} params.maxAmount
+ * @param {string} [params.userId]
+ */
+export async function setQuota({ drawId, gameItemId, maxAmount, userId }) {
+  if (typeof maxAmount !== 'number' || maxAmount <= 0) {
+    throw new Error('maxAmount must be a positive number');
+  }
+  return prisma.drawItemQuota.upsert({
+    where: { drawId_gameItemId: { drawId, gameItemId } },
+    create: { drawId, gameItemId, maxAmount, createdBy: userId ?? null },
+    update: { maxAmount },
+  });
+}
+
+/**
+ * Remove a quota. Idempotent — swallows Prisma P2025 (record not found).
+ */
+export async function removeQuota({ drawId, gameItemId }) {
+  try {
+    await prisma.drawItemQuota.delete({
+      where: { drawId_gameItemId: { drawId, gameItemId } },
+    });
+  } catch (err) {
+    if (err.code === 'P2025') return;
+    throw err;
+  }
+}
