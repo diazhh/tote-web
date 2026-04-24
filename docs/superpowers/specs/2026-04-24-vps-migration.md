@@ -20,7 +20,11 @@
 - Branch actual: `diazhh` @ `e4c2b93` (atrás de los 11 commits del cupo)
 - DB `tote_db`: **421 MB**
 - `backend/storage/`: **4.4 GB**
-- HAProxy ACLs: `tote.atilax.io` → 127.0.0.1:10000 (frontend), `toteback.atilax.io` → 127.0.0.1:3001 (backend), `webhook.atilax.io` → 127.0.0.1:9000
+- HAProxy ACLs (verificado en /etc/haproxy/haproxy.cfg):
+  - `tote.atilax.io` → backend `frontend_app` → `127.0.0.1:4006` (Next.js)
+  - `toteback.atilax.io` → backend `backend_api` → `127.0.0.1:3001` (Express)
+  - `webhook.atilax.io` → backend `webhook_server` → `127.0.0.1:9000` — **es del proyecto ERP (process `erp-webhook`), NO de tote. NO migrar.**
+- Providers PUSH usan `https://toteback.atilax.io/api/webhooks/{slug}` (ruteo por host, todos los paths van al backend)
 - Cert: `/etc/haproxy/tote.atilax.io.pem` (multi-cert PEM combinada)
 
 ### Destino — VPS 94 (`94.72.116.98`)
@@ -30,10 +34,10 @@
 ### Cloudflare
 - Zone `atilax.io`: `f3d4e5f0ea624f4ca7fd3e923998b24a`
 - Token: stored out-of-band; reference as `$CF_TOKEN` env var in scripts
-- DNS records a actualizar (todos proxied):
+- DNS records a actualizar (proxied):
   - `tote.atilax.io` → record id `d89136506f1a37bb8f5cdfbfc737be17`
   - `toteback.atilax.io` → record id `30dbc225a807cb8dcc1db4c98d748aab`
-  - `webhook.atilax.io` → record id `a5571471eed73528504ca99214fceec6`
+- **NO tocar** `webhook.atilax.io` (record id `a5571471eed73528504ca99214fceec6`) — pertenece al proyecto ERP que sigue en 144.
 - DNS legacy a IGNORAR (no aparecen en HAProxy ni pm2 de 144): `tote-hasura.atilax.io`, `tote-node-red.atilax.io`, `tote-nr.atilax.io`
 
 ## Fases (con orden de ejecución)
@@ -66,11 +70,11 @@
 1. Copiar `.env` de 144, modificar para SAFE testing:
    - `DISABLE_SOCIAL_CHANNELS=true`
    - `ENABLE_JOBS=false`
-2. HAProxy en 94: config minimal con SOLO los 3 backends de tote (`tote_frontend`, `tote_backend`, `webhook_server`) apuntando a 127.0.0.1
+2. HAProxy en 94: config minimal con 2 backends (`backend_api` → 127.0.0.1:3001, `frontend_app` → 127.0.0.1:4006). NO incluir `webhook_server` — ese sigue siendo del ERP en 144.
 3. Cert vía DNS-01 con Cloudflare (no requiere DNS apuntando a 94 todavía):
    ```
    certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/cf.ini \
-     -d tote.atilax.io -d toteback.atilax.io -d webhook.atilax.io \
+     -d tote.atilax.io -d toteback.atilax.io \
      --non-interactive --agree-tos -m diazhh@gmail.com
    ```
 4. Combinar cert + key en `/etc/haproxy/tote.atilax.io.pem`
@@ -94,7 +98,7 @@
 3. **144**: `pm2 stop tote-backend tote-frontend && pm2 save`
 4. **94**: cambiar `.env` — `DISABLE_SOCIAL_CHANNELS=false`, `ENABLE_JOBS=true`
 5. **94**: `pm2 restart tote-backend tote-frontend`
-6. Cloudflare API: actualizar 3 A records → `94.72.116.98`
+6. Cloudflare API: actualizar 2 A records → `94.72.116.98` (`tote.atilax.io`, `toteback.atilax.io`). **NO** tocar `webhook.atilax.io`.
 7. Smoke test externo desde local
 
 ### Fase 7 — Verificación post-cutover (hasta 8 AM)
