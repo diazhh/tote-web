@@ -146,3 +146,120 @@ describe('quota.service — removeQuota', () => {
     await expect(removeQuota({ drawId: 'draw-1', gameItemId: 'item-30' })).resolves.toBeUndefined();
   });
 });
+
+describe('quota.service — checkTicketQuotas', () => {
+  let checkTicketQuotas;
+  let mockTx;
+
+  beforeAll(async () => {
+    ({ checkTicketQuotas } = await import('../quota.service.js'));
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockTx = {
+      $queryRaw: jest.fn(),
+      ticketDetail: { groupBy: jest.fn() },
+      gameItem: { findUnique: jest.fn() },
+      draw: { findUnique: jest.fn() },
+    };
+  });
+
+  test('returns ok when no quotas exist for any play', async () => {
+    mockTx.$queryRaw.mockResolvedValue([]); // no quota rows
+    const result = await checkTicketQuotas(
+      [{ drawId: 'draw-1', gameItemId: 'item-30', amount: 500 }],
+      mockTx,
+    );
+    expect(result).toEqual({ ok: true });
+    expect(mockTx.ticketDetail.groupBy).not.toHaveBeenCalled(); // early exit
+  });
+
+  test('returns ok when sold + attempt <= max', async () => {
+    mockTx.$queryRaw.mockResolvedValue([
+      { drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 20000 },
+    ]);
+    mockTx.ticketDetail.groupBy.mockResolvedValue([
+      { drawId: 'draw-1', gameItemId: 'item-30', _sum: { amount: 19500 } },
+    ]);
+    const result = await checkTicketQuotas(
+      [{ drawId: 'draw-1', gameItemId: 'item-30', amount: 500 }],
+      mockTx,
+    );
+    expect(result).toEqual({ ok: true });
+  });
+
+  test('rejects when sold + attempt > max, includes item number and drawTime in reason', async () => {
+    mockTx.$queryRaw.mockResolvedValue([
+      { drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 20000 },
+    ]);
+    mockTx.ticketDetail.groupBy.mockResolvedValue([
+      { drawId: 'draw-1', gameItemId: 'item-30', _sum: { amount: 19500 } },
+    ]);
+    mockTx.gameItem.findUnique.mockResolvedValue({ number: '30', name: 'CARNERO' });
+    mockTx.draw.findUnique.mockResolvedValue({ drawTime: '10:00:00' });
+
+    const result = await checkTicketQuotas(
+      [{ drawId: 'draw-1', gameItemId: 'item-30', amount: 1000 }],
+      mockTx,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/30/);
+    expect(result.reason).toMatch(/CARNERO/);
+    expect(result.reason).toMatch(/10:00/);
+    expect(result.reason).toMatch(/20500/);
+    expect(result.reason).toMatch(/20000/);
+  });
+
+  test('aggregates multiple plays on the same (draw, item) before checking', async () => {
+    mockTx.$queryRaw.mockResolvedValue([
+      { drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 1000 },
+    ]);
+    mockTx.ticketDetail.groupBy.mockResolvedValue([]);
+    mockTx.gameItem.findUnique.mockResolvedValue({ number: '30', name: 'CARNERO' });
+    mockTx.draw.findUnique.mockResolvedValue({ drawTime: '10:00:00' });
+
+    // Two plays of 600 on same item = 1200, exceeds 1000
+    const result = await checkTicketQuotas(
+      [
+        { drawId: 'draw-1', gameItemId: 'item-30', amount: 600 },
+        { drawId: 'draw-1', gameItemId: 'item-30', amount: 600 },
+      ],
+      mockTx,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/1200/);
+  });
+
+  test('rejects ticket when any single (draw, item) exceeds (all-or-nothing)', async () => {
+    mockTx.$queryRaw.mockResolvedValue([
+      { drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 20000 },
+      { drawId: 'draw-1', gameItemId: 'item-31', maxAmount: 5000 },
+    ]);
+    mockTx.ticketDetail.groupBy.mockResolvedValue([
+      { drawId: 'draw-1', gameItemId: 'item-30', _sum: { amount: 100 } },
+      { drawId: 'draw-1', gameItemId: 'item-31', _sum: { amount: 4900 } },
+    ]);
+    mockTx.gameItem.findUnique.mockResolvedValue({ number: '31', name: 'TIGRE' });
+    mockTx.draw.findUnique.mockResolvedValue({ drawTime: '10:00:00' });
+
+    const result = await checkTicketQuotas(
+      [
+        { drawId: 'draw-1', gameItemId: 'item-30', amount: 500 }, // ok
+        { drawId: 'draw-1', gameItemId: 'item-31', amount: 200 }, // exceeds
+      ],
+      mockTx,
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/31/);
+  });
+
+  test('requires tx parameter', async () => {
+    await expect(
+      checkTicketQuotas([{ drawId: 'd', gameItemId: 'i', amount: 1 }], null),
+    ).rejects.toThrow(/tx is required/i);
+  });
+});
