@@ -178,6 +178,7 @@ import numberHistoryRoutes from './routes/number-history.routes.js';
 import adminJobsRoutes from './routes/admin-jobs.routes.js';
 import testSpecialImagesRoutes from './routes/test-special-images.routes.js';
 import webhookRoutes from './routes/webhook.routes.js';
+import quotaRoutes from './routes/quota.routes.js';
 import portalRoutes from './routes/portal.routes.js';
 import conciliacionRoutes from './routes/conciliacion.routes.js';
 
@@ -197,6 +198,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/games', gameRoutes);
 app.use('/api/items', gameItemRoutes);
 app.use('/api/draws', drawRoutes);
+app.use('/api/draws', quotaRoutes);
 app.use('/api/templates', drawTemplateRoutes);
 app.use('/api/pauses', drawPauseRoutes);
 app.use('/api/channels', channelRoutes);
