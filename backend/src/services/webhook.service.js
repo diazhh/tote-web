@@ -2,6 +2,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import { checkTicketQuotas } from './quota.service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,8 +15,8 @@ const __dirname = path.dirname(__filename);
  * @param {string} logId       - WebhookLog.id to update on DUPLICATE
  * @returns {object}           - Created or existing Ticket record
  */
-async function createWebhookTicket(normalized, logId, apiSystemId) {
-  const existing = await prisma.ticket.findFirst({
+async function createWebhookTicket(normalized, logId, apiSystemId, tx = prisma) {
+  const existing = await tx.ticket.findFirst({
     where: {
       externalTicketId: normalized.externalTicketId,
       source: 'WEBHOOK_PUSH',
@@ -24,14 +25,14 @@ async function createWebhookTicket(normalized, logId, apiSystemId) {
   });
 
   if (existing) {
-    await prisma.webhookLog.update({
+    await tx.webhookLog.update({
       where: { id: logId },
       data: { status: 'DUPLICATE' },
     });
     return existing;
   }
 
-  const ticket = await prisma.ticket.create({
+  const ticket = await tx.ticket.create({
     data: {
       drawId: normalized.drawId,
       source: 'WEBHOOK_PUSH',
@@ -186,7 +187,28 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
       return annulResult;
     }
 
-    const ticket = await createWebhookTicket(normalized, log.id, apiSystem.id);
+    // Wrap quota check + ticket creation in one transaction so the
+    // SELECT ... FOR UPDATE lock inside checkTicketQuotas stays held
+    // until the ticket insert commits.
+    const txResult = await prisma.$transaction(async (tx) => {
+      const quotaCheck = await checkTicketQuotas(normalized.details, tx);
+      if (!quotaCheck.ok) {
+        return { rejected: true, reason: quotaCheck.reason };
+      }
+      const ticket = await createWebhookTicket(normalized, log.id, apiSystem.id, tx);
+      return { rejected: false, ticket };
+    });
+
+    if (txResult.rejected) {
+      await prisma.webhookLog.update({
+        where: { id: log.id },
+        data: { status: 'FAILED', errorMessage: txResult.reason },
+      });
+      logger.warn(`[webhook] Rejected by quota — slug="${slug}" logId=${log.id} reason=${txResult.reason}`);
+      return { status: 'rejected', logId: log.id, reason: txResult.reason };
+    }
+
+    const ticket = txResult.ticket;
 
     // Check if the log was updated to DUPLICATE by createWebhookTicket
     const currentLog = await prisma.webhookLog.findUnique({ where: { id: log.id } });

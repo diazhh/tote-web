@@ -22,6 +22,9 @@ const mockPrisma = {
   ticket: { findFirst: jest.fn(), create: jest.fn() },
   draw: { findFirst: jest.fn() },
   gameItem: { findFirst: jest.fn() },
+  // Required by the quota-transaction wrapper introduced in Task 5.
+  // Pass mockPrisma itself as tx so existing assertions on mockPrisma.ticket.create still work.
+  $transaction: jest.fn((fn) => fn(mockPrisma)),
 };
 
 jest.unstable_mockModule('../lib/prisma.js', () => ({ prisma: mockPrisma }));
@@ -30,6 +33,11 @@ jest.unstable_mockModule('../lib/logger.js', () => ({
 }));
 jest.unstable_mockModule('../lib/dateUtils.js', () => ({
   getVenezuelaDateString: jest.fn().mockReturnValue('2026-04-08'),
+}));
+// Required by the quota-transaction wrapper introduced in Task 5.
+// Always returns ok:true so the success-path test (Test 2) reaches ticket.create.
+jest.unstable_mockModule('../services/quota.service.js', () => ({
+  checkTicketQuotas: jest.fn().mockResolvedValue({ ok: true }),
 }));
 
 // ── Shared test data ───────────────────────────────────────────────
