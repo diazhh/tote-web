@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { 
+import {
   Building2, Hash, FileText, Calendar, Gamepad2, Clock,
   DollarSign, Trophy, Ticket, AlertTriangle, ChevronRight,
-  X, Eye, Layers
+  X, Eye, Layers, Shield
 } from 'lucide-react';
 import ResponsiveTable from '@/components/common/ResponsiveTable';
 import ResponsiveTabs from '@/components/common/ResponsiveTabs';
@@ -12,6 +12,8 @@ import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
 import numberHistoryApi from '@/lib/api/number-history';
 import axios from '@/lib/api/axios';
+import quotaApi from '@/lib/api/quota';
+import QuotaModal from './QuotaModal';
 import TripletaDetailModal from '@/components/shared/TripletaDetailModal';
 import { getTodayVenezuela } from '@/lib/dateUtils';
 
@@ -34,6 +36,8 @@ export default function MonitorPage() {
   const [tripletaDetailModal, setTripletaDetailModal] = useState({ open: false, data: null });
   const [numberHistoryModal, setNumberHistoryModal] = useState({ open: false, number: null, history: null, loading: false });
   const [lastSeenData, setLastSeenData] = useState({});
+  const [quotas, setQuotas] = useState([]);
+  const [quotaModal, setQuotaModal] = useState({ open: false, item: null });
 
   useEffect(() => {
     fetchGames();
@@ -108,9 +112,13 @@ export default function MonitorPage() {
         const result = await monitorApi.getBancaStats(selectedDraw);
         setBancaStats(result.data);
       } else if (activeTab === 'numeros') {
-        const result = await monitorApi.getItemStats(selectedDraw);
-        setItemStats(result.data);
-        
+        const [statsResult, quotasResult] = await Promise.all([
+          monitorApi.getItemStats(selectedDraw),
+          quotaApi.getDrawQuotas(selectedDraw).catch(() => ({ data: [] })),
+        ]);
+        setItemStats(statsResult.data);
+        setQuotas(quotasResult.data || []);
+
         // Fetch last seen data for all numbers
         if (selectedGame) {
           try {
@@ -211,6 +219,12 @@ export default function MonitorPage() {
     const [hours, minutes] = timeStr.split(':');
     return `${hours}:${minutes}`;
   };
+
+  const quotaByItem = new Map(quotas.map((q) => [q.gameItemId, q]));
+  const getQuota = (itemId) => quotaByItem.get(itemId) || null;
+
+  const currentDraw = draws.find((d) => d.id === selectedDraw);
+  const canEditQuota = currentDraw && (currentDraw.status === 'SCHEDULED' || currentDraw.status === 'CLOSED');
 
   return (
     <div className="space-y-6">
@@ -412,8 +426,16 @@ export default function MonitorPage() {
 
                   <ResponsiveTable
                     data={[...itemStats.items].sort((a, b) => parseInt(a.number) - parseInt(b.number))}
-                    rowClassName={(item) => item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'bg-red-50' : ''}
-                    cardClassName={(item) => item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'border-red-300 bg-red-50' : ''}
+                    rowClassName={(item) => {
+                      const q = getQuota(item.itemId);
+                      if (q?.exceeded) return 'bg-red-50';
+                      return item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'bg-red-50' : '';
+                    }}
+                    cardClassName={(item) => {
+                      const q = getQuota(item.itemId);
+                      if (q?.exceeded) return 'border-red-300 bg-red-50';
+                      return item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'border-red-300 bg-red-50' : '';
+                    }}
                     columns={[
                       { key: 'number', label: '#', primary: true, render: (i) => <span className="font-bold">{i.number}</span> },
                       { key: 'name', label: 'Nombre' },
@@ -442,10 +464,10 @@ export default function MonitorPage() {
                       },
                       { key: 'tripletaCount', label: 'Tripletas', align: 'right', render: (i) => i.tripletaCount > 0 ? <span className="text-purple-600 font-medium">{i.tripletaCount}</span> : <span className="text-gray-400">0</span> },
                       { key: 'tripletaPrize', label: 'Premio Trip.', align: 'right', render: (i) => <span className="text-purple-600">{formatCurrency(i.tripletaPrize)}</span> },
-                      { 
-                        key: 'totalPotentialPrize', 
-                        label: 'Total Premio', 
-                        align: 'right', 
+                      {
+                        key: 'totalPotentialPrize',
+                        label: 'Total Premio',
+                        align: 'right',
                         render: (i) => {
                           const isDangerous = i.totalPotentialPrize > itemStats.totalSales * 0.7;
                           return (
@@ -455,7 +477,36 @@ export default function MonitorPage() {
                             </span>
                           );
                         }
-                      }
+                      },
+                      {
+                        key: 'cupo',
+                        label: 'Cupo',
+                        align: 'right',
+                        render: (i) => {
+                          const q = getQuota(i.itemId);
+                          if (!q || q.maxAmount === null) return <span className="text-gray-400">—</span>;
+                          return <span className="font-medium text-gray-900">{formatCurrency(q.maxAmount)}</span>;
+                        },
+                      },
+                      {
+                        key: 'disponible',
+                        label: 'Disponible',
+                        align: 'right',
+                        render: (i) => {
+                          const q = getQuota(i.itemId);
+                          if (!q || q.maxAmount === null) return <span className="text-gray-400">—</span>;
+                          if (q.exceeded) {
+                            return (
+                              <span className="inline-flex items-center gap-1 text-red-700 font-bold">
+                                Excedido
+                              </span>
+                            );
+                          }
+                          const pct = q.maxAmount > 0 ? q.availableAmount / q.maxAmount : 0;
+                          const color = pct > 0.2 ? 'text-green-600' : 'text-yellow-600';
+                          return <span className={`font-medium ${color}`}>{formatCurrency(q.availableAmount)}</span>;
+                        },
+                      },
                     ]}
                     actions={(item) => (
                       <div className="flex items-center gap-2">
@@ -473,6 +524,27 @@ export default function MonitorPage() {
                             title="Ver tripletas"
                           >
                             <Layers className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canEditQuota && (
+                          <button
+                            onClick={() => {
+                              const q = getQuota(item.itemId);
+                              setQuotaModal({
+                                open: true,
+                                item: {
+                                  gameItemId: item.itemId,
+                                  number: item.number,
+                                  name: item.name,
+                                  maxAmount: q?.maxAmount ?? null,
+                                  soldAmount: q?.soldAmount ?? item.totalAmount ?? 0,
+                                },
+                              });
+                            }}
+                            className="p-2 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg"
+                            title="Configurar cupo"
+                          >
+                            <Shield className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -822,6 +894,21 @@ export default function MonitorPage() {
         <TripletaDetailModal
           tripleta={tripletaDetailModal.data}
           onClose={() => setTripletaDetailModal({ open: false, data: null })}
+        />
+      )}
+
+      {/* Modal de Cupo */}
+      {quotaModal.open && quotaModal.item && currentDraw && (
+        <QuotaModal
+          draw={{
+            id: currentDraw.id,
+            drawTime: currentDraw.drawTime,
+            game: itemStats?.game,
+            status: currentDraw.status,
+          }}
+          item={quotaModal.item}
+          onClose={() => setQuotaModal({ open: false, item: null })}
+          onSaved={() => fetchData()}
         />
       )}
 
