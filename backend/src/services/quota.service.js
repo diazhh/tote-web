@@ -35,6 +35,8 @@ export async function getDrawQuotas(drawId) {
       where: { drawId },
       select: { gameItemId: true, maxAmount: true },
     }),
+    // Requires TicketDetail.drawId to be populated on all webhook/online/SRQ tickets.
+    // Any legacy rows with drawId=null are silently excluded from soldAmount.
     prisma.ticketDetail.groupBy({
       by: ['gameItemId'],
       where: {
