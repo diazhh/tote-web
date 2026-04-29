@@ -57,7 +57,7 @@ async function main() {
       WHERE t."drawId" = d.id AND td.prize > 0
     ) p ON true
     WHERE d."gameId" = $1
-      AND d.status IN ('DRAWN', 'PUBLISHED')
+      AND d.status = 'DRAWN'
       AND d."drawDate" >= $2
       AND COALESCE(p.total, 0) > COALESCE(s.total, 0)
     ORDER BY ratio DESC
@@ -97,7 +97,7 @@ async function main() {
       FROM "Draw" d
       JOIN "GameItem" wi ON wi.id = d."winnerItemId"
       WHERE d."gameId" = $1
-        AND d.status IN ('DRAWN', 'PUBLISHED')
+        AND d.status = 'DRAWN'
         AND d."drawDate" >= $2
       GROUP BY centena
       ORDER BY centena
@@ -134,7 +134,7 @@ async function main() {
     JOIN "Draw" d ON d.id = t."drawId"
     JOIN "GameItem" wi ON wi.id = d."winnerItemId"
     WHERE d."gameId" = $1
-      AND d.status IN ('DRAWN', 'PUBLISHED')
+      AND d.status = 'DRAWN'
       AND d."drawDate" >= $2
       AND td.prize > 0
       AND t.source = 'EXTERNAL_API'
@@ -164,7 +164,7 @@ async function main() {
   const totalDraws = await prisma.draw.count({
     where: {
       gameId: game.id,
-      status: { in: ['DRAWN', 'PUBLISHED'] },
+      status: 'DRAWN',
       drawDate: { gte: since },
     },
   });
