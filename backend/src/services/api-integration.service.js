@@ -3,6 +3,7 @@ import logger from '../lib/logger.js';
 import providerEntitiesService from './provider-entities.service.js';
 import srqTripletaService from './srq-tripleta.service.js';
 import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
+import { withDrawLock } from '../lib/drawLock.js';
 
 /**
  * Servicio para integración con APIs externas de ventas
@@ -275,7 +276,25 @@ class ApiIntegrationService {
    * @param {boolean} clearExisting - Si debe limpiar tickets existentes antes de importar
    */
   async importSRQTickets(drawId, clearExisting = true) {
+    // Serializar concurrencia por drawId — previene race condition entre
+    // este import y la selección del preganador (close-draw worker) o entre
+    // ejecuciones simultáneas del job periódico sync-api-tickets.
+    return withDrawLock(drawId, async () => this._importSRQTicketsInner(drawId, clearExisting));
+  }
+
+  async _importSRQTicketsInner(drawId, clearExisting = true) {
     try {
+      // Defensa: no sincronizar draws que ya cerraron — el snapshot de ventas
+      // debe quedar congelado al momento de la selección del preganador.
+      const drawState = await prisma.draw.findUnique({
+        where: { id: drawId },
+        select: { status: true }
+      });
+      if (drawState && drawState.status !== 'SCHEDULED') {
+        logger.debug(`[importSRQTickets] Draw ${drawId} en estado ${drawState.status}, ignorando sync`);
+        return { imported: 0, skipped: 0, deleted: 0, frozen: true };
+      }
+
       logger.info(`🎫 Importando tickets para draw ${drawId}...`);
 
       // Obtener el mapping del sorteo

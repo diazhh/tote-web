@@ -5,6 +5,7 @@ import pdfReportService from './pdf-report.service.js';
 import { startOfDay, differenceInDays } from 'date-fns';
 import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 import prewinnerOptimizerService from './prewinner-optimizer.service.js';
+import { withDrawLock } from '../lib/drawLock.js';
 
 /**
  * Servicio para selección de pre-ganadores
@@ -22,6 +23,12 @@ class PrewinnerSelectionService {
    * @returns {Promise<Object|null>} - GameItem seleccionado o null
    */
   async selectPrewinner(drawId) {
+    // Serializar concurrencia con import SRQ — garantiza que el optimizer lea
+    // un snapshot consistente de ventas, sin tickets a medio insertar.
+    return withDrawLock(drawId, async () => this._selectPrewinnerInner(drawId));
+  }
+
+  async _selectPrewinnerInner(drawId) {
     try {
       logger.info(`🎯 Seleccionando pre-ganador para sorteo ${drawId}...`);
 

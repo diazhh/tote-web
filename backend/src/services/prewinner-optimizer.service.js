@@ -1270,28 +1270,30 @@ class PrewinnerOptimizerService {
    * v3: Verifica tripletas para evitar seleccionar números que las completarían
    */
   async selectFallback(context, constraints) {
-    const { gameItems, usedItemsToday, game, draw, activeTripletas } = context;
+    const { gameItems, salesByItem, usedItemsToday, game, draw, activeTripletas } = context;
     const history = await this.getDrawHistory(context);
     const cooldownDays = PrewinnerOptimizerService.DEFAULTS.COOLDOWN_DAYS;
-    
+
     // Solo mantener restricción de no usado hoy
     let validItems = gameItems.filter(item => !usedItemsToday.has(item.id));
-    
+
     if (validItems.length === 0) {
       validItems = gameItems;
     }
 
-    // v2: Calcular días sin ganar usando historial real
-    const itemsWithDays = validItems.map(item => {
+    // v5: incluir días sin ganar Y pago potencial — sin ordenar por número
+    const itemsWithMeta = validItems.map(item => {
       const lastWinInfo = history.lastWinByItemId.get(item.id);
-      const daysSinceWin = lastWinInfo 
+      const daysSinceWin = lastWinInfo
         ? differenceInDays(draw.drawDate, new Date(lastWinInfo.date))
         : 999;
-      return { item, daysSinceWin };
+      const sales = salesByItem.get(item.id) || { amount: 0, count: 0 };
+      const potentialPayout = parseFloat(sales.amount) * parseFloat(item.multiplier);
+      return { item, daysSinceWin, potentialPayout };
     });
 
     // Filtrar números sucesivos con los ganadores de hoy
-    const nonSequential = itemsWithDays.filter(x => {
+    const nonSequential = itemsWithMeta.filter(x => {
       const itemNumber = parseInt(x.item.number);
       for (const winnerNum of history.todayWinners) {
         if (Math.abs(itemNumber - winnerNum) <= 1) return false;
@@ -1299,10 +1301,9 @@ class PrewinnerOptimizerService {
       return true;
     });
 
-    // Si hay items no sucesivos, usar esos
-    let candidatePool = nonSequential.length > 0 ? nonSequential : itemsWithDays;
+    let candidatePool = nonSequential.length > 0 ? nonSequential : itemsWithMeta;
 
-    // v3: CRÍTICO - Filtrar números que completarían tripletas
+    // CRÍTICO - Descartar números que completarían tripletas
     const candidatesWithoutTripletaRisk = [];
     for (const candidate of candidatePool) {
       const tripletaImpact = await this.calculateTripletaImpact(
@@ -1311,29 +1312,20 @@ class PrewinnerOptimizerService {
         draw.id,
         activeTripletas
       );
-      
-      // Solo incluir si NO completaría tripletas
       if (tripletaImpact.completedCount === 0) {
         candidatesWithoutTripletaRisk.push(candidate);
-      } else {
-        logger.debug(`  ⚠️ Fallback: Descartando ${candidate.item.number} - completaría ${tripletaImpact.completedCount} tripleta(s) por $${tripletaImpact.totalPrize.toFixed(2)}`);
       }
     }
 
-    // Si hay candidatos sin riesgo de tripleta, usar esos
     if (candidatesWithoutTripletaRisk.length > 0) {
       candidatePool = candidatesWithoutTripletaRisk;
       logger.info(`  ✅ Fallback: ${candidatePool.length} candidatos sin riesgo de tripleta`);
     } else {
       logger.warn(`  ⚠️ Fallback: TODOS los candidatos completarían tripletas - usando el de menor riesgo`);
-      // Si todos completan tripletas, ordenar por menor riesgo
       const candidatesWithRisk = [];
       for (const candidate of candidatePool) {
         const tripletaImpact = await this.calculateTripletaImpact(
-          game.id,
-          candidate.item.id,
-          draw.id,
-          activeTripletas
+          game.id, candidate.item.id, draw.id, activeTripletas
         );
         candidatesWithRisk.push({ ...candidate, tripletaImpact });
       }
@@ -1341,24 +1333,56 @@ class PrewinnerOptimizerService {
       candidatePool = candidatesWithRisk;
     }
 
-    // v2: Preferir items fuera de cooldown y con más días sin ganar
-    candidatePool.sort((a, b) => {
-      // Primero: fuera de cooldown antes que dentro
-      const aInCooldown = a.daysSinceWin < cooldownDays && a.daysSinceWin < 999;
-      const bInCooldown = b.daysSinceWin < cooldownDays && b.daysSinceWin < 999;
-      if (aInCooldown !== bInCooldown) return aInCooldown ? 1 : -1;
-      
-      // Segundo: más días sin ganar
-      return b.daysSinceWin - a.daysSinceWin;
+    // v5: ANTI-BIAS Fisher-Yates ANTES de cualquier sort para destruir el orden
+    // numérico ascendente que el query inicial aplicaba (origen del sesgo histórico
+    // que concentraba todos los fallbacks en el rango 000-312).
+    this._shuffleInPlace(candidatePool);
+
+    // Preferir items fuera del cooldown si hay suficientes
+    const outOfCooldown = candidatePool.filter(c => c.daysSinceWin >= cooldownDays);
+    let workingPool = outOfCooldown.length >= 10 ? outOfCooldown : candidatePool;
+
+    // v5: Selección por pago potencial bajo, pero dentro de un pool YA aleatorizado.
+    // Sort estable preserva el orden del shuffle entre items con mismo potentialPayout.
+    workingPool.sort((a, b) => a.potentialPayout - b.potentialPayout);
+
+    // Tomar 50 % con menor pago potencial — más amplio que el 30 % anterior
+    const safePoolSize = Math.max(Math.floor(workingPool.length * 0.5), 10);
+    const safePool = workingPool.slice(0, safePoolSize);
+
+    // Re-shuffle del subset elegido para garantizar uniformidad final
+    this._shuffleInPlace(safePool);
+
+    const selected = safePool[Math.floor(Math.random() * safePool.length)];
+
+    // Telemetría estructurada (Fase 5) — permite filtrar y analizar
+    // distribución de fallbacks en logs.
+    const numberInt = parseInt(selected.item.number);
+    logger.info(`  🎲 Fallback aleatorio: ${selected.item.number} (pago potencial $${selected.potentialPayout.toFixed(2)}, días sin ganar ${selected.daysSinceWin}, pool ${safePool.length})`, {
+      event: 'prewinner_fallback',
+      drawId: draw.id,
+      gameId: game.id,
+      gameType: game.type,
+      selectedNumber: selected.item.number,
+      numberRange: Math.floor(numberInt / 100),
+      potentialPayout: selected.potentialPayout,
+      daysSinceWin: selected.daysSinceWin,
+      poolSize: safePool.length,
+      candidatePoolSize: candidatePool.length,
     });
 
-    // Tomar el top 30%
-    const topCount = Math.max(Math.floor(candidatePool.length * 0.3), 3);
-    const topItems = candidatePool.slice(0, topCount);
-    
-    // Selección aleatoria del pool
-    const randomIndex = Math.floor(Math.random() * topItems.length);
-    return topItems[randomIndex].item;
+    return selected.item;
+  }
+
+  /**
+   * Fisher-Yates shuffle in-place. Usado por selectFallback para destruir
+   * el sesgo de orden numérico introducido por el query inicial de gameItems.
+   */
+  _shuffleInPlace(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
   }
 
   /**
