@@ -1626,6 +1626,6 @@ If any of the above fails, investigate before moving on. Nothing to commit in th
 - [ ] Admin can set/remove quota from the Monitor Números tab.
 - [ ] Webhook over the cap receives `REJECTED` with a clear reason.
 - [ ] Webhook under the cap still creates the ticket normally.
-- [ ] Anulación (same externalTicketId sent empty within 190s) liberates the cap — verify manually by annulling `quota-test-1` and re-sending `quota-test-2`.
+- [ ] Anulación (same externalTicketId sent empty while draw is `SCHEDULED`) liberates the cap — verify manually by annulling `quota-test-1` and re-sending `quota-test-2`.
 - [ ] Shield button hidden on DRAWN/CANCELLED draws.
 - [ ] No migration files left untracked (project uses `db push`).

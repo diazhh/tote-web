@@ -59,24 +59,26 @@ async function createWebhookTicket(normalized, logId, apiSystemId, tx = prisma) 
 }
 
 /**
- * Annul a WEBHOOK_PUSH ticket if it was created within the allowed window.
+ * Annul a WEBHOOK_PUSH ticket while its draw is still open for betting.
  * Sets ticket status to CANCELLED (keeps record in DB for audit).
  * The provider sends the same ticketId without plays to request annulment.
+ *
+ * Annulment is allowed only when the ticket's draw is in `SCHEDULED` state.
+ * Draws transition to `CLOSED` 5 minutes before draw time; once closed,
+ * drawn or cancelled, annulment is rejected.
  *
  * @param {string} externalTicketId - The provider's ticket ID
  * @param {string} logId            - WebhookLog.id for this request
  * @param {string} slug             - Provider slug for logging
  * @returns {object}                - Result object with status and logId
  */
-const ANNUL_WINDOW_SECONDS = 190;
-
 async function annulWebhookTicket(externalTicketId, logId, slug) {
   const ticket = await prisma.ticket.findFirst({
     where: {
       externalTicketId,
       source: 'WEBHOOK_PUSH',
     },
-    include: { details: true },
+    include: { details: true, draw: { select: { status: true } } },
   });
 
   if (!ticket) {
@@ -88,14 +90,14 @@ async function annulWebhookTicket(externalTicketId, logId, slug) {
     return { status: 'rejected', logId, reason: `Ticket "${externalTicketId}" not found` };
   }
 
-  const ageSeconds = (Date.now() - new Date(ticket.createdAt).getTime()) / 1000;
-  if (ageSeconds > ANNUL_WINDOW_SECONDS) {
+  const drawStatus = ticket.draw?.status;
+  if (drawStatus !== 'SCHEDULED') {
     await prisma.webhookLog.update({
       where: { id: logId },
-      data: { status: 'FAILED', errorMessage: `Annulment failed: ticket "${externalTicketId}" is ${Math.round(ageSeconds)}s old (limit: ${ANNUL_WINDOW_SECONDS}s)` },
+      data: { status: 'FAILED', errorMessage: `Annulment failed: draw is ${drawStatus} (must be SCHEDULED)` },
     });
-    logger.warn(`[webhook] Annulment denied — ticket "${externalTicketId}" is ${Math.round(ageSeconds)}s old, limit is ${ANNUL_WINDOW_SECONDS}s (logId=${logId})`);
-    return { status: 'rejected', logId, reason: `Ticket too old for annulment (${Math.round(ageSeconds)}s > ${ANNUL_WINDOW_SECONDS}s limit)` };
+    logger.warn(`[webhook] Annulment denied — ticket "${externalTicketId}" draw is ${drawStatus}, must be SCHEDULED (logId=${logId})`);
+    return { status: 'rejected', logId, reason: `Draw is ${drawStatus} — annulment only allowed while SCHEDULED` };
   }
 
   // Mark ticket and details as CANCELLED (keep in DB for audit)
@@ -113,7 +115,7 @@ async function annulWebhookTicket(externalTicketId, logId, slug) {
     data: { status: 'PROCESSED', errorMessage: `Annulled ticket "${externalTicketId}" (ticketNumber=${ticket.ticketNumber})` },
   });
 
-  logger.info(`[webhook] Ticket annulled: "${externalTicketId}" (ticketNumber=${ticket.ticketNumber}, age=${Math.round(ageSeconds)}s) by "${slug}" (logId=${logId})`);
+  logger.info(`[webhook] Ticket annulled: "${externalTicketId}" (ticketNumber=${ticket.ticketNumber}) by "${slug}" (logId=${logId})`);
   return { status: 'annulled', logId, ticketNumber: ticket.ticketNumber };
 }
 

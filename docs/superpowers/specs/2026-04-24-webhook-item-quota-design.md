@@ -183,7 +183,7 @@ Cliente API nuevo: `frontend/lib/api/quota.js` con `getDrawQuotas`, `setQuota`, 
 
 - `SELECT ... FOR UPDATE` en `DrawItemQuota` serializa webhooks concurrentes que apunten al mismo `(drawId, gameItemId)`. Dos inserts simultáneos que sumen exactamente al límite → uno pasa, uno se rechaza.
 - Items sin cupo no entran al lock (early exit en `checkTicketQuotas`) — cero impacto en latencia para tráfico sin cupos configurados.
-- Anulación de ticket (`annulWebhookTicket` dentro de la ventana de 190s): marca Ticket y detalles como `CANCELLED`. La query de `soldAmount` filtra `status = 'ACTIVE'`, por lo que libera el cupo automáticamente sin código extra.
+- Anulación de ticket (`annulWebhookTicket` mientras el sorteo esté `SCHEDULED`): marca Ticket y detalles como `CANCELLED`. La query de `soldAmount` filtra `status = 'ACTIVE'`, por lo que libera el cupo automáticamente sin código extra.
 - Cupo seteado durante venta activa: permitido. Ventas previas no afectadas. UI muestra "excedido" si aplica.
 
 ## Manejo de errores
