@@ -64,6 +64,17 @@ export async function registerAllWorkers(boss) {
     logger.info('[pg-boss] Worker sync-api-tickets registrado');
   }
 
+  // ⚠️ BUG LATENTE — pg-boss v10 NO crea automáticamente la fila en `pgboss.queue`
+  // al hacer `boss.work(...)`. Si el flag se pone en 'true' sin un `boss.createQueue(...)`
+  // explícito, los `boss.send(...)` desde el cron Croner (sync-scrape-tickets.job.js)
+  // fallan silencio sin throw — los jobs nunca llegan a la cola y nunca se procesan.
+  // Síntoma: el log dice "Job encolado en pg-boss" cada 5 min pero `pgboss.job` tiene 0 filas
+  // y los datos de Maxplay quedan stale.
+  // FIX cuando se quiera activar este path:
+  //   await boss.createQueue(QUEUES.SYNC_SCRAPE_TICKETS);
+  //   await boss.work(QUEUES.SYNC_SCRAPE_TICKETS, ..., syncScrapeTicketsWorker);
+  // Mientras tanto, mantener PGBOSS_SYNC_SCRAPE_TICKETS=false en producción —
+  // el cron Croner del job ejecuta `_runSweep()` inline, que es lo que está corriendo hoy.
   if (process.env.PGBOSS_SYNC_SCRAPE_TICKETS === 'true') {
     const { syncScrapeTicketsWorker } = await import('./workers/sync-scrape-tickets.worker.js');
     await boss.work(QUEUES.SYNC_SCRAPE_TICKETS, QUEUE_CONFIGS[QUEUES.SYNC_SCRAPE_TICKETS], syncScrapeTicketsWorker);
