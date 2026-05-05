@@ -448,6 +448,7 @@ model ApiSystem {
 enum ApiSystemMode {
   PULL // Provider polled by our system (SRQ pattern)
   PUSH // Provider sends webhooks to our endpoint
+  SCRAPE // Authenticated dashboard scraped via headless browser (Maxplay pattern)
 }
 
 enum WebhookLogStatus {
@@ -950,6 +951,7 @@ enum TicketSource {
   TAQUILLA_ONLINE // Jugado por usuario en la plataforma
   EXTERNAL_API // Importado de proveedor externo (SRQ, etc)
   WEBHOOK_PUSH // Received via webhook from a PUSH provider (Phase 2+)
+  EXTERNAL_SCRAPE // Importado por scraping autenticado (Maxplay)
 }
 
 model Ticket {

@@ -2,6 +2,7 @@ import { prisma } from '../../lib/prisma.js';
 import logger from '../../lib/logger.js';
 import { emitToAll, emitToGame } from '../../lib/socket.js';
 import apiIntegrationService from '../../services/api-integration.service.js';
+import maxplayService from '../../services/maxplay.service.js';
 import adminNotificationService from '../../services/admin-notification.service.js';
 import prewinnerSelectionService from '../../services/prewinner-selection.service.js';
 import pdfReportService from '../../services/pdf-report.service.js';
@@ -77,6 +78,13 @@ export async function closeDrawWorker(jobs) {
   let pdfPath = null;
   let selectionMethod = 'random';
 
+  // Per-source ingestion status — passed to Telegram notification so admins can see
+  // which providers contributed (or failed) for this draw.
+  const sourceStatus = {
+    srq:     { ok: false, imported: 0, reason: null },
+    maxplay: { ok: false, imported: 0, reason: null },
+  };
+
   // 2. Respetar pre-ganador manual del admin
   if (draw.preselectedItemId) {
     selectedItem = items.find(i => i.id === draw.preselectedItemId);
@@ -88,15 +96,35 @@ export async function closeDrawWorker(jobs) {
 
   // 3. Selección automática si no hay pre-ganador de admin
   if (!selectedItem) {
-    // Importar tickets SRQ
-    let hasTickets = false;
-    try {
-      const importResult = await apiIntegrationService.importSRQTickets(draw.id);
-      logger.info(`[close-draw] Importados: ${importResult.imported} tickets`);
-      hasTickets = importResult.imported > 0;
-    } catch (err) {
-      logger.warn(`[close-draw] No se pudieron importar ventas: ${err.message}`);
+    // Importar tickets — SRQ + Maxplay en paralelo. Falla aislada por fuente.
+    const [srqResult, maxplayResult] = await Promise.allSettled([
+      apiIntegrationService.importSRQTickets(draw.id),
+      maxplayService.importMaxplayTickets(draw.id),
+    ]);
+
+    if (srqResult.status === 'fulfilled') {
+      sourceStatus.srq.ok = true;
+      sourceStatus.srq.imported = srqResult.value?.imported || 0;
+      logger.info(`[close-draw] SRQ importados: ${sourceStatus.srq.imported}`);
+    } else {
+      sourceStatus.srq.reason = srqResult.reason?.message || String(srqResult.reason);
+      logger.warn(`[close-draw] No se pudieron importar SRQ: ${sourceStatus.srq.reason}`);
     }
+
+    if (maxplayResult.status === 'fulfilled' && maxplayResult.value?.ok) {
+      sourceStatus.maxplay.ok = true;
+      sourceStatus.maxplay.imported = maxplayResult.value.imported || 0;
+      sourceStatus.maxplay.reason = maxplayResult.value.reason || null; // e.g. 'maxplay_disabled'
+      logger.info(`[close-draw] Maxplay importados: ${sourceStatus.maxplay.imported} (${sourceStatus.maxplay.reason || 'ok'})`);
+    } else {
+      const errMsg = maxplayResult.status === 'rejected'
+        ? (maxplayResult.reason?.message || String(maxplayResult.reason))
+        : (maxplayResult.value?.reason || 'unknown_error');
+      sourceStatus.maxplay.reason = errMsg;
+      logger.warn(`[close-draw] No se pudo traer Maxplay: ${errMsg}`);
+    }
+
+    const hasTickets = (sourceStatus.srq.imported + sourceStatus.maxplay.imported) > 0;
 
     // Selección inteligente si hay tickets
     if (hasTickets) {
@@ -226,6 +254,7 @@ export async function closeDrawWorker(jobs) {
       salesByItem: null,
       pdfPath,
       tripletaRiskTop5,
+      sourceStatus,
     });
   } catch (err) {
     logger.warn(`[close-draw] Error notificando admin: ${err.message}`);

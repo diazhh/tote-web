@@ -64,16 +64,17 @@ class AdminNotificationService {
       pdfPath,
       tripletaRiskTop5,
       isTerminal,
-      terminalTickets
+      terminalTickets,
+      sourceStatus
     } = data;
 
     try {
       // Formatear mensaje (Terminal tiene formato especial sin pre-ganador)
       const message = isTerminal
-        ? this.formatTerminalCloseMessage({ game, drawDate, drawTime, terminalTickets })
+        ? this.formatTerminalCloseMessage({ game, drawDate, drawTime, terminalTickets, sourceStatus })
         : this.formatPrewinnerMessage({
             game, drawDate, drawTime, prewinnerItem, totalSales,
-            maxPayout, potentialPayout, salesByItem, tripletaRiskTop5
+            maxPayout, potentialPayout, salesByItem, tripletaRiskTop5, sourceStatus
           });
 
       // Usar el nuevo servicio de bots de administración (con PDF si está disponible)
@@ -89,6 +90,41 @@ class AdminNotificationService {
   }
 
   /**
+   * Bloque "Fuentes de venta" — muestra status por proveedor (SRQ, Maxplay, etc).
+   * `sourceStatus` shape: { srq: { ok, imported, reason }, maxplay: { ok, imported, reason }, ... }
+   */
+  formatSourceStatusBlock(sourceStatus) {
+    if (!sourceStatus) return '';
+
+    const lines = [];
+    const fmt = (label, s) => {
+      if (!s) return null;
+      // Disabled-by-flag is not a failure — present it as a neutral note
+      if (s.ok && s.reason && s.reason !== 'ok' && s.imported === 0) {
+        const noteMap = {
+          maxplay_disabled: 'desactivado por configuración',
+          game_not_supported: 'no aplica a este juego',
+          draw_frozen: 'sorteo ya cerrado',
+          draw_frozen_under_lock: 'sorteo ya cerrado',
+        };
+        const note = noteMap[s.reason] || s.reason;
+        return `▪️ ${label}: <i>${note}</i>`;
+      }
+      if (s.ok) return `✅ ${label}: ${s.imported} jugadas importadas`;
+      const cause = (s.reason || 'error desconocido').replace(/^scrape_failed:\s*/, '');
+      return `❌ ${label}: <i>no se pudo traer</i> — ${cause}`;
+    };
+
+    const labels = { srq: 'SRQ', maxplay: 'Maxplay', push: 'Push' };
+    for (const key of Object.keys(sourceStatus)) {
+      const ln = fmt(labels[key] || key, sourceStatus[key]);
+      if (ln) lines.push(ln);
+    }
+    if (lines.length === 0) return '';
+    return `\n📥 <b>Fuentes de venta:</b>\n${lines.join('\n')}\n`;
+  }
+
+  /**
    * Formatear mensaje de pre-ganador
    */
   formatPrewinnerMessage(data) {
@@ -101,7 +137,8 @@ class AdminNotificationService {
       maxPayout,
       potentialPayout,
       salesByItem,
-      tripletaRiskTop5
+      tripletaRiskTop5,
+      sourceStatus
     } = data;
 
     const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
@@ -158,7 +195,7 @@ class AdminNotificationService {
 • Máximo a pagar (${game.config?.percentageToDistribute || 70}%): <b>$${maxPayout.toFixed(2)}</b>
 • Pago potencial: <b>$${potentialPayout.toFixed(2)}</b>
 • Multiplicador: <b>x${prewinnerItem.multiplier}</b>
-${topItemsStr}${tripletaRiskStr}
+${topItemsStr}${tripletaRiskStr}${this.formatSourceStatusBlock(sourceStatus)}
 ━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ <i>Este es un número pre-seleccionado. El resultado final puede cambiar.</i>
@@ -171,7 +208,7 @@ ${topItemsStr}${tripletaRiskStr}
    * Formatear mensaje de cierre Terminal (sin pre-ganador)
    */
   formatTerminalCloseMessage(data) {
-    const { game, drawDate, drawTime, terminalTickets } = data;
+    const { game, drawDate, drawTime, terminalTickets, sourceStatus } = data;
     const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
     const [hours, minutes] = drawTime.split(':');
     const hour = parseInt(hours);
@@ -189,7 +226,7 @@ ${topItemsStr}${tripletaRiskStr}
 ━━━━━━━━━━━━━━━━━━━━
 
 🎫 <b>Tickets importados:</b> ${terminalTickets || 0}
-
+${this.formatSourceStatusBlock(sourceStatus)}
 ⚠️ <i>El ganador se determinara al ejecutar el sorteo Triple vinculado (ultimos 2 digitos).</i>
 `.trim();
   }

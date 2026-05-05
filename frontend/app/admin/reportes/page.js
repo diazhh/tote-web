@@ -15,6 +15,7 @@ const SOURCE_LABELS = {
   TAQUILLA_ONLINE: 'Online',
   EXTERNAL_API:    'SRQ / API',
   WEBHOOK_PUSH:    'Webhook',
+  EXTERNAL_SCRAPE: 'Scraping',
 };
 
 const PAGE_SIZE = 25;

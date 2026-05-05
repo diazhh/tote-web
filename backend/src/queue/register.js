@@ -64,6 +64,12 @@ export async function registerAllWorkers(boss) {
     logger.info('[pg-boss] Worker sync-api-tickets registrado');
   }
 
+  if (process.env.PGBOSS_SYNC_SCRAPE_TICKETS === 'true') {
+    const { syncScrapeTicketsWorker } = await import('./workers/sync-scrape-tickets.worker.js');
+    await boss.work(QUEUES.SYNC_SCRAPE_TICKETS, QUEUE_CONFIGS[QUEUES.SYNC_SCRAPE_TICKETS], syncScrapeTicketsWorker);
+    logger.info('[pg-boss] Worker sync-scrape-tickets registrado');
+  }
+
   if (process.env.PGBOSS_GENERATE_DAILY_DRAWS === 'true') {
     const { generateDailyDrawsWorker } = await import('./workers/generate-daily-draws.worker.js');
     await boss.work(QUEUES.GENERATE_DAILY_DRAWS, QUEUE_CONFIGS[QUEUES.GENERATE_DAILY_DRAWS], generateDailyDrawsWorker);

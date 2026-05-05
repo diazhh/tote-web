@@ -8,6 +8,7 @@ export const QUEUES = {
   STEP_CALCULATE_STATS: 'step-calculate-stats',
   SYNC_API_PLANNING: 'sync-api-planning',
   SYNC_API_TICKETS: 'sync-api-tickets',
+  SYNC_SCRAPE_TICKETS: 'sync-scrape-tickets',
   SIMULATE_BETS: 'simulate-bets',
   TEST_BETS: 'test-bets',
   GENERATE_DAILY_DRAWS: 'generate-daily-draws',
@@ -74,6 +75,14 @@ export const QUEUE_CONFIGS = {
     retryDelay: 5,
     retryBackoff: true,
     expireInMinutes: 2,
+  },
+  [QUEUES.SYNC_SCRAPE_TICKETS]: {
+    // Scraping handles its own internal retry (1 reintento extra) — pg-boss-level retry
+    // is kept low to avoid spamming the sidecar when Maxplay is down.
+    retryLimit: 1,
+    retryDelay: 30,
+    retryBackoff: false,
+    expireInMinutes: 3,
   },
   [QUEUES.SIMULATE_BETS]: {
     retryLimit: 2,

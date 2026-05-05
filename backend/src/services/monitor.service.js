@@ -348,7 +348,7 @@ class MonitorService {
       const ticketWhere = { status: { not: 'CANCELLED' } };
       if (apiSystemId) {
         const sys = await prisma.apiSystem.findUnique({ where: { id: apiSystemId }, select: { mode: true } });
-        if (sys?.mode === 'PUSH') ticketWhere.apiSystemId = apiSystemId;
+        if (sys?.mode === 'PUSH' || sys?.mode === 'SCRAPE') ticketWhere.apiSystemId = apiSystemId;
         else ticketWhere.source = 'EXTERNAL_API';
       } else if (source) {
         ticketWhere.source = source;
@@ -458,12 +458,12 @@ class MonitorService {
         where.gameId = gameId;
       }
 
-      // apiSystemId: resolve differently for PULL vs PUSH providers
+      // apiSystemId: resolve differently for PULL vs PUSH/SCRAPE providers
       let pushProviderFilter = false;
       if (apiSystemId) {
         const apiSystem = await prisma.apiSystem.findUnique({ where: { id: apiSystemId }, select: { mode: true } });
-        if (apiSystem?.mode === 'PUSH') {
-          // PUSH providers: filter tickets by source WEBHOOK_PUSH (no ApiDrawMapping)
+        if (apiSystem?.mode === 'PUSH' || apiSystem?.mode === 'SCRAPE') {
+          // PUSH and SCRAPE providers set Ticket.apiSystemId directly — filter by that
           pushProviderFilter = true;
         } else {
           // PULL providers: resolve to draw IDs via ApiDrawMapping (BACK-02)
