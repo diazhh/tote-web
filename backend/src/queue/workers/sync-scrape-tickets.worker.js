@@ -1,30 +1,36 @@
 import logger from '../../lib/logger.js';
+import syncScrapeTicketsJob from '../../jobs/sync-scrape-tickets.job.js';
 import maxplayService from '../../services/maxplay.service.js';
 
 /**
- * Pulls Maxplay jugadas for a specific drawId via the Python sidecar.
- * Job payload: { drawId: string }
+ * Worker pg-boss para sincronizar Maxplay.
  *
- * This worker does NOT throw on Maxplay scrape failure — it logs the result and
- * returns it. The orchestrator (close-draw worker) decides whether to proceed
- * with prewinner selection regardless of Maxplay availability.
+ * Dos modos según el payload del job:
+ *  - Sin drawId → barrido completo (Triple + Terminal próximos a cerrar)
+ *    Disparado por el cron Croner cada 5 minutos vía syncScrapeTicketsJob.
+ *  - Con drawId → sincroniza un sorteo específico (e.g. close-draw que enqueue manual).
+ *
+ * No tira excepciones — devuelve resultado para que pg-boss no reintente sobre
+ * fallas controladas (Maxplay caído, etc.). El close-draw inline tiene su propio
+ * retry y decide si continuar sin Maxplay.
  */
 export async function syncScrapeTicketsWorker(job) {
   const drawId = job?.data?.drawId;
-  if (!drawId) {
-    logger.warn('[sync-scrape-tickets] job sin drawId, ignorando');
-    return { ok: false, reason: 'missing_draw_id' };
-  }
 
   try {
-    const result = await maxplayService.importMaxplayTickets(drawId);
-    if (!result.ok) {
-      logger.warn(`[sync-scrape-tickets] draw ${drawId} fallo controlado: ${result.reason}`);
+    if (drawId) {
+      const result = await maxplayService.importMaxplayTickets(drawId);
+      if (!result.ok) {
+        logger.warn(`[sync-scrape-tickets] draw ${drawId} fallo controlado: ${result.reason}`);
+      }
+      return result;
     }
-    return result;
+
+    // Sin drawId: barrido completo
+    await syncScrapeTicketsJob._runSweep();
+    return { ok: true, mode: 'sweep' };
   } catch (err) {
-    // Catch-all so pg-boss doesn't keep retrying on programming errors that bypass our service guards.
-    logger.error(`[sync-scrape-tickets] error inesperado en draw ${drawId}: ${err.message}`);
-    return { ok: false, reason: `unexpected: ${err.message}`, imported: 0, deleted: 0 };
+    logger.error(`[sync-scrape-tickets] error inesperado: ${err.message}`);
+    return { ok: false, reason: `unexpected: ${err.message}` };
   }
 }

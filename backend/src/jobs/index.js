@@ -4,6 +4,7 @@ import executeDrawJob from './execute-draw.job.js';
 import publishDrawJob from './publish-draw.job.js';
 import syncApiPlanningJob from './sync-api-planning.job.js';
 import syncApiTicketsJob from './sync-api-tickets.job.js';
+import syncScrapeTicketsJob from './sync-scrape-tickets.job.js';
 import testBetsJob from './test-bets.job.js';
 import simulateBetsJob from './simulate-bets.job.js';
 import specialImagesJob from './special-images.job.js';
@@ -25,6 +26,7 @@ export function startAllJobs() {
     // Jobs de integración con APIs externas
     syncApiPlanningJob.start();      // Cada 5 minutos - Sincronizar planificación
     syncApiTicketsJob.start();       // Cada 2 minutos - Sincronizar tickets
+    syncScrapeTicketsJob.start();    // Cada 5 minutos - Sincronizar Maxplay (Triple/Terminal)
 
     // Jobs de simulación
     simulateBetsJob.start();         // Cada 30 segundos - Simular jugadas
@@ -53,6 +55,7 @@ export function stopAllJobs() {
     // publishDrawJob.stop(); // Ya no se inicia
     syncApiPlanningJob.stop();
     syncApiTicketsJob.stop();
+    syncScrapeTicketsJob.stop();
     simulateBetsJob.stop();
     testBetsJob.stop();
     specialImagesJob.stop();
@@ -72,6 +75,7 @@ export default {
   publishDrawJob,
   syncApiPlanningJob,
   syncApiTicketsJob,
+  syncScrapeTicketsJob,
   simulateBetsJob,
   testBetsJob,
   specialImagesJob
