@@ -43,8 +43,7 @@ class MaxplayService {
 
   /**
    * Extract a Date's hour in Caracas timezone, regardless of the host TZ.
-   * `Draw.drawTime` ('HH:MM:SS') is the canonical wall-clock value, but `scheduledAt`
-   * is a UTC timestamp; reading getHours() on it picks up the host's local TZ.
+   * Used as fallback when `drawTime` is missing (legacy draws).
    */
   hourInCaracas(date) {
     if (!date) return null;
@@ -58,11 +57,19 @@ class MaxplayService {
   }
 
   /**
-   * Map a Draw's scheduledAt hour to Maxplay's external juego_id.
-   * Returns null if the hour is outside the 8AM–7PM window.
+   * Map the canonical drawTime ('HH:MM:SS') to Maxplay's external juego_id.
+   * `drawTime` is wall-clock Caracas time and is the source of truth used by
+   * the rest of the system (close-draw, sync-api-tickets, etc.).
    */
-  hourToJuegoId(date) {
-    const h = this.hourInCaracas(date);
+  hourToJuegoId(drawTime, fallbackDate) {
+    let h = null;
+    if (typeof drawTime === 'string' && drawTime.includes(':')) {
+      const parsed = parseInt(drawTime.split(':')[0], 10);
+      if (Number.isFinite(parsed)) h = parsed;
+    }
+    if (h == null) {
+      h = this.hourInCaracas(fallbackDate);
+    }
     if (h == null) return null;
     return HOUR_TO_JUEGO_ID[h] || null;
   }
@@ -170,11 +177,12 @@ class MaxplayService {
     }
 
     const scheduledAt = draw.scheduledAt || draw.drawDate;
-    const juegoId = this.hourToJuegoId(scheduledAt);
+    const juegoId = this.hourToJuegoId(draw.drawTime, scheduledAt);
     if (!juegoId) {
-      return { ok: false, reason: 'hour_not_mapped', imported: 0, deleted: 0, durationMs: Date.now() - startedAt };
+      return { ok: false, reason: `hour_not_mapped (drawTime=${draw.drawTime})`, imported: 0, deleted: 0, durationMs: Date.now() - startedAt };
     }
-    const dateDDMMYYYY = this.formatDateDDMMYYYY(scheduledAt);
+    // Use drawDate (the canonical date in Venezuela TZ) for the form filter
+    const dateDDMMYYYY = this.formatDateDDMMYYYY(draw.drawDate || scheduledAt);
 
     logger.info(`[maxplay] scraping draw ${drawId} (${draw.game.slug} @ juego_id=${juegoId}, fecha=${dateDDMMYYYY})`);
 
