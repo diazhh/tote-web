@@ -37,4 +37,7 @@ router.get('/tickets-by-item/:drawId/:itemId', monitorController.getTicketsByIte
 // Tripletas por item
 router.get('/tripletas-by-item/:drawId/:itemId', monitorController.getTripletasByItem);
 
+// Frecuencia: última salida por item (filtro por gameId, sin paginación)
+router.get('/items-last-drawn', monitorController.getItemsLastDrawn);
+
 export default router;

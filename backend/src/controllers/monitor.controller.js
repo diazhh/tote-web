@@ -329,6 +329,25 @@ class MonitorController {
       res.status(500).json({ success: false, error: error.message });
     }
   }
+
+  /**
+   * GET /api/monitor/items-last-drawn?gameId=...
+   * Lista todos los items activos del juego con la fecha de su última salida
+   * y los días transcurridos. Items que nunca han salido devuelven null.
+   */
+  async getItemsLastDrawn(req, res) {
+    try {
+      const { gameId } = req.query;
+      if (!gameId) {
+        return res.status(400).json({ success: false, error: 'gameId es requerido' });
+      }
+      const data = await monitorService.getItemsLastDrawn(gameId);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error en getItemsLastDrawn:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
 }
 
 export default new MonitorController();

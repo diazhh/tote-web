@@ -5,7 +5,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
-import { startOfDayDate, endOfDayDate } from '../lib/dateUtils.js';
+import { startOfDayDate, endOfDayDate, getVenezuelaDateAsUTC } from '../lib/dateUtils.js';
 
 class MonitorService {
   /**
@@ -1201,6 +1201,69 @@ class MonitorService {
       logger.error('Error obteniendo lista de tickets:', error);
       throw error;
     }
+  }
+
+  /**
+   * Para un juego dado, retorna la lista de items con la fecha de su última salida
+   * (winnerItemId en un Draw cerrado) y los días transcurridos desde esa fecha.
+   *
+   * Items que nunca han salido se devuelven con `lastDrawnAt: null` y `daysSince: null`.
+   *
+   * @param {string} gameId
+   * @returns {Promise<Array<{id, number, name, multiplier, lastDrawnAt, daysSince}>>}
+   */
+  async getItemsLastDrawn(gameId) {
+    if (!gameId) {
+      throw new Error('gameId es requerido');
+    }
+
+    // 1. Una sola query agrupada para obtener la última fecha de salida por item.
+    //    Usa raw SQL con cast a text para soportar tanto local (enum DrawStatus
+    //    sin PUBLISHED) como producción (DB con valor PUBLISHED legacy en filas
+    //    históricas — el enum Prisma puede o no incluirlo según la versión).
+    const lastDraws = await prisma.$queryRaw`
+      SELECT
+        "winnerItemId" AS "winnerItemId",
+        MAX("drawDate") AS "lastDrawnAt"
+      FROM "Draw"
+      WHERE "gameId" = ${gameId}
+        AND "winnerItemId" IS NOT NULL
+        AND status::text IN ('DRAWN', 'PUBLISHED')
+      GROUP BY "winnerItemId"
+    `;
+
+    const lastDrawnByItem = new Map();
+    for (const row of lastDraws) {
+      if (row.winnerItemId && row.lastDrawnAt) {
+        lastDrawnByItem.set(row.winnerItemId, row.lastDrawnAt);
+      }
+    }
+
+    // 2. Listado de items activos del juego, ordenado por número.
+    const items = await prisma.gameItem.findMany({
+      where: { gameId, isActive: true },
+      orderBy: { number: 'asc' },
+      select: { id: true, number: true, name: true, multiplier: true },
+    });
+
+    // 3. Calcular días desde la última salida usando midnight UTC de hoy en Venezuela.
+    const todayCaracas = getVenezuelaDateAsUTC();
+    const ONE_DAY_MS = 86400000;
+
+    return items.map((item) => {
+      const lastDrawnAt = lastDrawnByItem.get(item.id) || null;
+      const daysSince = lastDrawnAt
+        ? Math.max(0, Math.floor((todayCaracas.getTime() - new Date(lastDrawnAt).getTime()) / ONE_DAY_MS))
+        : null;
+      return {
+        id: item.id,
+        number: item.number,
+        name: item.name,
+        multiplier: item.multiplier,
+        lastDrawnAt,
+        daysSince,
+      };
+    });
   }
 }
 

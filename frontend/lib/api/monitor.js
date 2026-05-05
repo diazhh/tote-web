@@ -76,6 +76,17 @@ export const monitorApi = {
     return response.data;
   },
   /**
+   * Listar items del juego con su última fecha de salida y días desde entonces.
+   * Sin paginación — devuelve todos los items activos del juego.
+   */
+  getItemsLastDrawn: async (gameId) => {
+    const params = new URLSearchParams();
+    if (gameId) params.append('gameId', gameId);
+    const response = await axios.get(`/monitor/items-last-drawn?${params.toString()}`);
+    return response.data;
+  },
+
+  /**
    * Listar tickets con filtros y paginación
    */
   getTicketList: async ({ dateFrom, dateTo, gameId, source, apiSystemId, page, pageSize } = {}) => {
