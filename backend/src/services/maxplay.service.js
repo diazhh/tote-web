@@ -75,15 +75,20 @@ class MaxplayService {
   }
 
   /**
-   * Format a Date as DD/MM/YYYY using Caracas timezone for the form filter.
+   * Format a Draw.drawDate as DD/MM/YYYY for the Maxplay form filter.
+   *
+   * `drawDate` is stored as midnight UTC of the Venezuela calendar date (per
+   * dateUtils.getVenezuelaDateAsUTC), so we read UTC components to avoid the
+   * UTC-4 offset bug — `Intl.DateTimeFormat` with TZ='America/Caracas' would
+   * subtract 4 hours and report the previous day.
    */
   formatDateDDMMYYYY(date) {
-    const fmt = new Intl.DateTimeFormat('es-VE', {
-      timeZone: 'America/Caracas',
-      day: '2-digit', month: '2-digit', year: 'numeric',
-    });
-    // es-VE returns "DD/MM/YYYY" already
-    return fmt.format(new Date(date));
+    if (!date) return null;
+    const d = new Date(date);
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${day}/${m}/${y}`;
   }
 
   /**
