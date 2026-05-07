@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import TelegramBot from 'node-telegram-bot-api';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
@@ -898,8 +899,8 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
       where: { userId }
     });
 
-    // Generar código de 6 dígitos
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
+    // Generar código de 6 dígitos con CSPRNG (Math.random no es seguro)
+    const code = String(crypto.randomInt(100000, 1000000));
 
     // Crear código con expiración de 10 minutos
     await prisma.telegramLinkCode.create({

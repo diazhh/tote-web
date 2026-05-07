@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import sessionManager from '../lib/whatsapp/session-manager.js';
 import logger from '../lib/logger.js';
@@ -17,8 +18,8 @@ class WhatsAppOtpService {
     if (!user.phone) throw new Error('No tienes un número de teléfono registrado');
     if (user.whatsappVerified) throw new Error('Tu WhatsApp ya está verificado');
 
-    // Generar código de 6 dígitos
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // Generar código de 6 dígitos con CSPRNG (Math.random no es seguro)
+    const code = String(crypto.randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutos
 
     // Upsert OTP (reemplaza el anterior si existe)

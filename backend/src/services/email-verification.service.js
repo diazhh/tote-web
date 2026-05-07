@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import emailService from './email.service.js';
 import logger from '../lib/logger.js';
@@ -13,7 +14,8 @@ class EmailVerificationService {
     if (!user.email) throw new Error('No tienes un correo electrónico registrado');
     if (user.emailVerified) throw new Error('Tu correo ya está verificado');
 
-    const code = String(Math.floor(100000 + Math.random() * 900000));
+    // CSPRNG — Math.random es predecible.
+    const code = String(crypto.randomInt(100000, 1000000));
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
     await prisma.emailVerificationCode.upsert({
