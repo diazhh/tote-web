@@ -1,7 +1,11 @@
 import express from 'express';
 import tiktokController from '../controllers/tiktok.controller.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
+
+// Todas las rutas de TikTok requieren admin
+router.use(authenticate, authorize('ADMIN'));
 
 // Rutas para gestionar instancias de TikTok
 router.post('/instances', tiktokController.createInstance);

@@ -241,7 +241,16 @@ class CloseDrawJob {
             // Si hay tickets, usar el servicio de selección inteligente
             if (hasTickets) {
               try {
-                selectedItem = await prewinnerSelectionService.selectPrewinner(draw.id);
+                // Timeout 15s: si el optimizer cuelga (lock DB, query lenta,
+                // bug interno) se aborta y caemos al fallback aleatorio en
+                // vez de bloquear el cron entero. El sorteo SE CIERRA igual.
+                selectedItem = await Promise.race([
+                  prewinnerSelectionService.selectPrewinner(draw.id),
+                  new Promise((_, rej) => setTimeout(
+                    () => rej(new Error('selectPrewinner timeout 15s')),
+                    15000
+                  ))
+                ]);
                 // El servicio ya actualiza el sorteo, genera PDF y envía notificación
                 if (selectedItem) {
                   selectionMethod = 'intelligent';
@@ -273,7 +282,11 @@ class CloseDrawJob {
                   continue; // Ya se procesó todo en el servicio
                 }
               } catch (error) {
-                logger.warn(`⚠️ Error en selección inteligente, usando aleatoria:`, error.message);
+                // Loguear stack completo para diagnóstico — no solo message
+                logger.warn(
+                  `⚠️ Error en selección inteligente para draw ${draw.id}, cayendo a aleatoria: ${error.message}`,
+                  { stack: error.stack }
+                );
               }
             }
 
@@ -391,6 +404,57 @@ class CloseDrawJob {
         } catch (error) {
           logger.error(`Error al cerrar sorteo ${draw.id}:`, error);
         }
+      }
+
+      // ============================================================
+      // RED DE SEGURIDAD — recovery de draws "stuck"
+      // ============================================================
+      // Captura cualquier draw en la ventana actual que quedó en SCHEDULED
+      // pero ya tiene preselectedItemId (race condition entre preselect del
+      // admin y el cron, optimizer abortado, error silencioso, etc.).
+      // Sin esto, el cron execute-draw nunca lo procesaría porque filtra
+      // por status=CLOSED. Como este job corre cada minuto, recovery
+      // automático en máximo 60s tras detectar el estado inconsistente.
+      try {
+        const stuck = await prisma.draw.findMany({
+          where: {
+            status: 'SCHEDULED',
+            preselectedItemId: { not: null },
+            drawDate: venezuelaDate,
+            drawTime: { gte: targetDrawTime, lt: targetDrawTimeNext }
+          },
+          include: { game: { select: { name: true, slug: true } } }
+        });
+
+        for (const draw of stuck) {
+          logger.warn(
+            `⚠️ Draw ${draw.game.name} ${draw.drawTime} (${draw.id}) ` +
+            `quedó SCHEDULED con preselectedItemId set — forzando CLOSED (red de seguridad)`
+          );
+          const updated = await prisma.draw.updateMany({
+            where: { id: draw.id, status: 'SCHEDULED' },
+            data: { status: 'CLOSED', closedAt: new Date() }
+          });
+          if (updated.count > 0) {
+            emitToAll('draw:closed', {
+              drawId: draw.id,
+              game: { name: draw.game.name, slug: draw.game.slug },
+              drawDate: draw.drawDate,
+              drawTime: draw.drawTime,
+              recovered: true
+            });
+            await prisma.auditLog.create({
+              data: {
+                action: 'DRAW_CLOSED_RECOVERY',
+                entity: 'Draw',
+                entityId: draw.id,
+                changes: { reason: 'stuck_in_scheduled_with_preselect', forcedBy: 'close-draw-safety-net' }
+              }
+            }).catch(() => { /* audit best-effort */ });
+          }
+        }
+      } catch (safetyError) {
+        logger.error('❌ Error en red de seguridad close-draw:', safetyError);
       }
     } catch (error) {
       logger.error('❌ Error en CloseDrawJob:', error);

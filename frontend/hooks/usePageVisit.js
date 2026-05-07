@@ -73,11 +73,18 @@ export const usePageVisit = (pageType, pagePath) => {
     return () => {
       if (visitIdRef.current && startTimeRef.current) {
         const duration = Math.floor((Date.now() - startTimeRef.current) / 1000);
-        
+
         if (duration > 0) {
+          // sessionId requerido por el backend para validar ownership de la visita
+          // (sendBeacon no permite headers custom, se manda en el body).
+          const sessionId = getSessionId();
+          const blob = new Blob(
+            [JSON.stringify({ duration, sessionId })],
+            { type: 'application/json' }
+          );
           navigator.sendBeacon(
             `${API_URL}/api/page-visits/${visitIdRef.current}/duration`,
-            JSON.stringify({ duration })
+            blob
           );
         }
       }

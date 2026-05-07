@@ -4,6 +4,9 @@ import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
+// Todas las rutas de provider son admin-only
+router.use(authenticate, authorize('ADMIN'));
+
 // Rutas para ApiSystem
 router.get('/systems', providerController.getAllSystems.bind(providerController));
 router.get('/systems/:id', providerController.getSystemById.bind(providerController));
@@ -26,25 +29,10 @@ router.get('/configurations/:id/stats', providerController.getConfigurationStats
 router.post('/systems/:id/generate-token', providerController.generateToken.bind(providerController));
 router.get('/systems/:id/adapter-status', providerController.getAdapterStatus.bind(providerController));
 
-// Portal user management (ADMIN only)
-router.get(
-  '/systems/:id/portal-user',
-  authenticate,
-  authorize('ADMIN'),
-  providerController.getPortalUser.bind(providerController)
-);
-router.post(
-  '/systems/:id/portal-user',
-  authenticate,
-  authorize('ADMIN'),
-  providerController.createPortalUser.bind(providerController)
-);
-router.put(
-  '/systems/:id/portal-user/password',
-  authenticate,
-  authorize('ADMIN'),
-  providerController.resetPortalUserPassword.bind(providerController)
-);
+// Portal user management (ADMIN only — guard ya aplicado al router)
+router.get('/systems/:id/portal-user', providerController.getPortalUser.bind(providerController));
+router.post('/systems/:id/portal-user', providerController.createPortalUser.bind(providerController));
+router.put('/systems/:id/portal-user/password', providerController.resetPortalUserPassword.bind(providerController));
 
 // Logs de webhook
 router.get('/webhook-logs', providerController.getWebhookLogs.bind(providerController));

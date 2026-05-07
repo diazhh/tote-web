@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import axios from 'axios';
 import logger from '../lib/logger.js';
@@ -63,7 +64,7 @@ class TikTokService {
       redirect_uri: redirectUri,
       response_type: 'code',
       scope: scopes,
-      state: Math.random().toString(36).substring(7) // Estado aleatorio para seguridad
+      state: crypto.randomBytes(32).toString('hex') // CSRF token OAuth — CSPRNG, no Math.random
     });
 
     return `${baseUrl}?${params.toString()}`;

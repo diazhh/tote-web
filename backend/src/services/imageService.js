@@ -202,8 +202,15 @@ export async function generateDailyImages(date) {
  * Get image path for serving
  */
 export async function getImagePath(filename) {
-  const imagePath = path.join(OUTPUT_PATH, filename);
-  
+  const baseDir = path.resolve(OUTPUT_PATH);
+  const imagePath = path.resolve(baseDir, filename);
+
+  // Defensa en profundidad: aunque el controller valide filename, asegurar
+  // que la resolución no escape de OUTPUT_PATH (path traversal).
+  if (!imagePath.startsWith(baseDir + path.sep)) {
+    throw new Error('Image not found');
+  }
+
   try {
     await fs.access(imagePath);
     return imagePath;

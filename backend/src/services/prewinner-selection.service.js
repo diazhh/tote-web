@@ -42,9 +42,21 @@ class PrewinnerSelectionService {
 
       const selectedItem = result.selectedItem;
       
-      // Si fue selección de admin, ya está todo listo
+      // Si fue selección de admin (preselect vía Telegram, panel, etc.), el draw
+      // tiene preselectedItemId pero NO necesariamente status=CLOSED. El cron
+      // execute-draw filtra por status=CLOSED, así que sin este update el
+      // sorteo nunca se ejecuta automáticamente. updateMany con where
+      // status=SCHEDULED evita pisar draws que ya pasaron a CLOSED/DRAWN
+      // por otro flujo concurrente (ej. force-totalize).
       if (result.method === 'admin') {
         logger.info(`  👤 Pre-ganador seleccionado por admin: ${selectedItem.number} - ${selectedItem.name}`);
+        const updated = await prisma.draw.updateMany({
+          where: { id: drawId, status: 'SCHEDULED' },
+          data: { status: 'CLOSED', closedAt: new Date() }
+        });
+        if (updated.count > 0) {
+          logger.info(`  🔒 Draw ${drawId} marcado CLOSED (preselect admin previo)`);
+        }
         return selectedItem;
       }
 

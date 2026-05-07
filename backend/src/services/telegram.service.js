@@ -207,7 +207,12 @@ class TelegramService {
         orderBy: { createdAt: 'desc' }
       });
 
-      return instances;
+      // Ocultar secrets — defensa en profundidad. La ruta es admin-only,
+      // pero la API nunca debe devolver el botToken en bulk.
+      return instances.map(instance => ({
+        ...instance,
+        botToken: instance.botToken ? '***hidden***' : null
+      }));
     } catch (error) {
       logger.error('Error al listar instancias de Telegram:', error);
       throw error;

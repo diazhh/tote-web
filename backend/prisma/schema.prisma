@@ -424,15 +424,19 @@ model AuditLog {
 // ============================================
 
 model ApiSystem {
-  id           String        @id @default(uuid())
-  name         String // "SRQ", "OtroSistema"
-  description  String?
-  slug         String        @unique
-  webhookToken String?       @unique
-  mode         ApiSystemMode @default(PULL)
-  isActive     Boolean       @default(true)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+  id               String        @id @default(uuid())
+  name             String // "SRQ", "OtroSistema"
+  description      String?
+  slug             String        @unique
+  webhookToken     String?       @unique
+  // Si true, el webhook exige X-Webhook-Signature (HMAC-SHA256 del body con
+  // webhookToken como secret) y X-Webhook-Timestamp (±300s). Opt-in para no
+  // romper proveedores existentes que solo envían el token.
+  requireSignature Boolean       @default(false)
+  mode             ApiSystemMode @default(PULL)
+  isActive         Boolean       @default(true)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   configurations ApiConfiguration[]
   comerciales    ProviderComercial[]

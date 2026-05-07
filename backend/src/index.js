@@ -41,29 +41,35 @@ app.use(helmet({
 // CORS - debe ir ANTES del rate limiter para manejar preflight requests
 const isProduction = process.env.NODE_ENV === 'production';
 
-// En producción: solo https://tote.atilax.io
-// En desarrollo: permitir localhost y servidor de desarrollo
+// Producción: hardcodeada al dominio público.
+// No-producción: solo localhost (cualquier puerto) y orígenes en la env
+// var ALLOWED_ORIGINS (CSV). Eliminada la entrada hardcodeada al VPS viejo
+// (http://144.126.150.120:10000) que dejaba un origen IP público abierto
+// con credentials:true ante un descuido de NODE_ENV.
+const PROD_ALLOWED_ORIGINS = ['https://tote.atilax.io'];
+const EXTRA_ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+const LOCALHOST_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
 const corsOptions = {
   origin: (origin, callback) => {
+    // Sin Origin (curl, server-side fetch): permitir.
+    if (!origin) return callback(null, true);
+
     if (isProduction) {
-      // Producción: solo el dominio específico
-      const allowedOrigins = ['https://tote.atilax.io'];
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+      if (PROD_ALLOWED_ORIGINS.includes(origin) || EXTRA_ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, true);
       }
-    } else {
-      // Desarrollo: permitir localhost y servidor de desarrollo (144.126.150.120:10000)
-      if (!origin || 
-          origin.startsWith('http://localhost:10000') || 
-          origin.startsWith('http://127.0.0.1:') ||
-          origin === 'http://144.126.150.120:10000') {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
+      return callback(new Error('Not allowed by CORS'));
     }
+
+    // No-producción: localhost por regex + lo que esté en ALLOWED_ORIGINS.
+    if (LOCALHOST_ORIGIN_RE.test(origin) || EXTRA_ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -93,6 +99,22 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting - Password reset (extra estricto: cada request envía email)
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Demasiadas solicitudes de reseteo, intenta más tarde.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Auth limiter ANTES del general — login/register/password-reset deben pegar
+// el límite estricto primero (express monta middlewares en orden).
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register-player', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/password-reset', passwordResetLimiter);
+
 app.use('/api/', generalLimiter);
 
 // Webhook routes — MUST be registered before express.json() to capture raw body Buffer.
@@ -108,7 +130,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use('/storage', express.static(path.join(__dirname, '../storage')));
+// Imágenes generadas — cacheables por 1 día (los assets no cambian una vez
+// publicados). Sin esto, cada hit del feed social repetía el bytes desde Node,
+// drenando ancho de banda del VPS.
+app.use('/storage', express.static(path.join(__dirname, '../storage'), {
+  maxAge: '1d',
+  immutable: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  },
+}));
 
 // Logging de requests
 app.use((req, res, next) => {
@@ -299,6 +330,21 @@ app.use((err, req, res, next) => {
 // ============================================
 // INICIO DEL SERVIDOR
 // ============================================
+
+// Handlers globales — Node ≥15 termina el proceso ante una rejection no
+// capturada. Logueamos en lugar de morir; la causa raíz se investiga vía
+// los logs. NO llamar process.exit() acá: pm2 reiniciaría en loop.
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('unhandledRejection', {
+    reason: reason instanceof Error ? reason.stack : String(reason),
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('uncaughtException', {
+    error: error?.stack || String(error),
+  });
+});
 
 async function startServer() {
   try {

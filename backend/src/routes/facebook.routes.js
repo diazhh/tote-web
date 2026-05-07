@@ -1,7 +1,19 @@
 import express from 'express';
 import facebookController from '../controllers/facebook.controller.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
+
+// Verificación de webhook de Facebook (handshake GET público — Meta lo necesita)
+router.get('/instances/:instanceId/webhook', facebookController.verifyWebhook);
+
+// Callback de eventos de webhook (POST público — Meta entrega eventos aquí)
+// NOTA: pre-existente colisión con setupWebhook abajo; el primero registrado gana.
+// Movido aquí (antes del guard) para que Meta pueda entregar sin auth.
+router.post('/instances/:instanceId/webhook', facebookController.handleWebhook);
+
+// A partir de aquí, todo requiere admin
+router.use(authenticate, authorize('ADMIN'));
 
 // Rutas para gestionar instancias de Facebook
 router.post('/instances', facebookController.createInstance);
@@ -13,13 +25,9 @@ router.delete('/instances/:instanceId', facebookController.deleteInstance);
 router.post('/instances/:instanceId/send-message', facebookController.sendMessage);
 router.post('/instances/:instanceId/send-image', facebookController.sendImage);
 router.get('/instances/:instanceId/user/:userId', facebookController.getUserInfo);
-router.post('/instances/:instanceId/webhook', facebookController.setupWebhook);
+router.post('/instances/:instanceId/setup-webhook', facebookController.setupWebhook);
 router.post('/instances/:instanceId/test', facebookController.testConnection);
 router.post('/instances/:instanceId/disconnect', facebookController.disconnectInstance);
 router.patch('/instances/:instanceId/toggle', facebookController.toggleActive);
-
-// Webhook endpoints
-router.get('/instances/:instanceId/webhook', facebookController.verifyWebhook);
-router.post('/instances/:instanceId/webhook', facebookController.handleWebhook);
 
 export default router;
