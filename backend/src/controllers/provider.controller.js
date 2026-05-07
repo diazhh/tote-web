@@ -76,13 +76,20 @@ class ProviderController {
     try {
       const { id } = req.params;
 
+      // NUNCA incluir webhookToken — solo se devuelve una vez en generateToken.
       const system = await prisma.apiSystem.findUnique({
         where: { id },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          slug: true,
+          mode: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
           configurations: {
-            include: {
-              game: true
-            }
+            include: { game: true }
           }
         }
       });
