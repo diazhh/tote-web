@@ -316,6 +316,21 @@ app.use((err, req, res, next) => {
 // INICIO DEL SERVIDOR
 // ============================================
 
+// Handlers globales — Node ≥15 termina el proceso ante una rejection no
+// capturada. Logueamos en lugar de morir; la causa raíz se investiga vía
+// los logs. NO llamar process.exit() acá: pm2 reiniciaría en loop.
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('unhandledRejection', {
+    reason: reason instanceof Error ? reason.stack : String(reason),
+  });
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('uncaughtException', {
+    error: error?.stack || String(error),
+  });
+});
+
 async function startServer() {
   try {
     // Verificar conexión a BD

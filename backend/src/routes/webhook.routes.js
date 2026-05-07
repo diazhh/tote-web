@@ -7,7 +7,11 @@ const router = express.Router();
 // express.raw must be applied FIRST on this router so req.body is a Buffer
 // for all subsequent handlers. This must be registered BEFORE app.use(express.json())
 // in index.js (Plan 03 handles the index.js registration).
-router.use(express.raw({ type: '*/*', limit: '1mb' }));
+//
+// Limit is intentionally tight (64KB): real provider payloads (SRQ/Maxplay)
+// are well under 10KB. A larger cap would let a leaked token spam-fill
+// the WebhookLog table 1MB at a time.
+router.use(express.raw({ type: '*/*', limit: '64kb' }));
 
 router.post('/:providerSlug', webhookAuth, receive);
 
