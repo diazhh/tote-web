@@ -130,7 +130,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use('/storage', express.static(path.join(__dirname, '../storage')));
+// Imágenes generadas — cacheables por 1 día (los assets no cambian una vez
+// publicados). Sin esto, cada hit del feed social repetía el bytes desde Node,
+// drenando ancho de banda del VPS.
+app.use('/storage', express.static(path.join(__dirname, '../storage'), {
+  maxAge: '1d',
+  immutable: true,
+  setHeaders: (res) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
+  },
+}));
 
 // Logging de requests
 app.use((req, res, next) => {
