@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.post('/track', optionalAuth, pageVisitController.trackVisit);
 
-router.patch('/:visitId/duration', pageVisitController.updateVisitDuration);
+router.patch('/:visitId/duration', optionalAuth, pageVisitController.updateVisitDuration);
 
 router.get('/stats', authenticate, pageVisitController.getVisitStats);
 
