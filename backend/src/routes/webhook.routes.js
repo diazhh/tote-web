@@ -1,5 +1,6 @@
 import express from 'express';
 import { webhookAuth } from '../middlewares/webhook-auth.middleware.js';
+import { webhookRateLimit } from '../middlewares/webhook-rate-limit.middleware.js';
 import { receive } from '../controllers/webhook.controller.js';
 
 const router = express.Router();
@@ -13,6 +14,7 @@ const router = express.Router();
 // the WebhookLog table 1MB at a time.
 router.use(express.raw({ type: '*/*', limit: '64kb' }));
 
-router.post('/:providerSlug', webhookAuth, receive);
+// Cadena: auth → rate limit (per-provider) → handler
+router.post('/:providerSlug', webhookAuth, webhookRateLimit, receive);
 
 export default router;
