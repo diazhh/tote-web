@@ -14,7 +14,10 @@ import logger from '../lib/logger.js';
 import withDrawLock from '../lib/drawLock.js';
 
 const SIDECAR_URL = process.env.MAXPLAY_SIDECAR_URL || 'http://127.0.0.1:8055';
-const REQUEST_TIMEOUT_MS = parseInt(process.env.MAXPLAY_TIMEOUT_MS || '30000', 10);
+// Cold-start scrapes take ~48s after Maxplay enabled the managed Turnstile
+// challenge (checkbox click + token wait). Warm session is 7–30s. Default
+// generously so the worker doesn't time out before the sidecar can recover.
+const REQUEST_TIMEOUT_MS = parseInt(process.env.MAXPLAY_TIMEOUT_MS || '90000', 10);
 const RETRY_DELAY_MS = parseInt(process.env.MAXPLAY_RETRY_DELAY_MS || '3000', 10);
 
 // External juego_id per draw hour (Caracas timezone, all under TRIPLE PANTERA dropdown
