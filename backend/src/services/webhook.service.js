@@ -148,7 +148,19 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
   });
 
   // Step 2: attempt to load the provider adapter
-  const adapterPath = path.resolve(__dirname, '../webhooks/adapters/' + slug + '.adapter.js');
+  // Sandbox: build the path with path.join and verify it stays inside the
+  // adapters directory. Defense-in-depth on top of the slug regex applied
+  // by createSystem/updateSystem and webhookAuth.
+  const adaptersDir = path.resolve(__dirname, '../webhooks/adapters');
+  const adapterPath = path.resolve(adaptersDir, `${slug}.adapter.js`);
+  if (!adapterPath.startsWith(adaptersDir + path.sep)) {
+    await prisma.webhookLog.update({
+      where: { id: log.id },
+      data: { status: 'FAILED', errorMessage: 'Adapter path escape attempted' },
+    });
+    logger.error(`[webhook] Adapter path escape blocked for slug "${slug}"`);
+    return { status: 'failed', logId: log.id, error: 'invalid slug' };
+  }
 
   let adapterModule;
   try {
