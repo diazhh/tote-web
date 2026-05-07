@@ -141,35 +141,41 @@ External betting providers can send bets via webhooks instead of being polled (l
 
 ---
 
-## Production Environment (VPS 144)
+## Production Environment (VPS 94 — Telecom)
+
+> **Migración:** la producción se mudó de VPS 144 (DigitalOcean, IP `144.126.150.120`) a VPS 94 (Telecom, IP `94.72.116.98`) en 2026-05. El alias `ssh 144` aún resuelve al box viejo pero **no contiene el stack actual**. Usar siempre `ssh 94`.
 
 ### Conexión SSH
 ```bash
-ssh 144    # alias configurado localmente en ~/.ssh/config
+ssh 94     # alias configurado localmente en ~/.ssh/config
 ```
-IP del servidor: `144.126.150.120`
+IP del servidor: `94.72.116.98`
 
 ### Ubicación de proyectos
 Todos los proyectos están en `/var/proyectos/`:
 ```
 /var/proyectos/tote-web/          # Este proyecto
-/var/proyectos/atilax-web/        # Atilax frontend
-/var/proyectos/erp/               # ERP (backend + frontend)
-/var/proyectos/dentista/          # Dentista
+/var/proyectos/tote-scrape/       # Sidecar Maxplay (FastAPI + Scrapling, port 8055) — repo: github.com/diazhh/tote-scrape (privado)
 ```
 
 ### pm2 — Procesos de tote-web
-| ID | Nombre           | Descripción              |
-|----|------------------|--------------------------|
-| 7  | tote-backend     | Express API (port 3001)  |
-| 15 | tote-frontend    | Next.js (port 10000)     |
+| ID | Nombre           | Descripción                                       |
+|----|------------------|---------------------------------------------------|
+| 0  | tote-backend     | Express API (port 3001)                           |
+| 2  | tote-frontend    | Next.js (port 10000)                              |
+| 3  | whatsapp-service | WhatsApp gateway                                  |
+| 4  | tote-scrape      | Maxplay scraping sidecar (FastAPI on `127.0.0.1:8055`) |
+
+> Los IDs son los actuales del `pm2 list` en VPS 94 — pueden cambiar si pm2 se reinicia. Referenciar siempre por nombre.
 
 Comandos útiles en producción:
 ```bash
-ssh 144 "pm2 list"                          # Ver todos los procesos
-ssh 144 "pm2 logs tote-backend --lines 50"  # Ver logs del backend
-ssh 144 "pm2 restart tote-backend"          # Reiniciar backend
-ssh 144 "pm2 restart tote-frontend"         # Reiniciar frontend
+ssh 94 "pm2 list"                           # Ver todos los procesos
+ssh 94 "pm2 logs tote-backend --lines 50"   # Ver logs del backend
+ssh 94 "pm2 logs tote-scrape --lines 100"   # Ver logs del sidecar Maxplay
+ssh 94 "pm2 restart tote-backend"           # Reiniciar backend (cuesta 1-2s downtime)
+ssh 94 "pm2 restart tote-frontend"          # Reiniciar frontend (build cache, ver feedback memory)
+ssh 94 "pm2 restart tote-scrape"            # Reiniciar sidecar (próximo scrape paga ~45s cold start)
 ```
 
 ### Base de Datos — Producción
@@ -181,8 +187,30 @@ ssh 144 "pm2 restart tote-frontend"         # Reiniciar frontend
 
 Consultar desde local vía SSH:
 ```bash
-ssh 144 "PGPASSWORD='ToteSecure2024*' psql -U tote_user -h localhost -p 5433 -d tote_db -c 'SELECT ...'"
+ssh 94 "PGPASSWORD='ToteSecure2024*' psql -U tote_user -h localhost -p 5433 -d tote_db -c 'SELECT ...'"
 ```
+
+### Maxplay Scraping Sidecar
+
+El proveedor Maxplay no expone API ni webhooks — sólo un dashboard administrativo (`mpgadmin.maxplaygo.com`) protegido por Cloudflare + login. Para sortear esto, hay un servicio FastAPI en Python ("tote-scrape") que mantiene una sesión stealth caliente y expone `POST /scrape/maxplay/jugadas` al backend Node.
+
+- **Repo:** [github.com/diazhh/tote-scrape](https://github.com/diazhh/tote-scrape) (privado — contiene credenciales hardcoded)
+- **Path en VPS:** `/var/proyectos/tote-scrape/` · pm2 `tote-scrape` · puerto `127.0.0.1:8055`
+- **Cliente Node:** `backend/src/services/maxplay.service.js` (timeout default 90s, override con `MAXPLAY_TIMEOUT_MS`)
+- **Worker pg-boss:** `backend/src/queue/workers/sync-scrape-tickets.worker.js` (corre T-5min antes de cada sorteo)
+- **Tickets:** `Ticket.source = 'EXTERNAL_SCRAPE'`, `apiSystemId` apunta al row `ApiSystem` con `slug='maxplay'` y `mode='SCRAPE'`
+- **Performance:** cold start ~45s (browser boot + Cloudflare + login + Turnstile + form submit), warm session ~5–7s
+
+**Cloudflare Turnstile interactivo:** desde 2026-05-07 el form de login muestra un widget "Verify you are human" con checkbox que requiere click explícito. La función `_solve_turnstile_checkbox` en `app/adapters/maxplay.py` lo maneja con un click humanizado al iframe + espera al token `cf-turnstile-response`. Si CF endurece y rechaza clicks automatizados, el plan B documentado es 2Captcha/Capsolver.
+
+**Despliegue manual** (no hay CI):
+```bash
+# Desde local, en /Users/diazhh/Documents/GitHub/tote-scrape
+rsync -av --exclude '.venv' --exclude '__pycache__' --exclude '*.egg-info' --exclude '.git' ./ 94:/var/proyectos/tote-scrape/
+ssh 94 "pm2 restart tote-scrape"
+```
+
+**Diagnóstico ante fallo:** el adapter dumpea screenshot + HTML + DOM markers en `/tmp/maxplay-debug-*` cuando hay timeout. Inspeccionar `*.json` da el estado en 5s; el `.png` confirma visualmente.
 
 ### Base de Datos — Local (Docker)
 - **Contenedor:** `tote_postgres`
