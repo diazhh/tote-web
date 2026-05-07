@@ -2,6 +2,10 @@ import crypto from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 
+// Defensa en profundidad: incluso si createSystem se filtra, el slug en la URL
+// del webhook nunca puede salirse del set seguro.
+const SLUG_REGEX = /^[a-z0-9_-]{1,64}$/;
+
 /**
  * Webhook authentication middleware.
  *
@@ -12,6 +16,11 @@ import logger from '../lib/logger.js';
  * - Attaches req.apiSystem on success and calls next().
  */
 export async function webhookAuth(req, res, next) {
+  // Validar formato del slug antes de cualquier acceso a DB o filesystem
+  if (!SLUG_REGEX.test(req.params.providerSlug || '')) {
+    return res.status(404).json({ error: 'Provider not found' });
+  }
+
   const incomingToken = req.headers['x-webhook-token'];
 
   if (!incomingToken) {

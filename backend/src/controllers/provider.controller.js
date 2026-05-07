@@ -9,6 +9,9 @@ import bcrypt from 'bcrypt';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Restringe slugs a caracteres seguros para uso en filesystem (path traversal) y URLs.
+const SLUG_REGEX = /^[a-z0-9_-]{1,64}$/;
+
 class ProviderController {
   async getAllSystems(req, res) {
     try {
@@ -70,6 +73,10 @@ class ProviderController {
         return res.status(400).json({ error: 'El nombre y el slug son requeridos' });
       }
 
+      if (!SLUG_REGEX.test(slug)) {
+        return res.status(400).json({ error: 'Slug inválido. Solo a-z, 0-9, _ y - (máx 64)' });
+      }
+
       const system = await prisma.apiSystem.create({
         data: {
           name,
@@ -99,7 +106,12 @@ class ProviderController {
       const data = {};
       if (name !== undefined) data.name = name;
       if (description !== undefined) data.description = description;
-      if (slug !== undefined) data.slug = slug;
+      if (slug !== undefined) {
+        if (!SLUG_REGEX.test(slug)) {
+          return res.status(400).json({ error: 'Slug inválido. Solo a-z, 0-9, _ y - (máx 64)' });
+        }
+        data.slug = slug;
+      }
       if (mode !== undefined) data.mode = mode;
       if (isActive !== undefined) data.isActive = isActive;
 
