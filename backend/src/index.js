@@ -93,6 +93,22 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Rate limiting - Password reset (extra estricto: cada request envía email)
+const passwordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: 'Demasiadas solicitudes de reseteo, intenta más tarde.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Auth limiter ANTES del general — login/register/password-reset deben pegar
+// el límite estricto primero (express monta middlewares en orden).
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register-player', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/password-reset', passwordResetLimiter);
+
 app.use('/api/', generalLimiter);
 
 // Webhook routes — MUST be registered before express.json() to capture raw body Buffer.
