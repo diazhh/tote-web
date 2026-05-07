@@ -41,29 +41,35 @@ app.use(helmet({
 // CORS - debe ir ANTES del rate limiter para manejar preflight requests
 const isProduction = process.env.NODE_ENV === 'production';
 
-// En producción: solo https://tote.atilax.io
-// En desarrollo: permitir localhost y servidor de desarrollo
+// Producción: hardcodeada al dominio público.
+// No-producción: solo localhost (cualquier puerto) y orígenes en la env
+// var ALLOWED_ORIGINS (CSV). Eliminada la entrada hardcodeada al VPS viejo
+// (http://144.126.150.120:10000) que dejaba un origen IP público abierto
+// con credentials:true ante un descuido de NODE_ENV.
+const PROD_ALLOWED_ORIGINS = ['https://tote.atilax.io'];
+const EXTRA_ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+const LOCALHOST_ORIGIN_RE = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/;
+
 const corsOptions = {
   origin: (origin, callback) => {
+    // Sin Origin (curl, server-side fetch): permitir.
+    if (!origin) return callback(null, true);
+
     if (isProduction) {
-      // Producción: solo el dominio específico
-      const allowedOrigins = ['https://tote.atilax.io'];
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+      if (PROD_ALLOWED_ORIGINS.includes(origin) || EXTRA_ALLOWED_ORIGINS.includes(origin)) {
+        return callback(null, true);
       }
-    } else {
-      // Desarrollo: permitir localhost y servidor de desarrollo (144.126.150.120:10000)
-      if (!origin || 
-          origin.startsWith('http://localhost:10000') || 
-          origin.startsWith('http://127.0.0.1:') ||
-          origin === 'http://144.126.150.120:10000') {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
+      return callback(new Error('Not allowed by CORS'));
     }
+
+    // No-producción: localhost por regex + lo que esté en ALLOWED_ORIGINS.
+    if (LOCALHOST_ORIGIN_RE.test(origin) || EXTRA_ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
