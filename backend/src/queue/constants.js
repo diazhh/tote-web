@@ -19,6 +19,7 @@ export const QUEUES = {
   RECOMENDACIONES_TRIPLE: 'recomendaciones-triple',
   RESUMEN_TRIPLE: 'resumen-triple',
   RETRY_FAILED_PUBLICATIONS: 'retry-failed-publications',
+  CLEANUP_LOGS: 'cleanup-logs',
 };
 
 export const QUEUE_CONFIGS = {

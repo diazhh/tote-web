@@ -51,6 +51,15 @@ export async function registerAllWorkers(boss) {
   await boss.schedule('monitor-dlq', '*/2 * * * *', {}, { tz: 'America/Caracas' });
   logger.info('[pg-boss] Monitor DLQ registrado (cada 2 min)');
 
+  // Cleanup logs (security/retención) — siempre activo. Patrón createQueue +
+  // work + schedule para evitar el bug latente de pg-boss v10 (ver nota más abajo).
+  const { cleanupLogsWorker } = await import('./workers/cleanup-logs.worker.js');
+  await boss.createQueue(QUEUES.CLEANUP_LOGS);
+  await boss.work(QUEUES.CLEANUP_LOGS, cleanupLogsWorker);
+  // 03:15 diario hora Caracas — fuera del peak de sorteos
+  await boss.schedule(QUEUES.CLEANUP_LOGS, '15 3 * * *', {}, { tz: 'America/Caracas' });
+  logger.info('[pg-boss] Worker cleanup-logs registrado (03:15 diario)');
+
   // Workers sync y generate-daily-draws (TW-12, TW-13, TW-15)
   if (process.env.PGBOSS_SYNC_API_PLANNING === 'true') {
     const { syncApiPlanningWorker } = await import('./workers/sync-api-planning.worker.js');
