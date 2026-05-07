@@ -1,7 +1,14 @@
 import express from 'express';
 import telegramController from '../controllers/telegram.controller.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
+
+// Webhook callback de Telegram (público — Telegram debe poder llegar)
+router.post('/webhook/:instanceId', telegramController.handleWebhook);
+
+// A partir de aquí, todo requiere admin
+router.use(authenticate, authorize('ADMIN'));
 
 // Rutas para gestionar instancias de Telegram
 router.post('/instances', telegramController.createInstance);
@@ -17,8 +24,5 @@ router.post('/instances/:instanceId/webhook', telegramController.setupWebhook);
 router.post('/instances/:instanceId/test', telegramController.testConnection);
 router.post('/instances/:instanceId/disconnect', telegramController.disconnectInstance);
 router.patch('/instances/:instanceId/toggle', telegramController.toggleActive);
-
-// Webhook endpoint
-router.post('/webhook/:instanceId', telegramController.handleWebhook);
 
 export default router;

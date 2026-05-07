@@ -1,7 +1,11 @@
 import express from 'express';
 import instagramController from '../controllers/instagram.controller.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
+
+// Todas las rutas de Instagram requieren admin (no hay webhook callback público)
+router.use(authenticate, authorize('ADMIN'));
 
 // Rutas para gestionar instancias de Instagram
 router.post('/instances', instagramController.createInstance);

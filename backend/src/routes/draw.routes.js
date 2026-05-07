@@ -4,17 +4,19 @@
 
 import express from 'express';
 import drawController from '../controllers/draw.controller.js';
+import { authenticate, authorize } from '../middlewares/auth.middleware.js';
 
 const router = express.Router();
 
+// Rutas públicas (consumidas por /jugar)
+router.get('/today', drawController.getTodayDraws.bind(drawController));
+router.get('/next', drawController.getNextDraw.bind(drawController));
+
+// A partir de aquí, todo requiere autenticación admin/operator
+router.use(authenticate, authorize('ADMIN', 'OPERATOR'));
+
 // GET /api/draws
 router.get('/', drawController.getDraws.bind(drawController));
-
-// GET /api/draws/today
-router.get('/today', drawController.getTodayDraws.bind(drawController));
-
-// GET /api/draws/next
-router.get('/next', drawController.getNextDraw.bind(drawController));
 
 // GET /api/draws/stats
 router.get('/stats', drawController.getDrawStats.bind(drawController));
