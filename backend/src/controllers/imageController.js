@@ -91,26 +91,35 @@ export async function generateDailyImages(req, res) {
 /**
  * Serve image file
  */
+// Acepta solo nombres de archivo planos con extensiones permitidas. Bloquea
+// path traversal (..), separadores y nombres ocultos. Esta ruta es PÚBLICA.
+const IMAGE_FILENAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.(png|jpg|jpeg|webp)$/;
+
 export async function serveImage(req, res) {
   try {
     const { filename } = req.params;
-    
+
+    if (!filename || !IMAGE_FILENAME_REGEX.test(filename) || filename.includes('..')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.status(400).json({ success: false, error: 'Invalid filename' });
+    }
+
     const imagePath = await imageService.getImagePath(filename);
-    
+
     // Set cache control headers to prevent caching of 404s
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    
+
     res.sendFile(imagePath);
   } catch (error) {
     console.error('Error in serveImage:', error);
-    
+
     // Set headers to prevent caching of 404 responses
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
-    
+
     res.status(404).json({
       success: false,
       error: 'Image not found'
