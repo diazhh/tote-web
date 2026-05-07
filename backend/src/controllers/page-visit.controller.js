@@ -116,15 +116,36 @@ const pageVisitController = {
       const { startDate, endDate, pageType, userId } = req.query;
 
       const where = {};
-      
+
       if (startDate || endDate) {
         where.createdAt = {};
-        if (startDate) where.createdAt.gte = new Date(startDate);
-        if (endDate) where.createdAt.lte = new Date(endDate);
+        if (startDate) {
+          const s = new Date(startDate);
+          if (isNaN(s.getTime())) return res.status(400).json({ error: 'startDate inválido' });
+          where.createdAt.gte = s;
+        }
+        if (endDate) {
+          const e = new Date(endDate);
+          if (isNaN(e.getTime())) return res.status(400).json({ error: 'endDate inválido' });
+          where.createdAt.lte = e;
+        }
+      } else {
+        // Default: últimos 30 días si no se pasa rango (evita full-table scan)
+        where.createdAt = { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
       }
-      
-      if (pageType) where.pageType = pageType;
-      if (userId) where.userId = userId;
+
+      if (pageType) {
+        if (!ALLOWED_PAGE_TYPES.has(pageType)) {
+          return res.status(400).json({ error: 'pageType inválido' });
+        }
+        where.pageType = pageType;
+      }
+      if (userId) {
+        if (!UUID_REGEX.test(userId)) {
+          return res.status(400).json({ error: 'userId inválido' });
+        }
+        where.userId = userId;
+      }
 
       const [totalVisits, visitsByPage, visitsByUser, recentVisits] = await Promise.all([
         prisma.pageVisit.count({ where }),
@@ -193,58 +214,66 @@ const pageVisitController = {
       const { startDate, endDate, groupBy = 'day' } = req.query;
 
       if (!startDate || !endDate) {
-        return res.status(400).json({ 
-          error: 'startDate y endDate son requeridos' 
-        });
+        return res.status(400).json({ error: 'startDate y endDate son requeridos' });
       }
 
-      const visits = await prisma.pageVisit.findMany({
-        where: {
-          createdAt: {
-            gte: new Date(startDate),
-            lte: new Date(endDate),
-          },
-        },
-        select: {
-          createdAt: true,
-          pageType: true,
-        },
-      });
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+        return res.status(400).json({ error: 'Fechas inválidas' });
+      }
+      if (end < start) {
+        return res.status(400).json({ error: 'endDate debe ser >= startDate' });
+      }
 
-      const groupedData = {};
-      visits.forEach(visit => {
-        const date = new Date(visit.createdAt);
-        let key;
-        
-        if (groupBy === 'hour') {
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:00`;
-        } else if (groupBy === 'day') {
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        } else if (groupBy === 'month') {
-          key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-        }
+      // Limitar el rango para evitar OOM si la tabla creció mucho.
+      const MAX_DAYS = 90;
+      const rangeDays = (end - start) / (1000 * 60 * 60 * 24);
+      if (rangeDays > MAX_DAYS) {
+        return res.status(400).json({ error: `Rango máximo: ${MAX_DAYS} días` });
+      }
 
-        if (!groupedData[key]) {
-          groupedData[key] = { total: 0, byPage: {} };
-        }
-        
-        groupedData[key].total++;
-        groupedData[key].byPage[visit.pageType] = (groupedData[key].byPage[visit.pageType] || 0) + 1;
-      });
+      // groupBy en allowlist — protege date_trunc de input arbitrario.
+      const truncMap = { hour: 'hour', day: 'day', month: 'month' };
+      const trunc = truncMap[groupBy];
+      if (!trunc) {
+        return res.status(400).json({ error: 'groupBy debe ser hour|day|month' });
+      }
 
-      const result = Object.entries(groupedData).map(([date, data]) => ({
-        date,
-        total: data.total,
-        byPage: data.byPage,
-      })).sort((a, b) => a.date.localeCompare(b.date));
+      // Agregación en SQL — evita traer N millones de filas a Node.
+      // Parámetros: $1=trunc no se parametriza (validado contra allowlist),
+      // $2=start, $3=end. Prisma.sql con interpolación literal solo del trunc.
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT
+           to_char(date_trunc('${trunc}', "createdAt" AT TIME ZONE 'UTC'), 'YYYY-MM-DD HH24:MI') AS bucket,
+           "pageType",
+           COUNT(*)::int AS count
+         FROM "PageVisit"
+         WHERE "createdAt" >= $1 AND "createdAt" <= $2
+         GROUP BY bucket, "pageType"
+         ORDER BY bucket ASC`,
+        start,
+        end
+      );
 
+      // Reformatear: agrupar por bucket con total + byPage
+      const grouped = {};
+      for (const row of rows) {
+        const key = trunc === 'day'
+          ? row.bucket.slice(0, 10)
+          : trunc === 'month'
+            ? row.bucket.slice(0, 7)
+            : row.bucket; // hour: YYYY-MM-DD HH:MM
+        if (!grouped[key]) grouped[key] = { date: key, total: 0, byPage: {} };
+        grouped[key].total += row.count;
+        grouped[key].byPage[row.pageType] = (grouped[key].byPage[row.pageType] || 0) + row.count;
+      }
+
+      const result = Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date));
       res.json(result);
     } catch (error) {
       console.error('Error getting visits by date range:', error);
-      res.status(500).json({ 
-        error: 'Error al obtener visitas por rango de fechas',
-        details: error.message 
-      });
+      res.status(500).json({ error: 'Error al obtener visitas por rango de fechas' });
     }
   },
 };
