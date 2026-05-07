@@ -4,6 +4,17 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import emailVerificationService from './email-verification.service.js';
 
+// Falla ruidosamente si JWT_SECRET no está configurado o es trivial.
+// Sin esto, un despliegue con .env mal cargado caía a un fallback público
+// y permitía forjar tokens admin desde fuera.
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  throw new Error(
+    'JWT_SECRET environment variable must be set to a string of at least 32 characters. ' +
+    'Generate one with: openssl rand -base64 48'
+  );
+}
+
 class AuthService {
   /**
    * Registrar un nuevo usuario
@@ -124,7 +135,7 @@ class AuthService {
 
     return jwt.sign(
       payload,
-      process.env.JWT_SECRET || 'secret-key-change-in-production',
+      JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
     );
   }
@@ -134,10 +145,7 @@ class AuthService {
    */
   verifyToken(token) {
     try {
-      return jwt.verify(
-        token,
-        process.env.JWT_SECRET || 'secret-key-change-in-production'
-      );
+      return jwt.verify(token, JWT_SECRET);
     } catch (error) {
       throw new Error('Token inválido o expirado');
     }
