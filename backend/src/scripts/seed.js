@@ -6,6 +6,18 @@ import logger from '../lib/logger.js';
  * Script para crear datos iniciales en la base de datos
  */
 async function seed() {
+  // Requerir passwords fuertes vía env — sin defaults inseguros.
+  const adminPassword = process.env.ADMIN_INITIAL_PASSWORD;
+  const operatorPassword = process.env.OPERATOR_INITIAL_PASSWORD;
+  if (!adminPassword || adminPassword.length < 12) {
+    logger.error('❌ ADMIN_INITIAL_PASSWORD env var requerida (mínimo 12 caracteres)');
+    process.exit(1);
+  }
+  if (!operatorPassword || operatorPassword.length < 12) {
+    logger.error('❌ OPERATOR_INITIAL_PASSWORD env var requerida (mínimo 12 caracteres)');
+    process.exit(1);
+  }
+
   try {
     logger.info('🌱 Iniciando seed de base de datos...');
 
@@ -15,17 +27,14 @@ async function seed() {
     });
 
     if (!adminExists) {
-      const admin = await authService.register({
+      await authService.register({
         username: 'admin',
         email: 'admin@tote.com',
-        password: 'admin123',
+        password: adminPassword,
         role: 'ADMIN'
       });
 
-      logger.info('✅ Usuario administrador creado:');
-      logger.info('   Username: admin');
-      logger.info('   Password: admin123');
-      logger.info('   ⚠️  CAMBIAR CONTRASEÑA EN PRODUCCIÓN');
+      logger.info('✅ Usuario administrador creado (password: $ADMIN_INITIAL_PASSWORD)');
     } else {
       logger.info('ℹ️  Usuario administrador ya existe');
     }
@@ -39,13 +48,11 @@ async function seed() {
       await authService.register({
         username: 'operator',
         email: 'operator@tote.com',
-        password: 'operator123',
+        password: operatorPassword,
         role: 'OPERATOR'
       });
 
-      logger.info('✅ Usuario operador creado:');
-      logger.info('   Username: operator');
-      logger.info('   Password: operator123');
+      logger.info('✅ Usuario operador creado (password: $OPERATOR_INITIAL_PASSWORD)');
     } else {
       logger.info('ℹ️  Usuario operador ya existe');
     }
