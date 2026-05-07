@@ -12,6 +12,39 @@ const __dirname = path.dirname(__filename);
 // Restringe slugs a caracteres seguros para uso en filesystem (path traversal) y URLs.
 const SLUG_REGEX = /^[a-z0-9_-]{1,64}$/;
 
+/**
+ * Validates that a URL points to a public host (not loopback/private/link-local).
+ * Used to prevent SSRF in testConfiguration where the user controls baseUrl.
+ */
+function isPublicHttpUrl(urlStr) {
+  let url;
+  try {
+    url = new URL(urlStr);
+  } catch {
+    return false;
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) return false;
+
+  const host = url.hostname.toLowerCase();
+  // Hostname-based blocklist for common private ranges
+  if (host === 'localhost' || host === '0.0.0.0') return false;
+  if (host === '::1' || host === '[::1]') return false;
+  // IPv4 private ranges (10/8, 127/8, 169.254/16, 192.168/16, 172.16-31/12, 0/8)
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [_, a, b] = v4.map(Number);
+    if (a === 10 || a === 127 || a === 0) return false;
+    if (a === 169 && b === 254) return false;
+    if (a === 192 && b === 168) return false;
+    if (a === 172 && b >= 16 && b <= 31) return false;
+  }
+  // IPv6: block loopback and unique-local (fc00::/7) and link-local (fe80::/10)
+  if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:')) return false;
+  // Block ".internal" / ".local" suffix commonly used for private services
+  if (host.endsWith('.internal') || host.endsWith('.local')) return false;
+  return true;
+}
+
 class ProviderController {
   async getAllSystems(req, res) {
     try {
@@ -453,6 +486,14 @@ class ProviderController {
         return res.status(404).json({ error: 'Configuración no encontrada' });
       }
 
+      // Bloquear SSRF: rechazar baseUrls que apunten a hosts privados/internos
+      if (!isPublicHttpUrl(configuration.baseUrl)) {
+        return res.status(400).json({
+          success: false,
+          error: 'baseUrl debe ser una URL pública (http/https, no loopback ni red privada)'
+        });
+      }
+
       let testUrl = configuration.baseUrl;
       if (configuration.type === 'PLANNING') {
         const today = new Date().toISOString().split('T')[0];
@@ -467,22 +508,22 @@ class ProviderController {
           'APIKEY': configuration.token,
           'Content-Type': 'application/json',
         },
+        signal: AbortSignal.timeout(10000),
+        redirect: 'manual'
       });
 
-      const data = await response.json();
-
+      // No reflejar el body al cliente — solo estado. Evita SSRF "full-read"
+      // y minimiza fuga de datos del proveedor externo.
       res.json({
         success: response.ok,
         status: response.status,
-        statusText: response.statusText,
-        data: data,
-        testUrl: testUrl
+        statusText: response.statusText
       });
     } catch (error) {
       logger.error('Error probando configuración API:', error);
       res.status(500).json({
         success: false,
-        error: error.message
+        error: 'Test failed'
       });
     }
   }
