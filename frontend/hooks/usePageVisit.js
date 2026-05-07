@@ -21,7 +21,7 @@ const getSessionId = () => {
 
 const getAuthToken = () => {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem('token');
+  return localStorage.getItem('accessToken');
 };
 
 export const usePageVisit = (pageType, pagePath) => {

@@ -26,7 +26,7 @@ export default function TestBetsControl() {
       setLoading(true);
       const response = await fetch('/api/system/test-bets', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         }
       });
 
@@ -62,7 +62,7 @@ export default function TestBetsControl() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify(body)
       });
@@ -86,7 +86,7 @@ export default function TestBetsControl() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
         },
         body: JSON.stringify(settings)
       });

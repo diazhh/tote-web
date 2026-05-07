@@ -26,7 +26,7 @@ export default function ProveedoresPage() {
 
   const fetchAdapterStatuses = async (systemsList) => {
     if (!systemsList || systemsList.length === 0) return;
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     const headers = { 'Authorization': `Bearer ${token}` };
     const results = await Promise.allSettled(
       systemsList.map(async (system) => {
@@ -47,7 +47,7 @@ export default function ProveedoresPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const headers = {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json'
@@ -81,7 +81,7 @@ export default function ProveedoresPage() {
 
   const handleSaveSystem = async (formData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const url = editingSystem
         ? `${API_URL}/providers/systems/${editingSystem.id}`
         : `${API_URL}/providers/systems`;
@@ -111,7 +111,7 @@ export default function ProveedoresPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_URL}/providers/systems/${id}`, {
         method: 'DELETE',
         headers: {
@@ -129,7 +129,7 @@ export default function ProveedoresPage() {
 
   const handleSaveConfiguration = async (formData) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const url = editingConfig
         ? `${API_URL}/providers/configurations/${editingConfig.id}`
         : `${API_URL}/providers/configurations`;
@@ -159,7 +159,7 @@ export default function ProveedoresPage() {
     }
 
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_URL}/providers/configurations/${id}`, {
         method: 'DELETE',
         headers: {
@@ -177,7 +177,7 @@ export default function ProveedoresPage() {
 
   const handleToggleSystem = async (id, currentStatus) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_URL}/providers/systems/${id}`, {
         method: 'PUT',
         headers: {
@@ -197,7 +197,7 @@ export default function ProveedoresPage() {
 
   const handleToggleActive = async (id, currentStatus) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_URL}/providers/configurations/${id}`, {
         method: 'PUT',
         headers: {
@@ -217,7 +217,7 @@ export default function ProveedoresPage() {
 
   const handleTestConfiguration = async (id) => {
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const response = await fetch(`${API_URL}/providers/configurations/${id}/test`, {
         method: 'POST',
         headers: {
@@ -760,7 +760,7 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
     if (!system?.id) return;
     setGeneratingToken(true);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const res = await fetch(`${apiUrl}/providers/systems/${system.id}/generate-token`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },

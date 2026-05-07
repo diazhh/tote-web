@@ -99,7 +99,7 @@ export default function WebhookLogsPage() {
 
   // Fetch systems list once for the filter dropdown
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem('accessToken');
     const headers = { 'Authorization': `Bearer ${token}` };
     fetch(`${API_URL}/providers/systems`, { headers })
       .then(r => r.json())
@@ -116,7 +116,7 @@ export default function WebhookLogsPage() {
   const fetchLogs = async (page, apiSystemId, status) => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const headers = { 'Authorization': `Bearer ${token}` };
       const params = new URLSearchParams({ page: String(page), limit: '50' });
       if (apiSystemId) params.set('apiSystemId', apiSystemId);
