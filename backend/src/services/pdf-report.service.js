@@ -497,6 +497,7 @@ class PdfReportService {
           game: true,
           preselectedItem: true,
           tickets: {
+            where: { status: { not: 'CANCELLED' } },
             include: {
               details: {
                 include: {

@@ -16,6 +16,7 @@ class DrawStatsService {
         where: { id: drawId },
         include: {
           tickets: {
+            where: { status: { not: 'CANCELLED' } },
             include: {
               details: true
             }
@@ -145,9 +146,10 @@ class DrawStatsService {
     try {
       // Obtener tickets del sorteo con datos de proveedor
       const tickets = await client.ticket.findMany({
-        where: { 
+        where: {
           drawId,
-          source: 'EXTERNAL_API'
+          source: 'EXTERNAL_API',
+          status: { not: 'CANCELLED' }
         },
         include: {
           details: true

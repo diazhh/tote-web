@@ -20,7 +20,7 @@ class MonitorService {
           game: true,
           winnerItem: true,
           tickets: {
-            where: { source: 'EXTERNAL_API' },
+            where: { source: 'EXTERNAL_API', status: { not: 'CANCELLED' } },
             include: {
               details: {
                 include: {
@@ -117,6 +117,7 @@ class MonitorService {
           game: true,
           winnerItem: true,
           tickets: {
+            where: { status: { not: 'CANCELLED' } },
             include: {
               details: {
                 include: {
@@ -622,8 +623,9 @@ class MonitorService {
         include: {
           game: true,
           tickets: {
-            where: { 
+            where: {
               source: 'EXTERNAL_API',
+              status: { not: 'CANCELLED' },
               providerData: {
                 path: ['bancaID'],
                 equals: parseInt(bancaExternalId)
@@ -686,6 +688,7 @@ class MonitorService {
         include: {
           game: true,
           tickets: {
+            where: { status: { not: 'CANCELLED' } },
             include: {
               details: {
                 include: {
