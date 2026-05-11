@@ -271,31 +271,44 @@ class ApiIntegrationService {
   }
 
   /**
-   * Importar tickets vendidos de un sorteo desde la API SRQ
-   * @param {string} drawId - ID del Draw
-   * @param {boolean} clearExisting - Si debe limpiar tickets existentes antes de importar
+   * Importar tickets vendidos de un sorteo desde la API SRQ — diff-based.
+   * No borra: confía en `@@unique([drawId, externalTicketId, source])` para idempotencia.
+   * Anulaciones se procesan al final: ACTIVE → CANCELLED; WON → solo warning.
+   *
+   * @param {string} drawId
+   * @param {object} [options]
+   * @param {boolean} [options.allowClosed=false] - permitir ingest tras cierre si closedAt < 2min
    */
-  async importSRQTickets(drawId, clearExisting = true) {
-    // Serializar concurrencia por drawId — previene race condition entre
-    // este import y la selección del preganador (close-draw worker) o entre
-    // ejecuciones simultáneas del job periódico sync-api-tickets.
-    return withDrawLock(drawId, async () => this._importSRQTicketsInner(drawId, clearExisting));
+  async importSRQTickets(drawId, options = {}) {
+    // Backwards-compat: callers que pasen un boolean (legacy `clearExisting`) son coerced
+    // a opciones vacías — el semantic `clearExisting` se fue (diff-based ahora).
+    const opts = (typeof options === 'object' && options !== null) ? options : {};
+    return withDrawLock(drawId, async () => this._importSRQTicketsInner(drawId, opts));
   }
 
-  async _importSRQTicketsInner(drawId, clearExisting = true) {
+  async _importSRQTicketsInner(drawId, options = {}) {
+    const { allowClosed = false } = options;
     try {
-      // Defensa: no sincronizar draws que ya cerraron — el snapshot de ventas
-      // debe quedar congelado al momento de la selección del preganador.
+      // Status guard. Default: solo SCHEDULED. allowClosed=true se acepta si closedAt < 2min.
       const drawState = await prisma.draw.findUnique({
         where: { id: drawId },
-        select: { status: true }
+        select: { status: true, closedAt: true }
       });
       if (drawState && drawState.status !== 'SCHEDULED') {
-        logger.debug(`[importSRQTickets] Draw ${drawId} en estado ${drawState.status}, ignorando sync`);
-        return { imported: 0, skipped: 0, deleted: 0, frozen: true };
+        if (!allowClosed) {
+          logger.debug(`[importSRQTickets] Draw ${drawId} en estado ${drawState.status}, ignorando sync`);
+          return { imported: 0, skipped: 0, cancelled: 0, ignored: true };
+        }
+        const isRecentlyClosed = drawState.status === 'CLOSED'
+          && drawState.closedAt
+          && (Date.now() - drawState.closedAt.getTime() < 120_000);
+        if (!isRecentlyClosed) {
+          logger.debug(`[importSRQTickets] Draw ${drawId} ${drawState.status} fuera de ventana de gracia, ignorando`);
+          return { imported: 0, skipped: 0, cancelled: 0, ignored: true };
+        }
       }
 
-      logger.info(`🎫 Importando tickets para draw ${drawId}...`);
+      logger.info(`🎫 Importando tickets para draw ${drawId}${allowClosed ? ' (allowClosed)' : ''}...`);
 
       // Obtener el mapping del sorteo
       const mapping = await prisma.apiDrawMapping.findFirst({
@@ -332,22 +345,7 @@ class ApiIntegrationService {
 
       if (!salesConfig) {
         logger.warn(`No hay configuración de ventas para juego ${mapping.apiConfig.game.name}`);
-        return { imported: 0, skipped: 0, deleted: 0 };
-      }
-
-      // Limpiar tickets existentes antes de importar (para sincronización completa)
-      let deleted = 0;
-      if (clearExisting) {
-        const deleteResult = await prisma.ticket.deleteMany({
-          where: { 
-            drawId,
-            source: 'EXTERNAL_API'
-          }
-        });
-        deleted = deleteResult.count;
-        if (deleted > 0) {
-          logger.info(`  🗑️ ${deleted} tickets externos anteriores eliminados para draw ${drawId}`);
-        }
+        return { imported: 0, skipped: 0, cancelled: 0 };
       }
 
       // Llamar a la API de tickets (header APIKEY)
@@ -365,7 +363,7 @@ class ApiIntegrationService {
 
       if (data.result === 'error') {
         logger.error(`Error obteniendo tickets:`, data.errors);
-        return { imported: 0, skipped: 0, deleted };
+        return { imported: 0, skipped: 0, cancelled: 0 };
       }
 
       // Procesar tickets - SRQ devuelve array directamente
@@ -374,15 +372,16 @@ class ApiIntegrationService {
       // Obtener el apiSystemId para crear entidades
       const apiSystemId = salesConfig.apiSystemId || mapping.apiConfig.apiSystemId;
 
-      // Agrupar tickets por ticketID
-      const ticketsGrouped = await this.groupTicketsByExternalId(
-        ticketsData, 
-        mapping.apiConfig.gameId, 
+      // Agrupar tickets por ticketID (devuelve groups + toCancel diff-based)
+      const { groups: ticketsGrouped, toCancel } = await this.groupTicketsByExternalId(
+        ticketsData,
+        mapping.apiConfig.gameId,
         apiSystemId
       );
 
       let imported = 0;
       let skipped = 0;
+      let cancelled = 0;
 
       // Crear Ticket + TicketDetail para cada ticket agrupado
       for (const ticketGroup of ticketsGrouped) {
@@ -394,7 +393,30 @@ class ApiIntegrationService {
         }
       }
 
-      logger.info(`✅ Tickets importados para draw ${drawId}: ${imported} tickets (${ticketsGrouped.reduce((sum, t) => sum + t.details.length, 0)} jugadas), ${skipped} saltados, ${deleted} eliminados`);
+      // Anulaciones diff-based:
+      // - existing ACTIVE → CANCELLED
+      // - existing WON    → log warn, no auto-cancel (admin debe revisar)
+      // - existing CANCELLED → no-op
+      // - no en DB        → ignorar (nunca lo conocimos)
+      for (const externalId of toCancel) {
+        const existing = await prisma.ticket.findFirst({
+          where: { drawId, externalTicketId: externalId, source: 'EXTERNAL_API' },
+          select: { id: true, status: true },
+        });
+        if (!existing) continue;
+        if (existing.status === 'WON') {
+          logger.warn(`[importSRQTickets] SRQ marca ticket ${externalId} (status=WON) como anulado — NO se auto-cancela; revisar con admin`);
+          continue;
+        }
+        if (existing.status === 'CANCELLED') continue;
+        await prisma.ticket.update({
+          where: { id: existing.id },
+          data: { status: 'CANCELLED' },
+        });
+        cancelled++;
+      }
+
+      logger.info(`✅ Tickets SRQ draw ${drawId}: ${imported} importados, ${skipped} ya existían, ${cancelled} cancelados`);
       
       // Importar tickets de tripleta si el juego tiene configuración de tripleta
       let tripletaImported = 0;
@@ -461,10 +483,10 @@ class ApiIntegrationService {
         logger.error(`⚠️ Error importando tripletas: ${tripletaError.message}`);
       }
       
-      return { 
-        imported, 
-        skipped, 
-        deleted,
+      return {
+        imported,
+        skipped,
+        cancelled,
         tripletaImported,
         tripletaSkipped
       };
@@ -483,10 +505,12 @@ class ApiIntegrationService {
    */
   async groupTicketsByExternalId(ticketsData, gameId, apiSystemId) {
     const grouped = new Map();
+    const toCancel = [];
 
     for (const ticket of ticketsData) {
-      // Ignorar tickets anulados
       if (ticket.anulado) {
+        const tid = ticket.ticketID?.toString();
+        if (tid) toCancel.push(tid);
         continue;
       }
 
@@ -553,7 +577,7 @@ class ApiIntegrationService {
       });
     }
 
-    return Array.from(grouped.values());
+    return { groups: Array.from(grouped.values()), toCancel };
   }
 
   /**
