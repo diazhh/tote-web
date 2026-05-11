@@ -1,8 +1,9 @@
 # Re-arquitectura de close-draw — Diseño
 
 **Fecha:** 2026-05-11
-**Estado:** Pendiente revisión
+**Estado:** APROBADO — Listo para implementación
 **Autor:** Claude + diazhh
+**Implementación:** pg-boss native (no Croner)
 
 ## Motivación
 
@@ -21,31 +22,35 @@ Los fixes urgentes ya desplegados (`3157db4`, `892f03d`) son defensivos pero mit
 
 ### Cambios incluidos
 
-1. **Separación de close-draw en dos jobs** (Cron A + Cron B).
-2. **Validación de webhooks por estado del sorteo** — rechazar pushes si `Draw.status != 'SCHEDULED'`.
-3. **Imports diff-based** (sin `deleteMany`) en SRQ y Maxplay, con manejo correcto de anulaciones.
-4. **Relax del guard de status** en Maxplay (y SRQ si aplica) para permitir inserts en draws CLOSED-recientes.
-5. **Parámetro `allowClosed`** en los importers para que solo los flujos legítimos puedan insertar tras el cierre.
-6. **Red de seguridad** en `execute-draw`: si encuentra CLOSED sin preselect, corre `selectPrewinner` inline.
+1. **Migración del flujo close-draw a pg-boss nativo**. Dos workers nuevos (close-and-ingest + preselect) reemplazan al cron Croner. Disparadores via `boss.schedule(...)`.
+2. **Fix del `createQueue` faltante** en 6 workers críticos del `register.js` (CLOSE_DRAW + EXECUTE_DRAW + 5 step-workers) para evitar el bug latente documentado en líneas 76-86 de ese archivo.
+3. **Activación de flags** `PGBOSS_CLOSE_DRAW=true` y nuevo `PGBOSS_PRESELECT=true`. El flag `PGBOSS_EXECUTE_DRAW` se queda en `false` por ahora (createQueue se arregla pero el flag no se prende).
+4. **Validación de webhooks por estado del sorteo** — rechazar pushes si `Draw.status != 'SCHEDULED'`.
+5. **Imports diff-based** (sin `deleteMany`) en SRQ y Maxplay, con manejo correcto de anulaciones.
+6. **Relax del guard de status** en Maxplay y SRQ para permitir inserts en draws CLOSED-recientes (`closedAt < 2min`).
+7. **Parámetro `allowClosed`** en los importers para que solo los flujos legítimos puedan insertar tras el cierre.
+8. **Red de seguridad** en `execute-draw` (que sigue en Croner): si encuentra CLOSED sin preselect, corre `selectPrewinner` inline.
+9. **Eliminación del cron Croner viejo** `close-draw.job.js` y su entrada en `jobs/index.js`.
 
 ### Fuera de alcance
 
-- Migración a pg-boss para close-draw (sigue siendo Croner por ahora).
+- Migración de `execute-draw` a pg-boss (queda en Croner; solo recibe el fallback inline).
+- Migración de los syncs periódicos (`sync-api-tickets`, `sync-scrape-tickets`) a pg-boss.
 - Cambios al algoritmo del optimizer (`prewinner-optimizer.service.js`).
-- Cambios al flujo de admin manual preselect via UI o Telegram (`drawService.preselectWinner`, `handleChangeResult`).
-- Cambios a `execute-draw` más allá del fallback de último segundo.
-- Limpieza de PDFs históricos en disco (ya quitada la generación, los viejos quedan).
+- Cambios al flujo de admin manual preselect via UI o Telegram (`drawService.preselectWinner`, `handleChangeResult`) — sigue intacto.
+- Limpieza de PDFs históricos en disco.
 
 ## Decisiones de diseño tomadas
 
 | Decisión | Valor |
 |--|--|
-| Schedule Cron A | `* * * * *` (legacy Croner) |
-| Schedule Cron B | `* * * * *` (legacy Croner) |
-| Ventana Cron A | SCHEDULED draws con `drawTime` ∈ [now+5min, now+6min] |
-| Ventana Cron B | CLOSED draws sin preselect con `drawTime` ∈ [now+3min, now+5min] |
-| SRQ en Cron A | 2 pasadas dentro del mismo tick |
-| Maxplay en Cron A | NO se invoca directamente — sigue viniendo del `sync-scrape-tickets.job.js` existente |
+| Implementación scheduler | **pg-boss nativo** (`boss.schedule()` + workers), NO Croner |
+| Schedule sweep close-and-ingest | `* * * * *` via `boss.schedule(QUEUES.CLOSE_AND_INGEST_SWEEP, '* * * * *')` |
+| Schedule sweep preselect | `* * * * *` via `boss.schedule(QUEUES.PRESELECT_SWEEP, '* * * * *')` |
+| Ventana sweep close-and-ingest | SCHEDULED draws con `drawTime` ∈ [now+5min, now+6min] |
+| Ventana sweep preselect | CLOSED draws sin preselect con `drawTime` ∈ [now+3min, now+5min] |
+| SRQ en worker close-and-ingest | 2 pasadas (paralelo con Maxplay; segunda llamada después del await de Maxplay) |
+| Maxplay en worker close-and-ingest | NO se invoca directamente — sigue viniendo del `sync-scrape-tickets.job.js` existente (Croner) |
 | Timeout Maxplay (en su servicio) | sin cambio (90s actual via `MAXPLAY_TIMEOUT_MS`) |
 | Guard de status — Maxplay | aceptar `SCHEDULED` o `CLOSED` si `closedAt > now - 120s` |
 | Guard de status — SRQ sync periódico | aceptar `SCHEDULED` o `CLOSED` si `closedAt > now - 120s` |
@@ -54,6 +59,10 @@ Los fixes urgentes ya desplegados (`3157db4`, `892f03d`) son defensivos pero mit
 | Diff-based Maxplay | upsert por `externalTicketId` (no borrar) |
 | Tickets WON anulados después | loguear warning, NO auto-cancelar |
 | Recovery en execute-draw | si `status=CLOSED && preselectedItemId=NULL && drawTime ≤ NOW()`, llamar `selectPrewinner` inline antes de procesar |
+| Env flags nuevos en `.env` | `PGBOSS_CLOSE_DRAW=true`, `PGBOSS_PRESELECT=true` |
+| Env flag NO se prende | `PGBOSS_EXECUTE_DRAW` (queda en `false` aunque arreglemos createQueue) |
+| Singleton key per-draw close | `close-${drawId}` previene doble close del mismo sorteo |
+| Singleton key per-draw preselect | `preselect-${drawId}` previene doble preselect |
 
 ## Arquitectura
 
@@ -97,96 +106,251 @@ xx:00:00  execute-draw fires
           Luego procede normal: lee preselect, publica, totaliza premios.
 ```
 
-### Componente: Cron A (`close-and-ingest.job.js`)
+### Estructura pg-boss
 
-**Archivo:** `backend/src/jobs/close-and-ingest.job.js` (renombrado de `close-draw.job.js`).
+**4 queues nuevas en `queue/constants.js`:**
+```js
+CLOSE_AND_INGEST_SWEEP: 'close-and-ingest-sweep'   // un sweep job por minuto
+CLOSE_AND_INGEST: 'close-and-ingest'               // un job por draw
+PRESELECT_SWEEP: 'preselect-sweep'                 // un sweep job por minuto
+PRESELECT: 'preselect'                             // un job por draw
+```
 
-**Responsabilidad única:** transicionar draws de SCHEDULED → CLOSED y traer la última data de SRQ. NO preselecciona, NO notifica ganador.
+**Registro en `register.js`** (siempre activos cuando los flags están on):
+```js
+if (process.env.PGBOSS_CLOSE_DRAW === 'true') {
+  // close-and-ingest pipeline
+  await boss.createQueue(QUEUES.CLOSE_AND_INGEST_SWEEP);
+  await boss.createQueue(QUEUES.CLOSE_AND_INGEST);
+  await boss.work(QUEUES.CLOSE_AND_INGEST_SWEEP, closeAndIngestSweepWorker);
+  await boss.work(QUEUES.CLOSE_AND_INGEST, { teamSize: 4, teamConcurrency: 4 }, closeAndIngestWorker);
+  await boss.schedule(QUEUES.CLOSE_AND_INGEST_SWEEP, '* * * * *', {}, { tz: 'America/Caracas' });
+}
+
+if (process.env.PGBOSS_PRESELECT === 'true') {
+  await boss.createQueue(QUEUES.PRESELECT_SWEEP);
+  await boss.createQueue(QUEUES.PRESELECT);
+  await boss.work(QUEUES.PRESELECT_SWEEP, preselectSweepWorker);
+  await boss.work(QUEUES.PRESELECT, { teamSize: 4, teamConcurrency: 4 }, preselectWorker);
+  await boss.schedule(QUEUES.PRESELECT_SWEEP, '* * * * *', {}, { tz: 'America/Caracas' });
+}
+```
+
+**Fix de createQueue retroactivo** para los 6 workers críticos existentes (afecta líneas 11-15 y 18-36 de `register.js`):
+```js
+// CLOSE_DRAW
+await boss.createQueue(QUEUES.CLOSE_DRAW);  // ← agregar antes del work
+await boss.work(QUEUES.CLOSE_DRAW, ...);
+
+// EXECUTE_DRAW + 5 steps
+await boss.createQueue(QUEUES.EXECUTE_DRAW);
+await boss.createQueue(QUEUES.STEP_GENERATE_IMAGE);
+await boss.createQueue(QUEUES.STEP_NOTIFY_ADMINS);
+await boss.createQueue(QUEUES.STEP_PUBLISH_DRAW);
+await boss.createQueue(QUEUES.STEP_PROCESS_PRIZES);
+await boss.createQueue(QUEUES.STEP_CALCULATE_STATS);
+// luego los boss.work como ya están
+```
+
+Nota: el flag `PGBOSS_CLOSE_DRAW` ahora se usa para el **nuevo** flujo (close-and-ingest + preselect), no para el `close-draw.worker.js` viejo. Ese worker viejo se ELIMINA. La queue `CLOSE_DRAW` queda con createQueue defensivo pero sin worker registrado tras el cambio.
+
+### Componente: Worker `close-and-ingest-sweep`
+
+**Archivo:** `backend/src/queue/workers/close-and-ingest-sweep.worker.js` (nuevo)
+
+**Responsabilidad:** cada minuto, encuentra draws a cerrar y encola jobs `close-and-ingest` (uno por draw). NO hace el trabajo en sí — solo enqueue.
 
 **Pseudo-código:**
 
 ```js
-async execute() {
-  if (await isEmergencyStop()) return;
-  
+// Sweep — solo busca y encola. NO hace trabajo pesado.
+export async function closeAndIngestSweepWorker(job) {
+  if (await isEmergencyStop()) return { skipped: 'emergency_stop' };
+
   const targetStart = addMinutes(now, 5);
   const targetEnd   = addMinutes(now, 6);
-  
-  const drawsToClose = await prisma.draw.findMany({
+
+  const draws = await prisma.draw.findMany({
     where: {
       status: 'SCHEDULED',
       drawTime: { gte: targetStart, lt: targetEnd },
       drawDate: todayInVenezuela()
     },
-    include: { game: { include: { items: true } } }
+    select: { id: true, gameId: true, drawDate: true, drawTime: true, game: { select: { type: true, name: true, slug: true } } }
   });
-  
-  for (const draw of drawsToClose) {
+
+  if (draws.length === 0) return { enqueued: 0 };
+
+  const boss = getBoss();
+  let enqueued = 0;
+  for (const draw of draws) {
     if (await isGamePaused(draw.gameId, draw.drawDate)) continue;
-    
-    // Caso TERMINAL: cierre simple (mantener flujo actual)
-    if (draw.game.type === 'TERMINAL') {
-      await closeTerminalDraw(draw);
-      continue;
-    }
-    
-    // Cierre atómico
-    const result = await prisma.draw.updateMany({
-      where: { id: draw.id, status: 'SCHEDULED' },
-      data: { status: 'CLOSED', closedAt: new Date() }
+    await boss.send(QUEUES.CLOSE_AND_INGEST, { drawId: draw.id }, {
+      singletonKey: `close-${draw.id}`,
+      ...QUEUE_CONFIGS[QUEUES.CLOSE_AND_INGEST]
     });
-    
-    if (result.count === 0) continue; // ya lo cerró otro proceso
-    
-    const updated = await prisma.draw.findUnique({
-      where: { id: draw.id },
-      include: { game: true, preselectedItem: true }
-    });
-    
-    // CASO A1: admin ya preseleccionó
-    if (updated.preselectedItemId) {
-      emitToAll('draw:closed', { drawId: updated.id, ..., preselectedItem });
-      emitToGame(updated.game.slug, 'draw:closed', {...});
-      await notifyPrewinnerSelected({
-        drawId: updated.id,
-        game: updated.game,
-        drawTime: updated.drawTime,
-        prewinnerItem: updated.preselectedItem,
-        // ... calcular ventas, maxPayout, etc.
-      });
-      logger.info(`🔒 ${updated.game.name} - ${updated.drawTime} cerrado | admin preselect: ${updated.preselectedItem.number}`);
-      continue;
-    }
-    
-    // CASO A2: flujo normal
-    emitToAll('draw:closing', { drawId: updated.id, ... });
-    emitToGame(updated.game.slug, 'draw:closing', {...});
-    
-    // Ingest SRQ con 2 pasadas
-    try {
-      await apiIntegrationService.importSRQTickets(draw.id, { allowClosed: true });
-    } catch (e) { logger.warn(`SRQ pasada 1 falló: ${e.message}`); }
-    
-    // pequeña espera natural: aprovechar otras tareas en el mismo tick
-    // o simplemente segunda llamada inmediata (SRQ es idempotente con diff-based)
-    try {
-      await apiIntegrationService.importSRQTickets(draw.id, { allowClosed: true });
-    } catch (e) { logger.warn(`SRQ pasada 2 falló: ${e.message}`); }
-    
-    // Maxplay viene por sync-scrape-tickets, ya en paralelo
-    
-    logger.info(`🔒 ${updated.game.name} - ${updated.drawTime} cerrado, esperando preselect`);
+    enqueued++;
   }
+  return { enqueued, total: draws.length };
 }
 ```
 
-### Componente: Cron B (`preselect.job.js`)
+### Componente: Worker `close-and-ingest` (per-draw)
 
-**Archivo:** `backend/src/jobs/preselect.job.js` (nuevo).
+**Archivo:** `backend/src/queue/workers/close-and-ingest.worker.js` (nuevo)
 
-**Responsabilidad única:** correr el optimizer en draws CLOSED sin preselect y notificar.
+**Responsabilidad:** procesa UN draw. Cierra atómicamente, decide entre rama admin-preselect o ingest normal, hace 2 pasadas SRQ, emite WS. **No corre optimizer ni notifica ganador final.**
+
+**Recibe:** `job.data = { drawId }`
 
 **Pseudo-código:**
+
+```js
+export async function closeAndIngestWorker(job) {
+  const { drawId } = job.data;
+  const draw = await prisma.draw.findUnique({
+    where: { id: drawId },
+    include: { game: { include: { items: true } } }
+  });
+  if (!draw) return { skipped: 'draw_not_found' };
+
+  // TERMINAL: cierre simple, cascada del Triple maneja el ganador
+  if (draw.game.type === 'TERMINAL') {
+    return await closeTerminalDraw(draw);
+  }
+
+  // Cierre atómico — solo procede si sigue SCHEDULED
+  const closed = await prisma.draw.updateMany({
+    where: { id: drawId, status: 'SCHEDULED' },
+    data: { status: 'CLOSED', closedAt: new Date() }
+  });
+  if (closed.count === 0) {
+    return { skipped: 'already_closed_by_other' };
+  }
+
+  const updated = await prisma.draw.findUnique({
+    where: { id: drawId },
+    include: { game: true, preselectedItem: true }
+  });
+
+  // CASO A1: admin ya preseleccionó (preselectedItemId fue seteado antes del cierre)
+  if (updated.preselectedItemId) {
+    const { totalSales, maxPayout, potentialPayout, salesByItem } = await computeSalesContext(updated);
+    emitToAll('draw:closed', { drawId, game: updated.game, drawDate: updated.drawDate, drawTime: updated.drawTime, preselectedItem: updated.preselectedItem });
+    emitToGame(updated.game.slug, 'draw:closed', { drawId, drawDate: updated.drawDate, drawTime: updated.drawTime, preselectedItem: updated.preselectedItem });
+    await notifyPrewinnerSelected({
+      drawId, game: updated.game, drawDate: updated.drawDate, drawTime: updated.drawTime,
+      prewinnerItem: updated.preselectedItem, totalSales, maxPayout, potentialPayout,
+      salesByItem, tripletaRiskTop5: []
+    });
+    logger.info(`🔒 ${updated.game.name} - ${updated.drawTime} cerrado | admin preselect: ${updated.preselectedItem.number}`);
+    return { closed: true, method: 'admin_preselect' };
+  }
+
+  // CASO A2: flujo normal — ingest + emit draw:closing
+  emitToAll('draw:closing', { drawId, game: updated.game, drawDate: updated.drawDate, drawTime: updated.drawTime });
+  emitToGame(updated.game.slug, 'draw:closing', { drawId, drawDate: updated.drawDate, drawTime: updated.drawTime });
+
+  // Ingest SRQ con 2 pasadas (diff-based, idempotente)
+  let srq1 = 0, srq2 = 0;
+  try {
+    const r = await apiIntegrationService.importSRQTickets(drawId, { allowClosed: true });
+    srq1 = r.imported || 0;
+  } catch (e) { logger.warn(`[close-and-ingest] SRQ pasada 1: ${e.message}`); }
+
+  try {
+    const r = await apiIntegrationService.importSRQTickets(drawId, { allowClosed: true });
+    srq2 = r.imported || 0;
+  } catch (e) { logger.warn(`[close-and-ingest] SRQ pasada 2: ${e.message}`); }
+
+  // Maxplay sigue su propio sync-scrape (Croner) — no lo invocamos aquí
+  logger.info(`🔒 ${updated.game.name} - ${updated.drawTime} cerrado | esperando preselect | SRQ ingested: ${srq1}+${srq2}`);
+  return { closed: true, method: 'awaiting_preselect', srqIngested: srq1 + srq2 };
+}
+```
+
+### Componente: Worker `preselect-sweep`
+
+**Archivo:** `backend/src/queue/workers/preselect-sweep.worker.js` (nuevo)
+
+**Responsabilidad:** cada minuto, encuentra draws CLOSED sin preselect en ventana y encola jobs `preselect`.
+
+```js
+export async function preselectSweepWorker(job) {
+  if (await isEmergencyStop()) return { skipped: 'emergency_stop' };
+
+  // Ventana: 3-5 min antes de drawTime — captura draws cerrados en el tick anterior (xx:55)
+  const targetEarliest = addMinutes(now, 3);
+  const targetLatest   = addMinutes(now, 5);
+
+  const draws = await prisma.draw.findMany({
+    where: {
+      status: 'CLOSED',
+      preselectedItemId: null,
+      drawTime: { gte: targetEarliest, lt: targetLatest },
+      drawDate: todayInVenezuela(),
+      game: { type: { not: 'TERMINAL' } } // TERMINAL no necesita preselect, viene del Triple
+    },
+    select: { id: true }
+  });
+
+  if (draws.length === 0) return { enqueued: 0 };
+
+  const boss = getBoss();
+  let enqueued = 0;
+  for (const draw of draws) {
+    await boss.send(QUEUES.PRESELECT, { drawId: draw.id }, {
+      singletonKey: `preselect-${draw.id}`,
+      ...QUEUE_CONFIGS[QUEUES.PRESELECT]
+    });
+    enqueued++;
+  }
+  return { enqueued, total: draws.length };
+}
+```
+
+### Componente: Worker `preselect` (per-draw)
+
+**Archivo:** `backend/src/queue/workers/preselect.worker.js` (nuevo)
+
+**Responsabilidad:** corre el optimizer para UN draw y notifica. `selectPrewinner` internamente ya persiste, emite WS y notifica Telegram, así que el worker es delgado.
+
+**Recibe:** `job.data = { drawId }`
+
+```js
+export async function preselectWorker(job) {
+  const { drawId } = job.data;
+
+  // Re-verificar que sigue CLOSED sin preselect (otro flujo pudo haberlo procesado)
+  const draw = await prisma.draw.findUnique({
+    where: { id: drawId },
+    select: { status: true, preselectedItemId: true, game: { select: { name: true } }, drawTime: true }
+  });
+  if (!draw) return { skipped: 'draw_not_found' };
+  if (draw.status !== 'CLOSED') return { skipped: `status_is_${draw.status}` };
+  if (draw.preselectedItemId) return { skipped: 'already_preselected' };
+
+  // selectPrewinner internamente: optimizer + persist + emit WS + notify Telegram
+  const selected = await prewinnerSelectionService.selectPrewinner(drawId);
+  if (!selected) {
+    logger.warn(`[preselect] No se pudo preseleccionar ${drawId}`);
+    return { skipped: 'optimizer_returned_null' };
+  }
+
+  logger.info(`✅ ${draw.game.name} - ${draw.drawTime} preselect: ${selected.number}`);
+  return { preselected: selected.number };
+}
+```
+
+### Componente: Cron B (`preselect.job.js`) — OBSOLETO
+
+**No se crea.** El sweep worker pg-boss reemplaza al Croner. Si por algún motivo querés un Croner mínimo, sería para situaciones donde pg-boss esté caído (no contemplado).
+
+---
+
+### (sección legacy del spec mantenida como referencia conceptual)
+
+Pseudo-código original (Croner-based) para referencia conceptual:
 
 ```js
 async execute() {
