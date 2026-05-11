@@ -1,0 +1,77 @@
+/**
+ * execute-draw-sweep worker — runs every minute via cron Linux.
+ * Discovers all CLOSED draws at the current Venezuela minute, runs
+ * preselect recovery if needed, and enqueues one `execute-draw` job
+ * per draw (singletonKey=`execute-${drawId}`).
+ *
+ * Replaces the legacy Croner execute-draw.job.js. The per-draw worker
+ * execute-draw.worker.js does the actual execution + pipeline kickoff.
+ */
+import { prisma } from '../../lib/prisma.js';
+import logger from '../../lib/logger.js';
+import systemConfigService from '../../services/system-config.service.js';
+import drawPauseService from '../../services/draw-pause.service.js';
+import { getBoss } from '../boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
+import { getVenezuelaTimeString, getVenezuelaDateAsUTC } from '../../lib/dateUtils.js';
+import { recoverPreselectIfMissing } from '../../jobs/execute-draw.job.js';
+
+export async function executeDrawSweepWorker(jobs) {
+  const job = Array.isArray(jobs) ? jobs[0] : jobs;
+  void job;
+
+  if (await systemConfigService.isEmergencyStop()) {
+    return { skipped: 'emergency_stop' };
+  }
+
+  const venezuelaTime = getVenezuelaTimeString();
+  const venezuelaDate = getVenezuelaDateAsUTC();
+  const normalized = venezuelaTime.substring(0, 5) + ':00';
+
+  // execute-draw corre exactamente en xx:00. Catch-up de 3 min hacia atrás
+  // por si un tick falló (e.g. el draw quedó CLOSED en xx:55 pero el sweep
+  // de xx:00 perdió el tick).
+  const draws = await prisma.draw.findMany({
+    where: {
+      status: 'CLOSED',
+      drawDate: venezuelaDate,
+      drawTime: normalized,
+    },
+    select: {
+      id: true,
+      gameId: true,
+      drawDate: true,
+      drawTime: true,
+      status: true,
+      preselectedItemId: true,
+      game: { select: { name: true, type: true } },
+    },
+  });
+
+  if (draws.length === 0) {
+    return { enqueued: 0 };
+  }
+
+  const boss = getBoss();
+  let enqueued = 0;
+  for (const draw of draws) {
+    if (await drawPauseService.isGamePausedOnDate(draw.gameId, draw.drawDate)) {
+      logger.warn(`[execute-draw-sweep] ⏸️ ${draw.game.name} ${draw.drawTime} OMITIDO: pausado`);
+      continue;
+    }
+
+    // Recovery inline: si quedó CLOSED sin preselect, ejecutar selectPrewinner ahora
+    // antes de encolar. Esto preserva la red final del flujo Croner.
+    await recoverPreselectIfMissing(draw);
+
+    const sent = await boss.send(QUEUES.EXECUTE_DRAW, { drawId: draw.id }, {
+      singletonKey: `execute-${draw.id}`,
+      ...QUEUE_CONFIGS[QUEUES.EXECUTE_DRAW],
+    });
+    if (sent) {
+      enqueued++;
+      logger.info(`[execute-draw-sweep] encolado ${draw.id} (${draw.game.name} ${draw.drawTime})`);
+    }
+  }
+  return { enqueued, total: draws.length };
+}

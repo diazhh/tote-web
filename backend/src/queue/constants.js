@@ -5,6 +5,7 @@ export const QUEUES = {
   PRESELECT_SWEEP: 'preselect-sweep',
   PRESELECT: 'preselect',
   EXECUTE_DRAW: 'execute-draw',
+  EXECUTE_DRAW_SWEEP: 'execute-draw-sweep',
   STEP_GENERATE_IMAGE: 'step-generate-image',
   STEP_NOTIFY_ADMINS: 'step-notify-admins',
   STEP_PUBLISH_DRAW: 'step-publish-draw',
@@ -62,6 +63,12 @@ export const QUEUE_CONFIGS = {
     retryDelay: 5,
     retryBackoff: true,
     expireInMinutes: 2,
+  },
+  [QUEUES.EXECUTE_DRAW_SWEEP]: {
+    retryLimit: 1,
+    retryDelay: 10,
+    retryBackoff: false,
+    expireInMinutes: 1,
   },
   [QUEUES.STEP_GENERATE_IMAGE]: {
     retryLimit: 4,
