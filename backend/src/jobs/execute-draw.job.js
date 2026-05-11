@@ -7,10 +7,39 @@ import { emitToAll, emitToGame } from '../lib/socket.js';
 import adminNotificationService from '../services/admin-notification.service.js';
 import prizeProcessorService from '../services/prize-processor.service.js';
 import drawStatsService from '../services/draw-stats.service.js';
+import prewinnerSelectionService from '../services/prewinner-selection.service.js';
 import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { getVenezuelaTimeString, getVenezuelaDateAsUTC } from '../lib/dateUtils.js';
 import { getBoss } from '../queue/boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
+
+/**
+ * Safety net: if draw is CLOSED without a preselect (pg-boss preselect didn't run,
+ * crashed, or sweep skipped), run selectPrewinner inline before processing.
+ * Idempotent: re-reads the draw after the call and returns the fresh row. On
+ * failure, returns the input unchanged (caller's existing fallback handles
+ * missing preselect).
+ *
+ * @param {object} draw - draw row with at least { id, status, preselectedItemId }
+ * @returns {Promise<object>} fresh draw row or the input if no recovery needed
+ */
+export async function recoverPreselectIfMissing(draw) {
+  if (draw.status !== 'CLOSED' || draw.preselectedItemId) {
+    return draw;
+  }
+  logger.warn(`[execute-draw] ⚠️ Recovery inline: ${draw.id} CLOSED sin preselect, ejecutando selectPrewinner`);
+  try {
+    await prewinnerSelectionService.selectPrewinner(draw.id);
+    const fresh = await prisma.draw.findUnique({
+      where: { id: draw.id },
+      include: { game: true, preselectedItem: true },
+    });
+    return fresh || draw;
+  } catch (err) {
+    logger.error(`[execute-draw] Recovery falló para ${draw.id}: ${err.message}`);
+    return draw;
+  }
+}
 
 /**
  * Job para ejecutar sorteos en su hora programada
@@ -87,7 +116,11 @@ class ExecuteDrawJob {
       });
 
       if (drawsToExecute.length === 0) {
-        return; // No hay sorteos para ejecutar
+        // No hay Triples por ejecutar, pero igual escanear TERMINAL huérfanos
+        // (caso: backend murió entre Triple draw y cascada → TERMINAL queda CLOSED).
+        // Ver incidente 2026-05-10.
+        await this.recoverOrphanTerminalDraws();
+        return;
       }
 
       // Filtrar sorteos cuyo juego está pausado
@@ -121,8 +154,13 @@ class ExecuteDrawJob {
       }
 
       // Legacy: ejecución directa sin reintentos
-      for (const draw of drawsToExecuteFiltered) {
+      for (const originalDraw of drawsToExecuteFiltered) {
         try {
+          // Safety net: if pg-boss preselect didn't run (worker down, crash, etc.),
+          // recover inline before reading preselectedItemId. If recovery fails,
+          // the existing `if (!winnerItemId) { continue; }` guard catches it.
+          const draw = await recoverPreselectIfMissing(originalDraw);
+
           // El número ganador es el preseleccionado (puede haber sido cambiado manualmente)
           const winnerItemId = draw.preselectedItemId;
 
@@ -474,6 +512,58 @@ class ExecuteDrawJob {
       } catch (statsError) {
         logger.error(`❌ Error estadísticas Terminal ${updatedTerminal.id}:`, statsError);
       }
+    }
+  }
+
+  /**
+   * Recuperar TERMINAL huérfanos: sorteos TERMINAL en CLOSED cuyo Triple
+   * vinculado ya está DRAWN. Pasa cuando el backend murió entre el draw
+   * del Triple y la cascada (incidente 2026-05-10: SIGKILL PM2 1G).
+   * Idempotente — si TERMINAL ya está DRAWN, cascadeTerminalDraws lo salta.
+   * Bound a drawDate=hoy (Venezuela) para no resucitar sorteos viejos.
+   */
+  async recoverOrphanTerminalDraws() {
+    try {
+      const venezuelaDate = getVenezuelaDateAsUTC();
+      const orphanTerminals = await prisma.draw.findMany({
+        where: {
+          status: 'CLOSED',
+          drawDate: venezuelaDate,
+          game: { type: 'TERMINAL', isActive: true }
+        },
+        include: { game: true },
+        take: 50 // safety cap
+      });
+
+      if (orphanTerminals.length === 0) return;
+
+      // Agrupar por Triple draw (linkedGameId + drawDate + drawTime)
+      const tripleKeys = new Map();
+      for (const t of orphanTerminals) {
+        const tripleGameId = t.game.linkedGameId;
+        if (!tripleGameId) continue;
+        const key = `${tripleGameId}|${t.drawDate.toISOString()}|${t.drawTime}`;
+        if (!tripleKeys.has(key)) {
+          tripleKeys.set(key, { tripleGameId, drawDate: t.drawDate, drawTime: t.drawTime });
+        }
+      }
+
+      for (const { tripleGameId, drawDate, drawTime } of tripleKeys.values()) {
+        const tripleDraw = await prisma.draw.findFirst({
+          where: { gameId: tripleGameId, drawDate, drawTime, status: 'DRAWN' },
+          include: { winnerItem: true }
+        });
+        if (!tripleDraw || !tripleDraw.winnerItem) continue;
+
+        logger.warn(`[recover-orphan-terminals] Disparando cascada para Triple ${tripleDraw.id} (${drawTime})`);
+        try {
+          await this.cascadeTerminalDraws(tripleDraw);
+        } catch (err) {
+          logger.error(`[recover-orphan-terminals] Error en cascada Triple ${tripleDraw.id}:`, err);
+        }
+      }
+    } catch (err) {
+      logger.error('[recover-orphan-terminals] Error en escaneo:', err);
     }
   }
 
