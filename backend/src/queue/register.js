@@ -7,12 +7,56 @@ import { QUEUES, QUEUE_CONFIGS } from './constants.js';
 export async function registerAllWorkers(boss) {
   logger.info('[pg-boss] Registrando workers...');
 
-  // Worker close-draw (TW-5) — teamSize=3 para procesar los 3 juegos en paralelo
+  // Close-draw flow (pg-boss native). PGBOSS_CLOSE_DRAW=true activates the new
+  // two-phase scheduler: close-and-ingest (xx:55) + preselect (xx:56).
+  // The legacy single-worker close-draw.worker.js has been retired (deleted).
+  // QUEUES.CLOSE_DRAW row is kept (createQueue defensive) so any stale callers
+  // don't silently drop jobs.
   if (process.env.PGBOSS_CLOSE_DRAW === 'true') {
-    const { closeDrawWorker } = await import('./workers/close-draw.worker.js');
-    await boss.createQueue(QUEUES.CLOSE_DRAW);
-    await boss.work(QUEUES.CLOSE_DRAW, { ...QUEUE_CONFIGS[QUEUES.CLOSE_DRAW], teamSize: 3, teamConcurrency: 3 }, closeDrawWorker);
-    logger.info('[pg-boss] Worker close-draw registrado (teamSize=3, concurrency=3)');
+    const { closeAndIngestSweepWorker } = await import('./workers/close-and-ingest-sweep.worker.js');
+    const { closeAndIngestWorker } = await import('./workers/close-and-ingest.worker.js');
+
+    await boss.createQueue(QUEUES.CLOSE_DRAW); // defensive, no worker bound
+    await boss.createQueue(QUEUES.CLOSE_AND_INGEST_SWEEP);
+    await boss.createQueue(QUEUES.CLOSE_AND_INGEST);
+
+    await boss.work(
+      QUEUES.CLOSE_AND_INGEST_SWEEP,
+      QUEUE_CONFIGS[QUEUES.CLOSE_AND_INGEST_SWEEP],
+      closeAndIngestSweepWorker
+    );
+    await boss.work(
+      QUEUES.CLOSE_AND_INGEST,
+      { ...QUEUE_CONFIGS[QUEUES.CLOSE_AND_INGEST], teamSize: 4, teamConcurrency: 4 },
+      closeAndIngestWorker
+    );
+
+    // The sweep fires every minute and discovers draws in [now+5, now+6).
+    await boss.schedule(QUEUES.CLOSE_AND_INGEST_SWEEP, '* * * * *', {}, { tz: 'America/Caracas' });
+    logger.info('[pg-boss] Workers close-and-ingest registrados (sweep cada minuto, teamSize=4)');
+  }
+
+  // Preselect flow — runs at xx:56 against draws closed at xx:55 without preselect.
+  if (process.env.PGBOSS_PRESELECT === 'true') {
+    const { preselectSweepWorker } = await import('./workers/preselect-sweep.worker.js');
+    const { preselectWorker } = await import('./workers/preselect.worker.js');
+
+    await boss.createQueue(QUEUES.PRESELECT_SWEEP);
+    await boss.createQueue(QUEUES.PRESELECT);
+
+    await boss.work(
+      QUEUES.PRESELECT_SWEEP,
+      QUEUE_CONFIGS[QUEUES.PRESELECT_SWEEP],
+      preselectSweepWorker
+    );
+    await boss.work(
+      QUEUES.PRESELECT,
+      { ...QUEUE_CONFIGS[QUEUES.PRESELECT], teamSize: 4, teamConcurrency: 4 },
+      preselectWorker
+    );
+
+    await boss.schedule(QUEUES.PRESELECT_SWEEP, '* * * * *', {}, { tz: 'America/Caracas' });
+    logger.info('[pg-boss] Workers preselect registrados (sweep cada minuto, teamSize=4)');
   }
 
   // Pipeline execute-draw (TW-6 a TW-11)
