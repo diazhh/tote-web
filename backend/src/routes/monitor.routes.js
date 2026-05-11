@@ -28,6 +28,10 @@ router.get('/reporte/pdf', monitorController.getReportePdf);
 // Reporte diario
 router.get('/reporte', monitorController.getDailyReport);
 
+// Reporte contable (agregado por fecha + juego). Excel ANTES de JSON para evitar conflicto.
+router.get('/reporte-contable/excel', monitorController.downloadAccountingExcel);
+router.get('/reporte-contable', monitorController.getAccountingReport);
+
 // Tickets por banca
 router.get('/tickets-by-banca/:drawId/:bancaId', monitorController.getTicketsByBanca);
 

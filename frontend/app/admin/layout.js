@@ -65,6 +65,7 @@ export default function AdminLayout({ children }) {
     { name: 'Análisis de Sorteo', href: '/admin/analisis-sorteo', icon: BarChart3, adminOnly: true },
     { name: 'Frecuencia de items', href: '/admin/items-frecuencia', icon: History, adminOnly: true },
     { name: 'Reportes', href: '/admin/reportes', icon: FileText, adminOnly: true },
+    { name: 'Reporte Contable', href: '/admin/reportes-contable', icon: FileText, adminOnly: true },
     { name: 'Tickets', href: '/admin/tickets-report', icon: List, adminOnly: true },
     { name: 'Conciliación', href: '/admin/conciliacion', icon: Scale, adminOnly: true },
     { 
