@@ -10,6 +10,7 @@ export async function registerAllWorkers(boss) {
   // Worker close-draw (TW-5) — teamSize=3 para procesar los 3 juegos en paralelo
   if (process.env.PGBOSS_CLOSE_DRAW === 'true') {
     const { closeDrawWorker } = await import('./workers/close-draw.worker.js');
+    await boss.createQueue(QUEUES.CLOSE_DRAW);
     await boss.work(QUEUES.CLOSE_DRAW, { ...QUEUE_CONFIGS[QUEUES.CLOSE_DRAW], teamSize: 3, teamConcurrency: 3 }, closeDrawWorker);
     logger.info('[pg-boss] Worker close-draw registrado (teamSize=3, concurrency=3)');
   }
@@ -22,6 +23,13 @@ export async function registerAllWorkers(boss) {
     const { stepPublishDrawWorker } = await import('./workers/step-publish-draw.worker.js');
     const { stepProcessPrizesWorker } = await import('./workers/step-process-prizes.worker.js');
     const { stepCalculateStatsWorker } = await import('./workers/step-calculate-stats.worker.js');
+
+    await boss.createQueue(QUEUES.EXECUTE_DRAW);
+    await boss.createQueue(QUEUES.STEP_GENERATE_IMAGE);
+    await boss.createQueue(QUEUES.STEP_NOTIFY_ADMINS);
+    await boss.createQueue(QUEUES.STEP_PUBLISH_DRAW);
+    await boss.createQueue(QUEUES.STEP_PROCESS_PRIZES);
+    await boss.createQueue(QUEUES.STEP_CALCULATE_STATS);
 
     const parallel = { teamSize: 3, teamConcurrency: 3 };
     await boss.work(QUEUES.EXECUTE_DRAW, { ...QUEUE_CONFIGS[QUEUES.EXECUTE_DRAW], ...parallel }, executeDrawWorker);
