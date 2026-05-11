@@ -226,17 +226,25 @@ class CloseDrawJob {
           // Si no hay pre-ganador de admin, hacer selección automática
           if (!selectedItem) {
             // ANTES DE CERRAR: Importar tickets de APIs externas
-            let hasTickets = false;
             try {
               logger.info(`📥 Importando ventas externas para sorteo ${draw.id}...`);
               const importResult = await apiIntegrationService.importSRQTickets(draw.id);
               logger.info(
                 `✅ Ventas importadas: ${importResult.imported} tickets guardados, ${importResult.skipped} saltados`
               );
-              hasTickets = importResult.imported > 0;
             } catch (error) {
               logger.warn(`⚠️ No se pudieron importar ventas para sorteo ${draw.id}:`, error.message);
             }
+
+            // hasTickets debe basarse en conteo REAL de DB, no solo en lo recién
+            // importado. Si el sync periódico (Maxplay, online, webhooks, SRQ previo)
+            // ya pobló la DB, importResult.imported puede ser 0 aunque sí haya
+            // tickets — y entonces caeríamos al fallback aleatorio sin necesidad.
+            const ticketCount = await prisma.ticket.count({
+              where: { drawId: draw.id, status: { not: 'CANCELLED' } }
+            });
+            const hasTickets = ticketCount > 0;
+            logger.info(`  📊 Tickets en DB: ${ticketCount} → ${hasTickets ? 'optimizer' : 'aleatoria'}`);
 
             // Si hay tickets, usar el servicio de selección inteligente
             if (hasTickets) {
@@ -284,9 +292,56 @@ class CloseDrawJob {
               } catch (error) {
                 // Loguear stack completo para diagnóstico — no solo message
                 logger.warn(
-                  `⚠️ Error en selección inteligente para draw ${draw.id}, cayendo a aleatoria: ${error.message}`,
+                  `⚠️ Error en selección inteligente para draw ${draw.id}: ${error.message}`,
                   { stack: error.stack }
                 );
+
+                // DEFENSIVO: el optimizer puede haber persistido el pre-ganador
+                // ANTES del timeout/error (el persist ocurre al inicio de
+                // _selectPrewinnerInner, antes del PDF y notificaciones que son
+                // lo que típicamente lo hacen demorar). Si ya quedó persistido,
+                // respetarlo y NO sobreescribir con fallback aleatorio — esa
+                // sobreescritura fue la causa del incidente del 2026-05-11
+                // (TRIPLE PANTERA 08:00, número 100, pérdida ~153K).
+                const current = await prisma.draw.findUnique({
+                  where: { id: draw.id },
+                  select: {
+                    status: true,
+                    preselectedItemId: true,
+                    preselectedItem: true
+                  }
+                });
+                if (current?.status === 'CLOSED' && current.preselectedItemId) {
+                  logger.info(
+                    `  ✅ Optimizer ya persistió ${current.preselectedItem.number} ` +
+                    `antes del error/timeout — respetando selección inteligente`
+                  );
+                  emitToAll('draw:closed', {
+                    drawId: draw.id,
+                    game: { name: draw.game.name, slug: draw.game.slug },
+                    drawDate: draw.drawDate,
+                    drawTime: draw.drawTime,
+                    preselectedItem: {
+                      number: current.preselectedItem.number,
+                      name: current.preselectedItem.name
+                    }
+                  });
+                  emitToGame(draw.game.slug, 'draw:closed', {
+                    drawId: draw.id,
+                    drawDate: draw.drawDate,
+                    drawTime: draw.drawTime,
+                    preselectedItem: {
+                      number: current.preselectedItem.number,
+                      name: current.preselectedItem.name
+                    }
+                  });
+                  logger.info(
+                    `🔒 Sorteo cerrado: ${draw.game.name} - ${draw.drawTime} ` +
+                    `| Preselección inteligente (recuperada): ${current.preselectedItem.number} - ${current.preselectedItem.name}`
+                  );
+                  continue;
+                }
+                logger.warn(`  ↪ cayendo a selección aleatoria`);
               }
             }
 
@@ -305,18 +360,34 @@ class CloseDrawJob {
             selectionMethod = 'random';
           }
 
-          // Actualizar sorteo
-          const updatedDraw = await prisma.draw.update({
-            where: { id: draw.id },
+          // Actualizar sorteo con guard atómico: solo cerrar si sigue SCHEDULED.
+          // Esto previene sobreescritura si otro flujo (selectPrewinner del
+          // optimizer, otra invocación del cron, force-totalize) ya lo cerró.
+          const writeResult = await prisma.draw.updateMany({
+            where: { id: draw.id, status: 'SCHEDULED' },
             data: {
               status: 'CLOSED',
               preselectedItemId: selectedItem.id,
               closedAt: new Date()
-            },
-            include: {
-              game: true,
-              preselectedItem: true
             }
+          });
+
+          if (writeResult.count === 0) {
+            // Otro proceso ya cerró este sorteo — releer y respetar
+            const existing = await prisma.draw.findUnique({
+              where: { id: draw.id },
+              include: { game: true, preselectedItem: true }
+            });
+            logger.info(
+              `  ↪ Sorteo ya cerrado por otro flujo con ` +
+              `${existing?.preselectedItem?.number || '?'} — saltando aleatoria`
+            );
+            continue;
+          }
+
+          const updatedDraw = await prisma.draw.findUnique({
+            where: { id: draw.id },
+            include: { game: true, preselectedItem: true }
           });
 
           logger.info(

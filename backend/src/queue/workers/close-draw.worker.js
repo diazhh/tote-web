@@ -124,7 +124,14 @@ export async function closeDrawWorker(jobs) {
       logger.warn(`[close-draw] No se pudo traer Maxplay: ${errMsg}`);
     }
 
-    const hasTickets = (sourceStatus.srq.imported + sourceStatus.maxplay.imported) > 0;
+    // hasTickets debe basarse en conteo REAL de DB, no solo en imports de
+    // este call. Tickets pueden venir de syncs previos (Maxplay scrape T-5min,
+    // webhooks, online). Sin esto caemos a aleatoria aunque sí haya datos.
+    const ticketCount = await prisma.ticket.count({
+      where: { drawId: draw.id, status: { not: 'CANCELLED' } }
+    });
+    const hasTickets = ticketCount > 0;
+    logger.info(`[close-draw] Tickets en DB: ${ticketCount} → ${hasTickets ? 'optimizer' : 'aleatoria'}`);
 
     // Selección inteligente si hay tickets
     if (hasTickets) {
@@ -153,7 +160,36 @@ export async function closeDrawWorker(jobs) {
           return { success: true, drawId, method: 'intelligent' };
         }
       } catch (err) {
-        logger.warn(`[close-draw] Error en selección inteligente, usando aleatoria: ${err.message}`);
+        logger.warn(`[close-draw] Error en selección inteligente: ${err.message}`);
+
+        // DEFENSIVO: el optimizer pudo haber persistido antes del error.
+        // Si ya quedó persistido, respetar y NO sobreescribir con aleatorio.
+        // Causa del incidente 2026-05-11 (TRIPLE PANTERA 08:00 → 100, -153K).
+        const current = await prisma.draw.findUnique({
+          where: { id: draw.id },
+          select: { status: true, preselectedItemId: true, preselectedItem: true, game: true, drawDate: true, drawTime: true }
+        });
+        if (current?.status === 'CLOSED' && current.preselectedItemId) {
+          logger.info(
+            `[close-draw] Optimizer ya persistió ${current.preselectedItem.number} ` +
+            `antes del error — respetando selección inteligente`
+          );
+          emitToAll('draw:closed', {
+            drawId: draw.id,
+            game: { name: draw.game.name, slug: draw.game.slug },
+            drawDate: draw.drawDate,
+            drawTime: draw.drawTime,
+            preselectedItem: { number: current.preselectedItem.number, name: current.preselectedItem.name },
+          });
+          emitToGame(draw.game.slug, 'draw:closed', {
+            drawId: draw.id,
+            drawDate: draw.drawDate,
+            drawTime: draw.drawTime,
+            preselectedItem: { number: current.preselectedItem.number, name: current.preselectedItem.name },
+          });
+          return { success: true, drawId, method: 'intelligent_recovered' };
+        }
+        logger.warn(`[close-draw] cayendo a selección aleatoria`);
       }
     }
 
