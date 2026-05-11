@@ -99,6 +99,10 @@ export function isTimeLessThanOrEqual(time1, time2) {
 export function addMinutesToTime(timeStr, minutes) {
   const [hours, mins, secs = 0] = timeStr.split(':').map(Number);
   const totalMinutes = hours * 60 + mins + minutes;
+  // Negative wrap-around: clamp at start-of-day instead of rolling to previous day.
+  // Used by close-and-ingest-sweep/preselect-sweep for catch-up windows that
+  // should not cross calendar boundaries (Prisma drawTime queries are wall-clock).
+  if (totalMinutes < 0) return '00:00:00';
   const newHours = Math.floor(totalMinutes / 60) % 24;
   const newMins = totalMinutes % 60;
   return `${newHours.toString().padStart(2, '0')}:${newMins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;

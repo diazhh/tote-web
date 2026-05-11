@@ -31,9 +31,12 @@ export async function registerAllWorkers(boss) {
       closeAndIngestWorker
     );
 
-    // The sweep fires every minute and discovers draws in [now+5, now+6).
-    await boss.schedule(QUEUES.CLOSE_AND_INGEST_SWEEP, '* * * * *', {}, { tz: 'America/Caracas' });
-    logger.info('[pg-boss] Workers close-and-ingest registrados (sweep cada minuto, teamSize=4)');
+    // El trigger del sweep ahora viene de cron Linux (NO de boss.schedule).
+    // boss.schedule en pg-boss v10 tiene una ventana hardcoded de 60s en
+    // shouldSendIt: si onCron() se atrasa >60s, el tick se descarta sin retry.
+    // Cron del SO + script /scripts/trigger-pgboss-cron.mjs lo reemplaza.
+    // Ver /etc/cron.d/tote-triggers en VPS 94.
+    logger.info('[pg-boss] Workers close-and-ingest registrados (trigger via cron Linux, teamSize=4)');
   }
 
   // Preselect flow — runs at xx:56 against draws closed at xx:55 without preselect.
@@ -55,8 +58,8 @@ export async function registerAllWorkers(boss) {
       preselectWorker
     );
 
-    await boss.schedule(QUEUES.PRESELECT_SWEEP, '* * * * *', {}, { tz: 'America/Caracas' });
-    logger.info('[pg-boss] Workers preselect registrados (sweep cada minuto, teamSize=4)');
+    // Trigger via cron Linux (ver comentario en bloque CLOSE_DRAW arriba).
+    logger.info('[pg-boss] Workers preselect registrados (trigger via cron Linux, teamSize=4)');
   }
 
   // Pipeline execute-draw (TW-6 a TW-11)

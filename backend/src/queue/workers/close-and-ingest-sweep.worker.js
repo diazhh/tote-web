@@ -26,7 +26,10 @@ export async function closeAndIngestSweepWorker(jobs) {
   const venezuelaTime = getVenezuelaTimeString();
   const venezuelaDate = getVenezuelaDateAsUTC();
   const normalized = venezuelaTime.substring(0, 5) + ':00';
-  const targetStart = addMinutesToTime(normalized, 5);
+  // Catch-up window: 15 min hacia atrás cubre cualquier tick perdido
+  // (cron Linux dispara cada minuto; ventana ancha previene huérfanos si
+  // hubo crash del backend entre xx:55 y el próximo trigger).
+  const targetStart = addMinutesToTime(normalized, -15);
   const targetEnd   = addMinutesToTime(normalized, 6);
 
   const draws = await prisma.draw.findMany({

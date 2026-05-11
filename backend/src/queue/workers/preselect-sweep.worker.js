@@ -22,7 +22,10 @@ export async function preselectSweepWorker(jobs) {
   const venezuelaTime = getVenezuelaTimeString();
   const venezuelaDate = getVenezuelaDateAsUTC();
   const normalized = venezuelaTime.substring(0, 5) + ':00';
-  const targetEarliest = addMinutesToTime(normalized, 3);
+  // Catch-up window: 10 min hacia atrás. Si preselect-sweep no corrió a tiempo,
+  // el siguiente tick recupera el draw aunque ya haya pasado T-3. La red final
+  // es `recoverPreselectIfMissing` en execute-draw.job.js (inline a xx:00).
+  const targetEarliest = addMinutesToTime(normalized, -10);
   const targetLatest   = addMinutesToTime(normalized, 5);
 
   const draws = await prisma.draw.findMany({
