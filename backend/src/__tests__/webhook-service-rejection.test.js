@@ -20,7 +20,10 @@ import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globa
 const mockPrisma = {
   webhookLog: { create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
   ticket: { findFirst: jest.fn(), create: jest.fn() },
-  draw: { findFirst: jest.fn() },
+  // draw.findUnique added for checkDrawIsOpen (close-draw rearchitecture).
+  // Default is set per-test below; if a test doesn't set it, dispatchWebhook
+  // will short-circuit at the rejected-by-adapter branch before this runs.
+  draw: { findFirst: jest.fn(), findUnique: jest.fn().mockResolvedValue({ status: 'SCHEDULED' }) },
   gameItem: { findFirst: jest.fn() },
   // Required by the quota-transaction wrapper introduced in Task 5.
   // Pass mockPrisma itself as tx so existing assertions on mockPrisma.ticket.create still work.

@@ -1,32 +1,30 @@
 /**
- * Integration test: quota check inside webhook dispatch.
- * Mocks prisma + quota.service to verify dispatch wiring.
+ * Integration test: webhook rejects pushes once draw is CLOSED.
  */
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
 
 const mockTx = {
   ticket: { findFirst: jest.fn(), create: jest.fn() },
   webhookLog: { update: jest.fn() },
-  // checkDrawIsOpen runs first inside $transaction and reads tx.draw.findUnique.
   draw: { findUnique: jest.fn() },
 };
 
 const mockPrisma = {
   webhookLog: { create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
   ticket: { findFirst: jest.fn(), create: jest.fn() },
-  draw: { findFirst: jest.fn() },
+  draw: { findUnique: jest.fn(), findFirst: jest.fn() },
   gameItem: { findFirst: jest.fn() },
   $transaction: jest.fn((fn) => fn(mockTx)),
 };
 
-const mockQuota = { checkTicketQuotas: jest.fn() };
+const mockQuota = { checkTicketQuotas: jest.fn().mockResolvedValue({ ok: true }) };
 
 jest.unstable_mockModule('../lib/prisma.js', () => ({ prisma: mockPrisma }));
 jest.unstable_mockModule('../lib/logger.js', () => ({
   default: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() },
 }));
 jest.unstable_mockModule('../lib/dateUtils.js', () => ({
-  getVenezuelaDateString: jest.fn().mockReturnValue('2026-04-24'),
+  getVenezuelaDateString: jest.fn().mockReturnValue('2026-05-11'),
 }));
 jest.unstable_mockModule('../services/quota.service.js', () => mockQuota);
 
@@ -35,14 +33,14 @@ const headers = { 'x-webhook-token': 'tok' };
 
 function payload() {
   return JSON.stringify({
-    ticketId: 't-quota-1',
+    ticketId: 't-closed-1',
     game: 'lotoanimalito',
     plays: [{ drawSlotId: 5, amount: 1000, animal: 'perro', number: '30' }],
-    timestamp: '2026-04-24T10:00:00Z',
+    timestamp: '2026-05-11T10:00:00Z',
   });
 }
 
-describe('dispatchWebhook — quota enforcement', () => {
+describe('dispatchWebhook — draw state validation', () => {
   let dispatchWebhook;
 
   beforeAll(async () => {
@@ -55,41 +53,43 @@ describe('dispatchWebhook — quota enforcement', () => {
     mockPrisma.webhookLog.findUnique.mockResolvedValue({ id: 'log-1', status: 'DISCOVERED' });
     mockPrisma.draw.findFirst.mockResolvedValue({ id: 'draw-1', status: 'SCHEDULED' });
     mockPrisma.gameItem.findFirst.mockResolvedValue({ id: 'item-30', multiplier: 30 });
-    mockTx.ticket.findFirst.mockResolvedValue(null); // no duplicate
+    mockTx.ticket.findFirst.mockResolvedValue(null);
     mockTx.ticket.create.mockResolvedValue({ id: 'ticket-1', ticketNumber: 999 });
-    mockTx.draw.findUnique.mockResolvedValue({ status: 'SCHEDULED' });
-    // default: $transaction runs the callback with mockTx
     mockPrisma.$transaction.mockImplementation((fn) => fn(mockTx));
   });
 
-  test('quota OK → ticket is created and log PROCESSED', async () => {
-    mockQuota.checkTicketQuotas.mockResolvedValue({ ok: true });
-
+  test('draw SCHEDULED → ticket created', async () => {
+    mockTx.draw.findUnique.mockResolvedValue({ id: 'draw-1', status: 'SCHEDULED', drawTime: '10:00:00' });
     const result = await dispatchWebhook(apiSystem, payload(), headers);
-
-    expect(mockQuota.checkTicketQuotas).toHaveBeenCalled();
-    expect(mockTx.ticket.create).toHaveBeenCalled();
     expect(result.status).toBe('processed');
-    expect(result.ticketNumber).toBe(999);
+    expect(mockTx.ticket.create).toHaveBeenCalled();
   });
 
-  test('quota rejects → ticket NOT created, log FAILED, rejected status returned', async () => {
-    mockQuota.checkTicketQuotas.mockResolvedValue({
-      ok: false,
-      reason: 'Cupo excedido para item 30 (CARNERO) en sorteo 10:00: vendido 19500 + intento 1000 = 20500 > cupo 20000',
-    });
-
+  test('draw CLOSED → rejected with WebhookLog FAILED', async () => {
+    mockTx.draw.findUnique.mockResolvedValue({ id: 'draw-1', status: 'CLOSED', drawTime: '10:00:00' });
     const result = await dispatchWebhook(apiSystem, payload(), headers);
-
-    expect(mockTx.ticket.create).not.toHaveBeenCalled();
-    expect(mockPrisma.webhookLog.update).toHaveBeenCalledWith({
-      where: { id: 'log-1' },
-      data: {
-        status: 'FAILED',
-        errorMessage: expect.stringMatching(/Cupo excedido/),
-      },
-    });
     expect(result.status).toBe('rejected');
-    expect(result.reason).toMatch(/Cupo excedido/);
+    expect(result.reason).toMatch(/closed for new bets|CLOSED/i);
+    expect(mockTx.ticket.create).not.toHaveBeenCalled();
+    expect(mockPrisma.webhookLog.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: 'FAILED' }),
+      })
+    );
+  });
+
+  test('draw DRAWN → rejected', async () => {
+    mockTx.draw.findUnique.mockResolvedValue({ id: 'draw-1', status: 'DRAWN', drawTime: '10:00:00' });
+    const result = await dispatchWebhook(apiSystem, payload(), headers);
+    expect(result.status).toBe('rejected');
+    expect(mockTx.ticket.create).not.toHaveBeenCalled();
+  });
+
+  test('draw not found → rejected', async () => {
+    mockTx.draw.findUnique.mockResolvedValue(null);
+    const result = await dispatchWebhook(apiSystem, payload(), headers);
+    expect(result.status).toBe('rejected');
+    expect(result.reason).toMatch(/not found/i);
+    expect(mockTx.ticket.create).not.toHaveBeenCalled();
   });
 });

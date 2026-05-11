@@ -8,6 +8,26 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 /**
+ * Verify the draw is still open for new tickets. Called inside the dispatch
+ * transaction so it serializes with the close-draw worker's atomic update.
+ *
+ * @param {string} drawId
+ * @param {object} tx - prisma or transactional client
+ * @returns {Promise<{ok: boolean, reason?: string}>}
+ */
+async function checkDrawIsOpen(drawId, tx) {
+  const draw = await tx.draw.findUnique({
+    where: { id: drawId },
+    select: { status: true },
+  });
+  if (!draw) return { ok: false, reason: `Draw ${drawId} not found` };
+  if (draw.status !== 'SCHEDULED') {
+    return { ok: false, reason: `Draw is ${draw.status} — closed for new bets` };
+  }
+  return { ok: true };
+}
+
+/**
  * Create an idempotent WEBHOOK_PUSH ticket for a normalized payload.
  * Returns the existing ticket if a duplicate is detected.
  *
@@ -205,6 +225,10 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
     // SELECT ... FOR UPDATE lock inside checkTicketQuotas stays held
     // until the ticket insert commits.
     const txResult = await prisma.$transaction(async (tx) => {
+      const drawCheck = await checkDrawIsOpen(normalized.drawId, tx);
+      if (!drawCheck.ok) {
+        return { rejected: true, reason: drawCheck.reason };
+      }
       const quotaCheck = await checkTicketQuotas(normalized.details, tx);
       if (!quotaCheck.ok) {
         return { rejected: true, reason: quotaCheck.reason };
