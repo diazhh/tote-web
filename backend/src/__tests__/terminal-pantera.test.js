@@ -240,79 +240,11 @@ describe('syncDrawWinner skips TERMINAL', () => {
   });
 });
 
-// ── Test: close-draw includes TERMINAL (closes without prewinner) ──
-describe('close-draw handles TERMINAL', () => {
-  let closeDrawJob;
-  let mockApiIntegration;
-
-  beforeAll(async () => {
-    mockApiIntegration = { importSRQTickets: jest.fn().mockResolvedValue({ imported: 10, skipped: 0, deleted: 0 }) };
-    jest.unstable_mockModule('../services/api-integration.service.js', () => ({
-      default: mockApiIntegration,
-    }));
-    jest.unstable_mockModule('../services/prewinner-selection.service.js', () => ({
-      default: { selectPrewinner: jest.fn(), calculateTripletaRiskTop5: jest.fn().mockResolvedValue([]) },
-    }));
-    jest.unstable_mockModule('../services/bet-simulator.service.js', () => ({
-      default: {},
-    }));
-    jest.unstable_mockModule('date-fns', () => ({
-      startOfDay: jest.fn(d => d),
-    }));
-
-    closeDrawJob = (await import('../jobs/close-draw.job.js')).default;
-  });
-
-  test('close-draw should include TERMINAL in query (no type exclusion)', async () => {
-    mockPrisma.draw.findMany.mockResolvedValue([]);
-
-    await closeDrawJob.execute();
-
-    const calls = mockPrisma.draw.findMany.mock.calls;
-    const closeCall = calls.find(c => c[0]?.where?.status === 'SCHEDULED');
-    expect(closeCall).toBeDefined();
-    // Should NOT have a game type filter
-    expect(closeCall[0].where.game?.type).toBeUndefined();
-  });
-
-  test('close-draw should close TERMINAL without prewinner selection', async () => {
-    const terminalDraw = {
-      id: 'terminal-draw-1',
-      gameId: TERMINAL_GAME_ID,
-      drawDate: new Date('2026-03-06T04:00:00.000Z'),
-      drawTime: '12:00:00',
-      status: 'SCHEDULED',
-      preselectedItemId: null,
-      game: {
-        id: TERMINAL_GAME_ID, name: 'TERMINAL PANTERA', slug: 'terminal-pantera',
-        type: 'TERMINAL', items: Array.from({ length: 100 }, (_, i) => ({ id: `ti-${i}`, number: String(i).padStart(2, '0') })),
-      },
-      preselectedItem: null,
-    };
-
-    mockPrisma.draw.findMany.mockResolvedValue([terminalDraw]);
-    mockPrisma.draw.update.mockResolvedValue({
-      ...terminalDraw, status: 'CLOSED',
-      game: terminalDraw.game,
-    });
-
-    await closeDrawJob.execute();
-
-    // Should have imported tickets
-    expect(mockApiIntegration.importSRQTickets).toHaveBeenCalledWith('terminal-draw-1');
-
-    // Should have updated to CLOSED without preselectedItemId
-    expect(mockPrisma.draw.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: { id: 'terminal-draw-1' },
-        data: expect.objectContaining({ status: 'CLOSED' }),
-      }),
-    );
-    // No preselectedItemId in update data
-    const updateCall = mockPrisma.draw.update.mock.calls[0][0];
-    expect(updateCall.data.preselectedItemId).toBeUndefined();
-  });
-});
+// ── Test: close-draw TERMINAL handling ──
+// Legacy describe block removed: close-draw.job.js was deleted as part of
+// the 2026-05-11 close-draw rearchitecture. TERMINAL behavior is now
+// covered by src/__tests__/close-and-ingest-worker.test.js
+// ("TERMINAL game → terminal close path").
 
 // ── Test: execute-draw excludes TERMINAL (handled by cascade) ──────
 describe('execute-draw excludes TERMINAL', () => {

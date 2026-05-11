@@ -1,5 +1,4 @@
 import generateDailyDrawsJob from './generate-daily-draws.job.js';
-import closeDrawJob from './close-draw.job.js';
 import executeDrawJob from './execute-draw.job.js';
 import publishDrawJob from './publish-draw.job.js';
 import syncApiPlanningJob from './sync-api-planning.job.js';
@@ -19,7 +18,8 @@ export function startAllJobs() {
 
     // Jobs del ciclo de vida de sorteos
     generateDailyDrawsJob.start();  // 00:05 AM - Generar sorteos del día
-    closeDrawJob.start();            // Cada minuto - Cerrar sorteos 5 min antes
+    // closeDrawJob: ELIMINADO — reemplazado por pg-boss native (close-and-ingest + preselect workers).
+    // Activar con PGBOSS_CLOSE_DRAW=true y PGBOSS_PRESELECT=true en .env.
     executeDrawJob.start();          // Cada minuto - Ejecutar sorteos Y publicar inmediatamente
     // publishDrawJob.start();       // DESHABILITADO - La publicación ahora ocurre en executeDrawJob
 
@@ -50,7 +50,6 @@ export function stopAllJobs() {
     logger.info('Deteniendo sistema de Jobs...');
 
     generateDailyDrawsJob.stop();
-    closeDrawJob.stop();
     executeDrawJob.stop();
     // publishDrawJob.stop(); // Ya no se inicia
     syncApiPlanningJob.stop();
@@ -70,7 +69,6 @@ export default {
   startAllJobs,
   stopAllJobs,
   generateDailyDrawsJob,
-  closeDrawJob,
   executeDrawJob,
   publishDrawJob,
   syncApiPlanningJob,
