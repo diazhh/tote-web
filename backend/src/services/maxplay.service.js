@@ -155,16 +155,17 @@ class MaxplayService {
    *
    * Returns: { ok, imported, deleted, reason, durationMs, totales }
    */
-  async importMaxplayTickets(drawId) {
+  async importMaxplayTickets(drawId, options = {}) {
+    const { allowClosed = false } = options;
     const startedAt = Date.now();
 
     const apiSystem = await this.getApiSystem();
     if (!apiSystem) {
-      return { ok: false, reason: 'apiSystem_not_seeded', imported: 0, deleted: 0, durationMs: Date.now() - startedAt };
+      return { ok: false, reason: 'apiSystem_not_seeded', imported: 0, durationMs: Date.now() - startedAt };
     }
     if (!apiSystem.isActive) {
       // Not an error — Maxplay disabled by feature flag.
-      return { ok: true, imported: 0, deleted: 0, reason: 'maxplay_disabled', durationMs: Date.now() - startedAt };
+      return { ok: true, imported: 0, reason: 'maxplay_disabled', durationMs: Date.now() - startedAt };
     }
 
     const draw = await prisma.draw.findUnique({
@@ -172,47 +173,57 @@ class MaxplayService {
       include: { game: true },
     });
     if (!draw) {
-      return { ok: false, reason: 'draw_not_found', imported: 0, deleted: 0, durationMs: Date.now() - startedAt };
+      return { ok: false, reason: 'draw_not_found', imported: 0, durationMs: Date.now() - startedAt };
     }
-    if (draw.status !== 'SCHEDULED') {
-      return { ok: true, imported: 0, deleted: 0, reason: 'draw_frozen', durationMs: Date.now() - startedAt };
+
+    const isOpen = draw.status === 'SCHEDULED';
+    const isRecentlyClosed = draw.status === 'CLOSED'
+      && draw.closedAt
+      && (Date.now() - draw.closedAt.getTime() < 120_000);
+    if (!isOpen && !(allowClosed && isRecentlyClosed)) {
+      return { ok: true, imported: 0, reason: `draw_frozen_${draw.status}`, durationMs: Date.now() - startedAt };
     }
 
     const product = GAME_SLUG_TO_PRODUCT[draw.game.slug];
     if (!product) {
       // Maxplay only covers Triple/Terminal Pantera — other games are silently skipped.
-      return { ok: true, imported: 0, deleted: 0, reason: 'game_not_supported', durationMs: Date.now() - startedAt };
+      return { ok: true, imported: 0, reason: 'game_not_supported', durationMs: Date.now() - startedAt };
     }
 
     const scheduledAt = draw.scheduledAt || draw.drawDate;
     const juegoId = this.hourToJuegoId(draw.drawTime, scheduledAt);
     if (!juegoId) {
-      return { ok: false, reason: `hour_not_mapped (drawTime=${draw.drawTime})`, imported: 0, deleted: 0, durationMs: Date.now() - startedAt };
+      return { ok: false, reason: `hour_not_mapped (drawTime=${draw.drawTime})`, imported: 0, durationMs: Date.now() - startedAt };
     }
     // Use drawDate (the canonical date in Venezuela TZ) for the form filter
     const dateDDMMYYYY = this.formatDateDDMMYYYY(draw.drawDate || scheduledAt);
 
-    logger.info(`[maxplay] scraping draw ${drawId} (${draw.game.slug} @ juego_id=${juegoId}, fecha=${dateDDMMYYYY})`);
+    logger.info(`[maxplay] scraping draw ${drawId} (${draw.game.slug} @ juego_id=${juegoId}, fecha=${dateDDMMYYYY})${allowClosed ? ' (allowClosed)' : ''}`);
 
     const payload = await this._fetchWithRetry(dateDDMMYYYY, juegoId, 'BS');
     if (!payload.ok) {
-      return { ok: false, reason: `scrape_failed: ${payload.error}`, imported: 0, deleted: 0, durationMs: Date.now() - startedAt };
+      return { ok: false, reason: `scrape_failed: ${payload.error}`, imported: 0, durationMs: Date.now() - startedAt };
     }
 
     const productRows = (payload.rows || []).filter(r => r.product === product);
     logger.info(`[maxplay] juego_id=${juegoId} sidecar=${payload.duration_ms}ms total_rows=${(payload.rows || []).length} ${product}=${productRows.length}`);
 
     return withDrawLock(drawId, async () => {
-      // Re-check status under lock (could have changed between getDraw and lock acquire)
-      const fresh = await prisma.draw.findUnique({ where: { id: drawId }, select: { status: true } });
-      if (!fresh || fresh.status !== 'SCHEDULED') {
-        return { ok: true, imported: 0, deleted: 0, reason: 'draw_frozen_under_lock', durationMs: Date.now() - startedAt, totales: payload.totales };
-      }
-
-      // Wipe previous EXTERNAL_SCRAPE tickets for this draw (full re-sync semantics)
-      const del = await prisma.ticket.deleteMany({
-        where: { drawId, source: 'EXTERNAL_SCRAPE', apiSystemId: apiSystem.id },
+      // Re-check status under lock — could have transitioned since the outer check.
+      const fresh = await prisma.draw.findUnique({
+        where: { id: drawId },
+        select: { status: true, closedAt: true },
       });
+      if (!fresh) {
+        return { ok: true, imported: 0, reason: 'draw_not_found_under_lock', durationMs: Date.now() - startedAt };
+      }
+      const stillOpen = fresh.status === 'SCHEDULED';
+      const stillRecentlyClosed = fresh.status === 'CLOSED'
+        && fresh.closedAt
+        && (Date.now() - fresh.closedAt.getTime() < 120_000);
+      if (!stillOpen && !(allowClosed && stillRecentlyClosed)) {
+        return { ok: true, imported: 0, reason: `draw_frozen_under_lock_${fresh.status}`, durationMs: Date.now() - startedAt, totales: payload.totales };
+      }
 
       let imported = 0;
       let skipped = 0;
@@ -223,25 +234,50 @@ class MaxplayService {
           skipped += 1;
           continue;
         }
+        const externalTicketId = `maxplay-${drawId}-${row.jugada}`;
+        const providerData = {
+          source: 'maxplay',
+          juego_id: juegoId,
+          jugada: row.jugada,
+          tickets_reportados: row.tickets,
+          taquillas: row.taquillas,
+          product: row.product,
+          fetched_at: payload.fetched_at,
+        };
         try {
-          await prisma.ticket.create({
-            data: {
+          await prisma.ticket.upsert({
+            where: {
+              drawId_externalTicketId_source: {
+                drawId,
+                externalTicketId,
+                source: 'EXTERNAL_SCRAPE',
+              },
+            },
+            update: {
+              totalAmount: row.venta,
+              providerData,
+              // status NOT updated — preserva CANCELLED si ya estaba
+              // createdAt NOT updated — preserva trazabilidad
+              details: {
+                deleteMany: {},
+                create: [{
+                  gameItemId: gameItem.id,
+                  amount: row.venta,
+                  multiplier: gameItem.multiplier,
+                  prize: 0,
+                  status: 'ACTIVE',
+                }],
+              },
+            },
+            create: {
               drawId,
               source: 'EXTERNAL_SCRAPE',
               apiSystemId: apiSystem.id,
-              externalTicketId: `maxplay-${drawId}-${row.jugada}`,
+              externalTicketId,
               totalAmount: row.venta,
               totalPrize: 0,
               status: 'ACTIVE',
-              providerData: {
-                source: 'maxplay',
-                juego_id: juegoId,
-                jugada: row.jugada,
-                tickets_reportados: row.tickets,
-                taquillas: row.taquillas,
-                product: row.product,
-                fetched_at: payload.fetched_at,
-              },
+              providerData,
               details: {
                 create: [{
                   gameItemId: gameItem.id,
@@ -255,17 +291,16 @@ class MaxplayService {
           });
           imported += 1;
         } catch (err) {
-          logger.error(`[maxplay] error creando ticket jugada=${row.jugada}: ${err.message}`);
+          logger.error(`[maxplay] error upsert jugada=${row.jugada}: ${err.message}`);
           skipped += 1;
         }
       }
 
       const durationMs = Date.now() - startedAt;
-      logger.info(`[maxplay] draw ${drawId} OK — deleted=${del.count} imported=${imported} skipped=${skipped} durationMs=${durationMs}`);
+      logger.info(`[maxplay] draw ${drawId} OK — imported=${imported} skipped=${skipped} durationMs=${durationMs}`);
       return {
         ok: true,
         imported,
-        deleted: del.count,
         skipped,
         product,
         juegoId,
