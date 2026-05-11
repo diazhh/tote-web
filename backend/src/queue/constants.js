@@ -1,5 +1,9 @@
 export const QUEUES = {
   CLOSE_DRAW: 'close-draw',
+  CLOSE_AND_INGEST_SWEEP: 'close-and-ingest-sweep',
+  CLOSE_AND_INGEST: 'close-and-ingest',
+  PRESELECT_SWEEP: 'preselect-sweep',
+  PRESELECT: 'preselect',
   EXECUTE_DRAW: 'execute-draw',
   STEP_GENERATE_IMAGE: 'step-generate-image',
   STEP_NOTIFY_ADMINS: 'step-notify-admins',
@@ -28,6 +32,30 @@ export const QUEUE_CONFIGS = {
     retryDelay: 5,
     retryBackoff: true,
     expireInMinutes: 5,
+  },
+  [QUEUES.CLOSE_AND_INGEST_SWEEP]: {
+    retryLimit: 1,
+    retryDelay: 10,
+    retryBackoff: false,
+    expireInMinutes: 1,
+  },
+  [QUEUES.CLOSE_AND_INGEST]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 3,
+  },
+  [QUEUES.PRESELECT_SWEEP]: {
+    retryLimit: 1,
+    retryDelay: 10,
+    retryBackoff: false,
+    expireInMinutes: 1,
+  },
+  [QUEUES.PRESELECT]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 2,
   },
   [QUEUES.EXECUTE_DRAW]: {
     retryLimit: 3,
