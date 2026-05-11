@@ -7,7 +7,6 @@ import { emitToAll, emitToGame } from '../lib/socket.js';
 import apiIntegrationService from '../services/api-integration.service.js';
 import adminNotificationService from '../services/admin-notification.service.js';
 import prewinnerSelectionService from '../services/prewinner-selection.service.js';
-import pdfReportService from '../services/pdf-report.service.js';
 import betSimulatorService from '../services/bet-simulator.service.js';
 import { startOfDay } from 'date-fns';
 import { getVenezuelaDateString, getVenezuelaTimeString, getVenezuelaDateAsUTC, addMinutesToTime } from '../lib/dateUtils.js';
@@ -177,7 +176,6 @@ class CloseDrawJob {
                 maxPayout: 0,
                 potentialPayout: 0,
                 salesByItem: null,
-                pdfPath: null,
                 tripletaRiskTop5: [],
                 isTerminal: true,
                 terminalTickets
@@ -207,7 +205,6 @@ class CloseDrawJob {
           }
 
           let selectedItem;
-          let pdfPath = null;
           let selectionMethod = 'random';
 
           // Verificar si un admin ya puso un pre-ganador manualmente
@@ -426,26 +423,6 @@ class CloseDrawJob {
             }
           });
 
-          // Generar PDF de cierre (sin ventas)
-          try {
-            pdfPath = await pdfReportService.generateDrawClosingReport({
-              drawId: draw.id,
-              game: updatedDraw.game,
-              drawDate: updatedDraw.drawDate,
-              drawTime: updatedDraw.drawTime,
-              prewinnerItem: selectedItem,
-              totalSales: 0,
-              maxPayout: 0,
-              potentialPayout: 0,
-              allItems: items,
-              salesByItem: {},
-              candidates: []
-            });
-            logger.info(`  📄 PDF generado: ${pdfPath}`);
-          } catch (pdfError) {
-            logger.warn(`⚠️ Error generando PDF:`, pdfError.message);
-          }
-
           // Calcular top 5 de riesgo de tripletas
           let tripletaRiskTop5 = [];
           try {
@@ -454,7 +431,8 @@ class CloseDrawJob {
             logger.warn(`⚠️ Error calculando riesgo de tripletas:`, tripletaError.message);
           }
 
-          // Enviar notificación a administradores por Telegram con PDF
+          // Enviar notificación a administradores por Telegram (solo texto;
+          // el PDF adjunto se eliminó — ver spec 2026-05-11-eliminar-pdf-cierre-sorteo-design.md)
           try {
             await adminNotificationService.notifyPrewinnerSelected({
               drawId: updatedDraw.id,
@@ -466,7 +444,6 @@ class CloseDrawJob {
               maxPayout: 0,
               potentialPayout: 0,
               salesByItem: null,
-              pdfPath,
               tripletaRiskTop5
             });
           } catch (notifyError) {

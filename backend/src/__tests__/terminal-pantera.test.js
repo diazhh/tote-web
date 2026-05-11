@@ -253,9 +253,6 @@ describe('close-draw handles TERMINAL', () => {
     jest.unstable_mockModule('../services/prewinner-selection.service.js', () => ({
       default: { selectPrewinner: jest.fn(), calculateTripletaRiskTop5: jest.fn().mockResolvedValue([]) },
     }));
-    jest.unstable_mockModule('../services/pdf-report.service.js', () => ({
-      default: { generateDrawClosingReport: jest.fn() },
-    }));
     jest.unstable_mockModule('../services/bet-simulator.service.js', () => ({
       default: {},
     }));

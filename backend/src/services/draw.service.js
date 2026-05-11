@@ -449,19 +449,19 @@ export class DrawService {
 
       logger.info(`Ganador preseleccionado en sorteo ${id}: ${updatedDraw.preselectedItem?.number}`);
 
-      // Notificar a administradores vía Telegram
+      // Notificar a administradores vía Telegram (solo mensaje de texto;
+      // el PDF adjunto se eliminó — ver spec 2026-05-11-eliminar-pdf-cierre-sorteo-design.md)
       try {
         const adminNotificationService = (await import('./admin-notification.service.js')).default;
-        const pdfReportService = (await import('./pdf-report.service.js')).default;
-        
+
         // Calcular ventas totales del sorteo
         const tickets = updatedDraw.tickets || [];
         const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
-        
+
         // Obtener configuración del juego
         const gameConfig = updatedDraw.game.config || {};
         const percentageToDistribute = gameConfig.percentageToDistribute || 70;
-        
+
         // Calcular monto máximo a pagar
         let maxPayout;
         if (gameConfig.maxPayoutFixed && gameConfig.maxPayoutFixed > 0) {
@@ -470,7 +470,7 @@ export class DrawService {
           maxPayout = (totalSales * percentageToDistribute) / 100;
         }
         maxPayout = Math.min(maxPayout, totalSales);
-        
+
         // Agrupar ventas por item
         const salesByItem = {};
         for (const ticket of tickets) {
@@ -489,62 +489,15 @@ export class DrawService {
             salesByItem[itemNumber].count += 1;
           }
         }
-        
+
         // Calcular pago potencial del item seleccionado
         const selectedSales = Object.values(salesByItem).find(
           item => item.number === updatedDraw.preselectedItem.number
         );
-        const potentialPayout = selectedSales 
+        const potentialPayout = selectedSales
           ? parseFloat(selectedSales.amount) * parseFloat(updatedDraw.preselectedItem.multiplier)
           : 0;
-        
-        // Generar PDF de cierre
-        let pdfPath = null;
-        try {
-          const gameItems = await prisma.gameItem.findMany({
-            where: {
-              gameId: updatedDraw.gameId,
-              isActive: true
-            },
-            orderBy: { number: 'asc' }
-          });
-          
-          pdfPath = await pdfReportService.generateDrawClosingReport({
-            drawId: updatedDraw.id,
-            game: updatedDraw.game,
-            drawDate: updatedDraw.drawDate,
-            drawTime: updatedDraw.drawTime,
-            prewinnerItem: updatedDraw.preselectedItem,
-            totalSales,
-            maxPayout,
-            potentialPayout,
-            allItems: gameItems,
-            salesByItem: tickets.reduce((acc, ticket) => {
-              ticket.details.forEach(detail => {
-                if (!acc[detail.gameItemId]) {
-                  acc[detail.gameItemId] = { amount: 0, count: 0 };
-                }
-                acc[detail.gameItemId].amount += parseFloat(detail.amount);
-                acc[detail.gameItemId].count += 1;
-              });
-              return acc;
-            }, {}),
-            candidates: [],
-            tripletaRiskData: {
-              activeTripletas: 0,
-              highRiskItems: 0,
-              mediumRiskItems: 0,
-              noRiskItems: 0,
-              totalHighRiskPrize: 0,
-              highRiskDetails: []
-            }
-          });
-          logger.info(`  📄 PDF generado para pre-selección web: ${pdfPath}`);
-        } catch (pdfError) {
-          logger.warn(`⚠️ Error generando PDF para pre-selección web:`, pdfError.message);
-        }
-        
-        // Enviar notificación
+
         await adminNotificationService.notifyPrewinnerSelected({
           drawId: updatedDraw.id,
           game: updatedDraw.game,
@@ -554,10 +507,9 @@ export class DrawService {
           totalSales,
           maxPayout,
           potentialPayout,
-          salesByItem,
-          pdfPath
+          salesByItem
         });
-        
+
         logger.info(`📱 Notificación de pre-selección web enviada a administradores`);
       } catch (notifyError) {
         logger.error(`Error enviando notificación de pre-selección web:`, notifyError.message);

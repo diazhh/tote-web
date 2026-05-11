@@ -5,7 +5,6 @@ import apiIntegrationService from '../../services/api-integration.service.js';
 import maxplayService from '../../services/maxplay.service.js';
 import adminNotificationService from '../../services/admin-notification.service.js';
 import prewinnerSelectionService from '../../services/prewinner-selection.service.js';
-import pdfReportService from '../../services/pdf-report.service.js';
 import systemConfigService from '../../services/system-config.service.js';
 import drawPauseService from '../../services/draw-pause.service.js';
 import { startOfDay } from 'date-fns';
@@ -75,7 +74,6 @@ export async function closeDrawWorker(jobs) {
   }
 
   let selectedItem;
-  let pdfPath = null;
   let selectionMethod = 'random';
 
   // Per-source ingestion status — passed to Telegram notification so admins can see
@@ -248,27 +246,7 @@ export async function closeDrawWorker(jobs) {
     },
   });
 
-  // 7. PDF de cierre
-  try {
-    pdfPath = await pdfReportService.generateDrawClosingReport({
-      drawId: draw.id,
-      game: updatedDraw.game,
-      drawDate: updatedDraw.drawDate,
-      drawTime: updatedDraw.drawTime,
-      prewinnerItem: selectedItem,
-      totalSales: 0,
-      maxPayout: 0,
-      potentialPayout: 0,
-      allItems: items,
-      salesByItem: {},
-      candidates: [],
-    });
-    logger.info(`[close-draw] PDF: ${pdfPath}`);
-  } catch (err) {
-    logger.warn(`[close-draw] Error generando PDF: ${err.message}`);
-  }
-
-  // 8. Tripleta risk top 5
+  // 7. Tripleta risk top 5
   let tripletaRiskTop5 = [];
   try {
     tripletaRiskTop5 = await prewinnerSelectionService.calculateTripletaRiskTop5(draw.gameId, draw.id);
@@ -276,7 +254,8 @@ export async function closeDrawWorker(jobs) {
     logger.warn(`[close-draw] Error calculando riesgo tripletas: ${err.message}`);
   }
 
-  // 9. Notificación admin
+  // 8. Notificación admin (solo texto; el PDF adjunto se eliminó —
+  // ver spec 2026-05-11-eliminar-pdf-cierre-sorteo-design.md)
   try {
     await adminNotificationService.notifyPrewinnerSelected({
       drawId: updatedDraw.id,
@@ -288,7 +267,6 @@ export async function closeDrawWorker(jobs) {
       maxPayout: 0,
       potentialPayout: 0,
       salesByItem: null,
-      pdfPath,
       tripletaRiskTop5,
       sourceStatus,
     });

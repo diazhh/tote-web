@@ -1,7 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import adminNotificationService from './admin-notification.service.js';
-import pdfReportService from './pdf-report.service.js';
 import { startOfDay, differenceInDays } from 'date-fns';
 import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 import prewinnerOptimizerService from './prewinner-optimizer.service.js';
@@ -155,41 +154,11 @@ class PrewinnerSelectionService {
       // Calcular top 5 de riesgo de tripletas
       const tripletaRiskTop5 = await this.calculateTripletaRiskTop5(draw.gameId, drawId);
 
-      // Preparar datos de análisis para el PDF
       const analysisData = result.analysis || {};
-      const tripletaRiskData = {
-        activeTripletas: 0,
-        highRiskItems: 0,
-        mediumRiskItems: 0,
-        noRiskItems: analysisData.validCandidates || 0,
-        totalHighRiskPrize: 0,
-        highRiskDetails: []
-      };
 
-      // Generar PDF de cierre
-      let pdfPath = null;
-      try {
-        pdfPath = await pdfReportService.generateDrawClosingReport({
-          drawId,
-          game: draw.game,
-          drawDate: draw.drawDate,
-          drawTime: draw.drawTime,
-          prewinnerItem: selectedItem,
-          totalSales,
-          maxPayout,
-          potentialPayout,
-          allItems: gameItems,
-          salesByItem: this.convertSalesByItemForPdf(salesByItem, gameItems),
-          candidates: analysisData.topAlternatives || [],
-          tripletaRiskData,
-          optimizerAnalysis: analysisData
-        });
-        logger.info(`  📄 PDF generado: ${pdfPath}`);
-      } catch (pdfError) {
-        logger.error(`Error generando PDF de cierre: ${pdfError.message}`);
-      }
-
-      // Enviar notificación a administradores
+      // Enviar notificación a administradores (solo mensaje de texto;
+      // se eliminó el PDF adjunto para liberar el lock más rápido — ver
+      // spec 2026-05-11-eliminar-pdf-cierre-sorteo-design.md)
       try {
         await adminNotificationService.notifyPrewinnerSelected({
           drawId,
@@ -201,7 +170,6 @@ class PrewinnerSelectionService {
           maxPayout,
           potentialPayout,
           salesByItem: salesByItemForNotification,
-          pdfPath,
           tripletaRiskTop5,
           optimizerMethod: result.method,
           optimizerAnalysis: analysisData
@@ -234,20 +202,6 @@ class PrewinnerSelectionService {
     }
 
     return salesByItem;
-  }
-
-  /**
-   * Convertir salesByItem para PDF
-   */
-  convertSalesByItemForPdf(salesByItem, gameItems) {
-    const result = {};
-    for (const [itemId, sales] of salesByItem.entries()) {
-      result[itemId] = {
-        amount: sales.amount,
-        count: sales.count
-      };
-    }
-    return result;
   }
 
   /**

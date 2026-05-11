@@ -790,10 +790,9 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
    * Notificar a todos los administradores de un juego
    * @param {string} gameId - ID del juego
    * @param {string} message - Mensaje a enviar
-   * @param {string} photoPath - Ruta de imagen opcional
-   * @param {string} documentPath - Ruta de documento PDF opcional
+   * @param {string} photoPath - Ruta de imagen opcional (resultado de sorteo)
    */
-  async notifyGameAdmins(gameId, message, photoPath = null, documentPath = null) {
+  async notifyGameAdmins(gameId, message, photoPath = null) {
     // NOTE: El bot de admin se mantiene activo en local para testing.
     // DISABLE_SOCIAL_CHANNELS solo aplica a canales públicos (publicationService, playerNotification).
     try {
@@ -811,10 +810,6 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
 
           if (photoPath) {
             await this.sendPhoto(gameId, admin.user.telegramChatId, photoPath);
-          }
-
-          if (documentPath) {
-            await this.sendDocument(gameId, admin.user.telegramChatId, documentPath, '📄 Reporte de cierre');
           }
 
           if (sent) notified++;

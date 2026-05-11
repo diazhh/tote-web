@@ -61,7 +61,6 @@ class AdminNotificationService {
       maxPayout,
       potentialPayout,
       salesByItem,
-      pdfPath,
       tripletaRiskTop5,
       isTerminal,
       terminalTickets,
@@ -77,8 +76,9 @@ class AdminNotificationService {
             maxPayout, potentialPayout, salesByItem, tripletaRiskTop5, sourceStatus
           });
 
-      // Usar el nuevo servicio de bots de administración (con PDF si está disponible)
-      const result = await adminTelegramBotService.notifyGameAdmins(game.id, message, null, pdfPath);
+      // Enviar solo mensaje de texto al admin (el PDF adjunto se eliminó —
+      // ver spec 2026-05-11-eliminar-pdf-cierre-sorteo-design.md)
+      const result = await adminTelegramBotService.notifyGameAdmins(game.id, message);
       
       logger.info(`📱 Notificaciones pre-ganador enviadas: ${result.notified}/${result.total}`);
       return result;
