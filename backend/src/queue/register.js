@@ -64,6 +64,7 @@ export async function registerAllWorkers(boss) {
 
   // Pipeline execute-draw (TW-6 a TW-11)
   if (process.env.PGBOSS_EXECUTE_DRAW === 'true') {
+    const { executeDrawSweepWorker } = await import('./workers/execute-draw-sweep.worker.js');
     const { executeDrawWorker } = await import('./workers/execute-draw.worker.js');
     const { stepGenerateImageWorker } = await import('./workers/step-generate-image.worker.js');
     const { stepNotifyAdminsWorker } = await import('./workers/step-notify-admins.worker.js');
@@ -71,6 +72,7 @@ export async function registerAllWorkers(boss) {
     const { stepProcessPrizesWorker } = await import('./workers/step-process-prizes.worker.js');
     const { stepCalculateStatsWorker } = await import('./workers/step-calculate-stats.worker.js');
 
+    await boss.createQueue(QUEUES.EXECUTE_DRAW_SWEEP);
     await boss.createQueue(QUEUES.EXECUTE_DRAW);
     await boss.createQueue(QUEUES.STEP_GENERATE_IMAGE);
     await boss.createQueue(QUEUES.STEP_NOTIFY_ADMINS);
@@ -79,23 +81,22 @@ export async function registerAllWorkers(boss) {
     await boss.createQueue(QUEUES.STEP_CALCULATE_STATS);
 
     const parallel = { teamSize: 3, teamConcurrency: 3 };
+    await boss.work(QUEUES.EXECUTE_DRAW_SWEEP, QUEUE_CONFIGS[QUEUES.EXECUTE_DRAW_SWEEP], executeDrawSweepWorker);
     await boss.work(QUEUES.EXECUTE_DRAW, { ...QUEUE_CONFIGS[QUEUES.EXECUTE_DRAW], ...parallel }, executeDrawWorker);
     await boss.work(QUEUES.STEP_GENERATE_IMAGE, { ...QUEUE_CONFIGS[QUEUES.STEP_GENERATE_IMAGE], ...parallel }, stepGenerateImageWorker);
     await boss.work(QUEUES.STEP_NOTIFY_ADMINS, { ...QUEUE_CONFIGS[QUEUES.STEP_NOTIFY_ADMINS], ...parallel }, stepNotifyAdminsWorker);
     await boss.work(QUEUES.STEP_PUBLISH_DRAW, { ...QUEUE_CONFIGS[QUEUES.STEP_PUBLISH_DRAW], ...parallel }, stepPublishDrawWorker);
     await boss.work(QUEUES.STEP_PROCESS_PRIZES, { ...QUEUE_CONFIGS[QUEUES.STEP_PROCESS_PRIZES], ...parallel }, stepProcessPrizesWorker);
     await boss.work(QUEUES.STEP_CALCULATE_STATS, { ...QUEUE_CONFIGS[QUEUES.STEP_CALCULATE_STATS], ...parallel }, stepCalculateStatsWorker);
-    logger.info('[pg-boss] Workers del pipeline execute-draw registrados (teamSize=3, concurrency=3)');
-    // Nota: el encadenamiento de pasos se realiza dentro de cada worker (ver workers/step-*.worker.js)
-    // pg-boss v10 no tiene onComplete; cada worker encola el siguiente paso al completar.
+    logger.info('[pg-boss] Pipeline execute-draw registrado (trigger via cron Linux, teamSize=3)');
   }
 
   // Retry failed publications — siempre activo, cada 5 minutos
   const { retryFailedPublicationsWorker } = await import('./workers/retry-failed-publications.worker.js');
   await boss.createQueue(QUEUES.RETRY_FAILED_PUBLICATIONS);
   await boss.work(QUEUES.RETRY_FAILED_PUBLICATIONS, QUEUE_CONFIGS[QUEUES.RETRY_FAILED_PUBLICATIONS], retryFailedPublicationsWorker);
-  await boss.schedule(QUEUES.RETRY_FAILED_PUBLICATIONS, '*/5 * * * *', {}, { tz: 'America/Caracas' });
-  logger.info('[pg-boss] Retry failed publications registrado (cada 5 min)');
+  // Trigger via cron Linux.
+  logger.info('[pg-boss] Retry failed publications registrado (trigger via cron Linux, cada 5 min)');
 
   // Monitor DLQ (TW-16) — siempre activo cuando pg-boss está habilitado
   const { monitorDlqWorker } = await import('./workers/monitor-dlq.worker.js');
@@ -118,37 +119,33 @@ export async function registerAllWorkers(boss) {
   // Workers sync y generate-daily-draws (TW-12, TW-13, TW-15)
   if (process.env.PGBOSS_SYNC_API_PLANNING === 'true') {
     const { syncApiPlanningWorker } = await import('./workers/sync-api-planning.worker.js');
+    await boss.createQueue(QUEUES.SYNC_API_PLANNING);
     await boss.work(QUEUES.SYNC_API_PLANNING, QUEUE_CONFIGS[QUEUES.SYNC_API_PLANNING], syncApiPlanningWorker);
-    logger.info('[pg-boss] Worker sync-api-planning registrado');
+    logger.info('[pg-boss] Worker sync-api-planning registrado (trigger via cron Linux, 06:00 VE diario)');
   }
 
   if (process.env.PGBOSS_SYNC_API_TICKETS === 'true') {
     const { syncApiTicketsWorker } = await import('./workers/sync-api-tickets.worker.js');
+    // pg-boss v10 NO crea la cola con boss.work() — boss.send() falla silente sin esto.
+    await boss.createQueue(QUEUES.SYNC_API_TICKETS);
     await boss.work(QUEUES.SYNC_API_TICKETS, QUEUE_CONFIGS[QUEUES.SYNC_API_TICKETS], syncApiTicketsWorker);
-    logger.info('[pg-boss] Worker sync-api-tickets registrado');
+    logger.info('[pg-boss] Worker sync-api-tickets registrado (trigger via cron Linux, cada 5 min)');
   }
 
-  // ⚠️ BUG LATENTE — pg-boss v10 NO crea automáticamente la fila en `pgboss.queue`
-  // al hacer `boss.work(...)`. Si el flag se pone en 'true' sin un `boss.createQueue(...)`
-  // explícito, los `boss.send(...)` desde el cron Croner (sync-scrape-tickets.job.js)
-  // fallan silencio sin throw — los jobs nunca llegan a la cola y nunca se procesan.
-  // Síntoma: el log dice "Job encolado en pg-boss" cada 5 min pero `pgboss.job` tiene 0 filas
-  // y los datos de Maxplay quedan stale.
-  // FIX cuando se quiera activar este path:
-  //   await boss.createQueue(QUEUES.SYNC_SCRAPE_TICKETS);
-  //   await boss.work(QUEUES.SYNC_SCRAPE_TICKETS, ..., syncScrapeTicketsWorker);
-  // Mientras tanto, mantener PGBOSS_SYNC_SCRAPE_TICKETS=false en producción —
-  // el cron Croner del job ejecuta `_runSweep()` inline, que es lo que está corriendo hoy.
   if (process.env.PGBOSS_SYNC_SCRAPE_TICKETS === 'true') {
     const { syncScrapeTicketsWorker } = await import('./workers/sync-scrape-tickets.worker.js');
+    // pg-boss v10 NO crea la cola con boss.work() — FIX del bug latente
+    // (los boss.send() del cron Croner sync-scrape-tickets.job.js fallaban silente).
+    await boss.createQueue(QUEUES.SYNC_SCRAPE_TICKETS);
     await boss.work(QUEUES.SYNC_SCRAPE_TICKETS, QUEUE_CONFIGS[QUEUES.SYNC_SCRAPE_TICKETS], syncScrapeTicketsWorker);
-    logger.info('[pg-boss] Worker sync-scrape-tickets registrado');
+    logger.info('[pg-boss] Worker sync-scrape-tickets registrado (trigger via cron Linux, cada 5 min)');
   }
 
   if (process.env.PGBOSS_GENERATE_DAILY_DRAWS === 'true') {
     const { generateDailyDrawsWorker } = await import('./workers/generate-daily-draws.worker.js');
+    await boss.createQueue(QUEUES.GENERATE_DAILY_DRAWS);
     await boss.work(QUEUES.GENERATE_DAILY_DRAWS, QUEUE_CONFIGS[QUEUES.GENERATE_DAILY_DRAWS], generateDailyDrawsWorker);
-    logger.info('[pg-boss] Worker generate-daily-draws registrado');
+    logger.info('[pg-boss] Worker generate-daily-draws registrado (trigger via cron Linux, 01:05 VE diario)');
   }
 
   // Workers de simulación (TW-14)

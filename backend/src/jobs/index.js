@@ -16,17 +16,16 @@ export function startAllJobs() {
   try {
     logger.info('🚀 Iniciando sistema de Jobs...');
 
-    // Jobs del ciclo de vida de sorteos
-    generateDailyDrawsJob.start();  // 00:05 AM - Generar sorteos del día
-    // closeDrawJob: ELIMINADO — reemplazado por pg-boss native (close-and-ingest + preselect workers).
-    // Activar con PGBOSS_CLOSE_DRAW=true y PGBOSS_PRESELECT=true en .env.
-    executeDrawJob.start();          // Cada minuto - Ejecutar sorteos Y publicar inmediatamente
-    // publishDrawJob.start();       // DESHABILITADO - La publicación ahora ocurre en executeDrawJob
+    // Jobs del ciclo de vida de sorteos — migrados a pg-boss + cron Linux 2026-05-12.
+    // Ver /etc/cron.d/tote-triggers en VPS 94 y backend/src/queue/workers/.
+    // generateDailyDrawsJob.start();  // → cron Linux 07:05 server / 01:05 VE diario
+    // executeDrawJob.start();         // → cron Linux + execute-draw-sweep cada minuto
+    // publishDrawJob.start();         // DESHABILITADO - publicación dentro del pipeline pg-boss
 
-    // Jobs de integración con APIs externas
-    syncApiPlanningJob.start();      // Cada 5 minutos - Sincronizar planificación
-    syncApiTicketsJob.start();       // Cada 2 minutos - Sincronizar tickets
-    syncScrapeTicketsJob.start();    // Cada 5 minutos - Sincronizar Maxplay (Triple/Terminal)
+    // Jobs de integración con APIs externas — migrados a pg-boss + cron Linux 2026-05-12
+    // syncApiPlanningJob.start();    // → cron Linux 12:00 server / 06:00 VE diario
+    // syncApiTicketsJob.start();     // → cron Linux cada 5 min
+    // syncScrapeTicketsJob.start();  // → cron Linux cada 5 min (arregla bug latente createQueue)
 
     // Jobs de simulación
     simulateBetsJob.start();         // Cada 30 segundos - Simular jugadas
@@ -49,12 +48,12 @@ export function stopAllJobs() {
   try {
     logger.info('Deteniendo sistema de Jobs...');
 
-    generateDailyDrawsJob.stop();
-    executeDrawJob.stop();
-    // publishDrawJob.stop(); // Ya no se inicia
-    syncApiPlanningJob.stop();
-    syncApiTicketsJob.stop();
-    syncScrapeTicketsJob.stop();
+    // Migrados a pg-boss + cron Linux — ya no se .stop()
+    // generateDailyDrawsJob.stop();
+    // executeDrawJob.stop();
+    // syncApiPlanningJob.stop();
+    // syncApiTicketsJob.stop();
+    // syncScrapeTicketsJob.stop();
     simulateBetsJob.stop();
     testBetsJob.stop();
     specialImagesJob.stop();
