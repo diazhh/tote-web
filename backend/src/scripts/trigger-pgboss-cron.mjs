@@ -30,8 +30,18 @@ if (!queueName) {
 }
 
 const ALLOWED_QUEUES = new Set([
+  // Sweeps (descubren trabajo y encolan jobs hijos)
   'close-and-ingest-sweep',
   'preselect-sweep',
+  'execute-draw-sweep',
+  // Jobs idempotentes con payload vacío (cron Linux es el único trigger)
+  'sync-api-tickets',
+  'sync-api-planning',
+  'sync-scrape-tickets',
+  'generate-daily-draws',
+  'retry-failed-publications',
+  'monitor-dlq',
+  'cleanup-logs',
 ]);
 
 if (!ALLOWED_QUEUES.has(queueName)) {
