@@ -112,8 +112,8 @@ export async function registerAllWorkers(boss) {
   await boss.createQueue(QUEUES.CLEANUP_LOGS);
   await boss.work(QUEUES.CLEANUP_LOGS, cleanupLogsWorker);
   // 03:15 diario hora Caracas — fuera del peak de sorteos
-  await boss.schedule(QUEUES.CLEANUP_LOGS, '15 3 * * *', {}, { tz: 'America/Caracas' });
-  logger.info('[pg-boss] Worker cleanup-logs registrado (03:15 diario)');
+  // Trigger via cron Linux (ver /etc/cron.d/tote-triggers). 03:15 VE = 09:15 server CEST.
+  logger.info('[pg-boss] Worker cleanup-logs registrado (trigger via cron Linux, 03:15 VE diario)');
 
   // Workers sync y generate-daily-draws (TW-12, TW-13, TW-15)
   if (process.env.PGBOSS_SYNC_API_PLANNING === 'true') {
