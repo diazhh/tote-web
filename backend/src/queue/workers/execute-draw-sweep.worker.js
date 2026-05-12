@@ -13,7 +13,7 @@ import systemConfigService from '../../services/system-config.service.js';
 import drawPauseService from '../../services/draw-pause.service.js';
 import { getBoss } from '../boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
-import { getVenezuelaTimeString, getVenezuelaDateAsUTC } from '../../lib/dateUtils.js';
+import { getVenezuelaTimeString, getVenezuelaDateAsUTC, addMinutesToTime } from '../../lib/dateUtils.js';
 import { recoverPreselectIfMissing } from '../../jobs/execute-draw.job.js';
 
 export async function executeDrawSweepWorker(jobs) {
@@ -28,14 +28,15 @@ export async function executeDrawSweepWorker(jobs) {
   const venezuelaDate = getVenezuelaDateAsUTC();
   const normalized = venezuelaTime.substring(0, 5) + ':00';
 
-  // execute-draw corre exactamente en xx:00. Catch-up de 3 min hacia atrás
-  // por si un tick falló (e.g. el draw quedó CLOSED en xx:55 pero el sweep
-  // de xx:00 perdió el tick).
+  // Catch-up window de 3 min cubre tick perdido del cron Linux. La
+  // idempotencia está garantizada por `singletonKey=execute-${drawId}`.
+  const targetEarliest = addMinutesToTime(normalized, -3);
+
   const draws = await prisma.draw.findMany({
     where: {
       status: 'CLOSED',
       drawDate: venezuelaDate,
-      drawTime: normalized,
+      drawTime: { gte: targetEarliest, lte: normalized },
     },
     select: {
       id: true,
