@@ -32,11 +32,17 @@ export async function executeDrawSweepWorker(jobs) {
   // idempotencia está garantizada por `singletonKey=execute-${drawId}`.
   const targetEarliest = addMinutesToTime(normalized, -3);
 
+  // Excluir TERMINAL: se ejecuta en cascada desde el Triple vinculado.
+  // Ver services/draw-cascade.service.js. Sin esta exclusión, el TERMINAL
+  // se ejecutaría con su preselectedItemId (que viene del SRQ sync) en vez
+  // de derivar de los últimos 2 dígitos del Triple. Primer mismatch
+  // detectado 2026-05-12 08:00 (Triple=028 pero Terminal=77).
   const draws = await prisma.draw.findMany({
     where: {
       status: 'CLOSED',
       drawDate: venezuelaDate,
       drawTime: { gte: targetEarliest, lte: normalized },
+      game: { type: { not: 'TERMINAL' } },
     },
     select: {
       id: true,

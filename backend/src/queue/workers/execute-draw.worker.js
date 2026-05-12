@@ -5,6 +5,7 @@ import { getBoss } from '../boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
 import systemConfigService from '../../services/system-config.service.js';
 import drawPauseService from '../../services/draw-pause.service.js';
+import { cascadeTerminalDraws } from '../../services/draw-cascade.service.js';
 
 export async function executeDrawWorker(jobs) {
   // pg-boss v10 siempre llama al handler con un array de jobs
@@ -93,6 +94,19 @@ export async function executeDrawWorker(jobs) {
     singletonKey: `img-${drawId}`,
     ...QUEUE_CONFIGS[QUEUES.STEP_GENERATE_IMAGE],
   });
+
+  // Cascada TERMINAL: si este Triple tiene un Terminal vinculado, derivar
+  // winnerItemId de los últimos 2 dígitos y ejecutar inline (premios +
+  // notify + stats). Idempotente. No bloquea si falla — Terminal queda
+  // CLOSED y se recupera en el siguiente tick por recoverOrphan*.
+  try {
+    const cascade = await cascadeTerminalDraws(updatedDraw);
+    if (cascade.cascaded > 0) {
+      logger.info(`[execute-draw] Draw ${drawId} — cascada Terminal: ${cascade.cascaded} draw(s) actualizados`);
+    }
+  } catch (err) {
+    logger.error(`[execute-draw] Cascada Terminal falló para ${drawId}: ${err.message}`);
+  }
 
   logger.info(`[execute-draw] Draw ${drawId} — pipeline iniciado, step-generate-image encolado`);
   return { success: true, drawId, pipelineStarted: true };
