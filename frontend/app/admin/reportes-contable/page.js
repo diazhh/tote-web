@@ -15,14 +15,17 @@ const PAGE_SIZE = 50;
 export default function ReportesContablePage() {
   // --- Filtros ---
   const [filters, setFilters] = useState({
-    dateFrom: todayInCaracas(),
-    dateTo:   todayInCaracas(),
-    gameId:   '',
+    dateFrom:    todayInCaracas(),
+    dateTo:      todayInCaracas(),
+    gameId:      '',
+    source:      '',
+    apiSystemId: '',
   });
 
   // --- Data ---
   const [report, setReport] = useState(null);
-  const [games, setGames]   = useState([]);
+  const [games, setGames]     = useState([]);
+  const [systems, setSystems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [xlsxLoading, setXlsxLoading] = useState(false);
 
@@ -30,15 +33,19 @@ export default function ReportesContablePage() {
   const [sortDir, setSortDir] = useState('asc'); // 'asc' | 'desc'
   const [page, setPage] = useState(1);
 
-  // --- Cargar juegos ---
+  // --- Cargar juegos + proveedores ---
   useEffect(() => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
-    fetch(`${API_URL}/games`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => {
-        setGames(Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : []);
+    const headers = { Authorization: `Bearer ${token}` };
+    Promise.all([
+      fetch(`${API_URL}/games`,            { headers }).then(r => r.json()),
+      fetch(`${API_URL}/providers/systems`, { headers }).then(r => r.json()),
+    ])
+      .then(([gamesData, systemsData]) => {
+        setGames(Array.isArray(gamesData?.data) ? gamesData.data : Array.isArray(gamesData) ? gamesData : []);
+        setSystems(Array.isArray(systemsData) ? systemsData : []);
       })
-      .catch(() => toast.error('Error cargando lista de juegos'));
+      .catch(() => toast.error('Error cargando filtros'));
   }, []);
 
   // --- Fetch reporte ---
@@ -48,9 +55,11 @@ export default function ReportesContablePage() {
     setPage(1);
     try {
       const result = await monitorApi.getAccountingReport({
-        dateFrom: filters.dateFrom,
-        dateTo:   filters.dateTo,
-        gameId:   filters.gameId || undefined,
+        dateFrom:    filters.dateFrom,
+        dateTo:      filters.dateTo,
+        gameId:      filters.gameId      || undefined,
+        source:      filters.source      || undefined,
+        apiSystemId: filters.apiSystemId || undefined,
       });
       if (result?.success) {
         setReport(result.data);
@@ -77,9 +86,11 @@ export default function ReportesContablePage() {
     setXlsxLoading(true);
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     const params = new URLSearchParams();
-    if (filters.dateFrom) params.append('dateFrom', filters.dateFrom);
-    if (filters.dateTo)   params.append('dateTo',   filters.dateTo);
-    if (filters.gameId)   params.append('gameId',   filters.gameId);
+    if (filters.dateFrom)    params.append('dateFrom',    filters.dateFrom);
+    if (filters.dateTo)      params.append('dateTo',      filters.dateTo);
+    if (filters.gameId)      params.append('gameId',      filters.gameId);
+    if (filters.source)      params.append('source',      filters.source);
+    if (filters.apiSystemId) params.append('apiSystemId', filters.apiSystemId);
 
     fetch(`${API_URL}/monitor/reporte-contable/excel?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -156,7 +167,7 @@ export default function ReportesContablePage() {
 
       {/* Filtros */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               <Calendar className="w-3.5 h-3.5 inline mr-1" /> Desde
@@ -191,6 +202,29 @@ export default function ReportesContablePage() {
               <option value="">Todos los juegos</option>
               {games.map(g => (
                 <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              Fuente / Proveedor
+            </label>
+            <select
+              value={filters.apiSystemId ? `sys:${filters.apiSystemId}` : filters.source}
+              onChange={e => {
+                const val = e.target.value;
+                if (val.startsWith('sys:')) {
+                  setFilters(prev => ({ ...prev, source: '', apiSystemId: val.slice(4) }));
+                } else {
+                  setFilters(prev => ({ ...prev, source: val, apiSystemId: '' }));
+                }
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Todas las fuentes</option>
+              <option value="TAQUILLA_ONLINE">Online</option>
+              {systems.map(s => (
+                <option key={s.id} value={`sys:${s.id}`}>{s.name}</option>
               ))}
             </select>
           </div>

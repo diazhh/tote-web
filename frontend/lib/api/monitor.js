@@ -108,12 +108,16 @@ export const monitorApi = {
    * @param {string} params.dateFrom - YYYY-MM-DD (requerido)
    * @param {string} params.dateTo   - YYYY-MM-DD (requerido)
    * @param {string} [params.gameId] - opcional
+   * @param {string} [params.source] - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH | EXTERNAL_SCRAPE
+   * @param {string} [params.apiSystemId] - UUID del ApiSystem
    */
-  getAccountingReport: async ({ dateFrom, dateTo, gameId } = {}) => {
+  getAccountingReport: async ({ dateFrom, dateTo, gameId, source, apiSystemId } = {}) => {
     const params = new URLSearchParams();
-    if (dateFrom) params.append('dateFrom', dateFrom);
-    if (dateTo)   params.append('dateTo',   dateTo);
-    if (gameId)   params.append('gameId',   gameId);
+    if (dateFrom)    params.append('dateFrom',    dateFrom);
+    if (dateTo)      params.append('dateTo',      dateTo);
+    if (gameId)      params.append('gameId',      gameId);
+    if (source)      params.append('source',      source);
+    if (apiSystemId) params.append('apiSystemId', apiSystemId);
     const response = await axios.get(`/monitor/reporte-contable?${params.toString()}`);
     return response.data;
   },

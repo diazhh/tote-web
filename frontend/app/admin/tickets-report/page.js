@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Calendar, Gamepad2, RefreshCw, ChevronLeft, ChevronRight, X, Eye
+  Calendar, Gamepad2, RefreshCw, ChevronLeft, ChevronRight, X, Eye, FileSpreadsheet
 } from 'lucide-react';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
@@ -29,6 +29,7 @@ export default function TicketsReportPage() {
   const [games, setGames]       = useState([]);
   const [systems, setSystems]   = useState([]);
   const [loading, setLoading]   = useState(false);
+  const [xlsxLoading, setXlsxLoading] = useState(false);
   const [page, setPage]         = useState(1);
   const [detailModal, setDetailModal] = useState({ open: false, data: null });
 
@@ -76,6 +77,43 @@ export default function TicketsReportPage() {
 
   const setFilter = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
 
+  const handleDownloadExcel = useCallback(() => {
+    setXlsxLoading(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    const params = new URLSearchParams();
+    if (filters.dateFrom)    params.append('dateFrom',    filters.dateFrom);
+    if (filters.dateTo)      params.append('dateTo',      filters.dateTo);
+    if (filters.gameId)      params.append('gameId',      filters.gameId);
+    if (filters.source)      params.append('source',      filters.source);
+    if (filters.apiSystemId) params.append('apiSystemId', filters.apiSystemId);
+
+    fetch(`${API_URL}/monitor/tickets/excel?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          try {
+            const parsed = JSON.parse(text);
+            throw new Error(parsed?.error || `HTTP ${res.status}`);
+          } catch {
+            throw new Error(text || `HTTP ${res.status}`);
+          }
+        }
+        return res.blob();
+      })
+      .then(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tickets-${filters.dateFrom || 'hoy'}-${filters.dateTo || 'hoy'}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+      })
+      .catch((err) => toast.error(err.message || 'Error generando Excel'))
+      .finally(() => setXlsxLoading(false));
+  }, [filters]);
+
   // Formatters
   const fmt = (n) =>
     new Intl.NumberFormat('es-VE', { style: 'currency', currency: 'VES', minimumFractionDigits: 2 }).format(n ?? 0);
@@ -116,14 +154,24 @@ export default function TicketsReportPage() {
           <h1 className="text-2xl font-bold text-gray-900">Reporte de Tickets</h1>
           <p className="text-sm text-gray-500 mt-0.5">Lista detallada de tickets por proveedor y fecha</p>
         </div>
-        <button
-          onClick={() => fetchTickets(page)}
-          disabled={loading}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Actualizar
-        </button>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <button
+            onClick={handleDownloadExcel}
+            disabled={xlsxLoading || loading || !result?.tickets?.length}
+            className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
+          >
+            <FileSpreadsheet className={`w-4 h-4 ${xlsxLoading ? 'animate-pulse' : ''}`} />
+            {xlsxLoading ? 'Generando...' : 'Descargar Excel'}
+          </button>
+          <button
+            onClick={() => fetchTickets(page)}
+            disabled={loading}
+            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 text-sm"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Filters */}

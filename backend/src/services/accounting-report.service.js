@@ -12,11 +12,15 @@ class AccountingReportService {
    * @param {string} opts.dateFrom - YYYY-MM-DD (inclusive)
    * @param {string} opts.dateTo   - YYYY-MM-DD (inclusive)
    * @param {string} [opts.gameId] - opcional, filtra un solo juego
+   * @param {string} [opts.source] - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH | EXTERNAL_SCRAPE
+   * @param {string} [opts.apiSystemId] - UUID del ApiSystem (filtra por proveedor)
    *
    * @returns {Promise<{
    *   dateFrom: string,
    *   dateTo: string,
    *   gameId: string|null,
+   *   source: string|null,
+   *   apiSystemId: string|null,
    *   rows: Array<{
    *     date: string,           // YYYY-MM-DD
    *     gameId: string,
@@ -29,7 +33,7 @@ class AccountingReportService {
    *   totals: { totalSales, totalPrize, utility, ticketCount }
    * }>}
    */
-  async getAccountingReport({ dateFrom, dateTo, gameId = null } = {}) {
+  async getAccountingReport({ dateFrom, dateTo, gameId = null, source = null, apiSystemId = null } = {}) {
     this._validateInputs({ dateFrom, dateTo, gameId });
 
     if (gameId) {
@@ -44,28 +48,70 @@ class AccountingReportService {
       }
     }
 
-    const draws = await prisma.draw.findMany({
-      where: {
-        drawDate: {
-          gte: new Date(`${dateFrom}T00:00:00.000Z`),
-          lte: new Date(`${dateTo}T00:00:00.000Z`),
-        },
-        ...(gameId && { gameId }),
+    const drawWhere = {
+      drawDate: {
+        gte: new Date(`${dateFrom}T00:00:00.000Z`),
+        lte: new Date(`${dateTo}T00:00:00.000Z`),
       },
+      ...(gameId && { gameId }),
+    };
+
+    // apiSystemId: resolve PUSH/SCRAPE vs PULL providers
+    // (mismo patrón que monitor.service.getDailyReport)
+    let pushProviderFilter = false;
+    if (apiSystemId) {
+      const apiSystem = await prisma.apiSystem.findUnique({
+        where: { id: apiSystemId },
+        select: { mode: true },
+      });
+      if (apiSystem?.mode === 'PUSH' || apiSystem?.mode === 'SCRAPE') {
+        pushProviderFilter = true;
+      } else {
+        // PULL providers: filter draws by ApiDrawMapping
+        const mappings = await prisma.apiDrawMapping.findMany({
+          where: { apiConfig: { apiSystemId } },
+          select: { drawId: true },
+        });
+        if (mappings.length === 0) {
+          return {
+            dateFrom,
+            dateTo,
+            gameId: gameId || null,
+            source: source || null,
+            apiSystemId,
+            rows: [],
+            totals: { totalSales: 0, totalPrize: 0, utility: 0, ticketCount: 0 },
+          };
+        }
+        drawWhere.id = { in: mappings.map((m) => m.drawId) };
+      }
+    }
+
+    const ticketsInclude = {
+      where: { status: { not: 'CANCELLED' } },
+      select: { totalAmount: true, totalPrize: true, source: true, providerData: true },
+    };
+    if (pushProviderFilter) {
+      ticketsInclude.where.apiSystemId = apiSystemId;
+    } else if (source) {
+      ticketsInclude.where.source = source;
+    }
+
+    const draws = await prisma.draw.findMany({
+      where: drawWhere,
       include: {
         game: { select: { id: true, name: true } },
-        tickets: {
-          where: { status: { not: 'CANCELLED' } },
-          select: { totalAmount: true, totalPrize: true, source: true, providerData: true },
-        },
+        tickets: ticketsInclude,
       },
       orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }],
     });
 
-    // Premios de tripletas externas atribuidos por prizeDrawId — mismo patrón que
-    // monitor.service.getDailyReport para coherencia con el reporte operativo.
+    // Premios de tripletas externas atribuidos por prizeDrawId.
+    // Sólo aplican cuando el filtro de fuente las incluye (sin filtro o EXTERNAL_API).
+    // Si se filtra por un apiSystemId PUSH/SCRAPE no hay tripletas externas (SRQ es PULL).
     const tripletaPrizeByDraw = {};
-    if (draws.length > 0) {
+    const includesTripletaPrizes = !pushProviderFilter && (!source || source === 'EXTERNAL_API');
+    if (includesTripletaPrizes && draws.length > 0) {
       const drawIds = draws.map((d) => d.id);
       const tripletaWinners = await prisma.ticket.findMany({
         where: { prizeDrawId: { in: drawIds }, status: 'WON' },
@@ -125,7 +171,15 @@ class AccountingReportService {
       { totalSales: 0, totalPrize: 0, utility: 0, ticketCount: 0 },
     );
 
-    return { dateFrom, dateTo, gameId: gameId || null, rows, totals };
+    return {
+      dateFrom,
+      dateTo,
+      gameId: gameId || null,
+      source: source || null,
+      apiSystemId: apiSystemId || null,
+      rows,
+      totals,
+    };
   }
 
   /**
@@ -143,12 +197,22 @@ class AccountingReportService {
 
     const ws = wb.addWorksheet('Reporte Contable');
 
-    // Encabezado: rango y filtro
+    // Encabezado: rango y filtros aplicados
     ws.mergeCells('A1:F1');
     const titleCell = ws.getCell('A1');
-    titleCell.value = `Reporte Contable — ${report.dateFrom} a ${report.dateTo}${
-      report.gameId ? ` (juego filtrado: ${report.rows[0]?.game ?? report.gameId})` : ' (todos los juegos)'
-    }`;
+    const filterParts = [];
+    if (report.gameId) {
+      filterParts.push(`juego: ${report.rows[0]?.game ?? report.gameId}`);
+    }
+    if (report.apiSystemId) {
+      filterParts.push(`proveedor: ${report.apiSystemId}`);
+    } else if (report.source) {
+      filterParts.push(`fuente: ${report.source}`);
+    }
+    const filterSuffix = filterParts.length > 0
+      ? ` (${filterParts.join(' · ')})`
+      : ' (todos los juegos)';
+    titleCell.value = `Reporte Contable — ${report.dateFrom} a ${report.dateTo}${filterSuffix}`;
     titleCell.font = { bold: true, size: 14 };
     titleCell.alignment = { horizontal: 'center' };
 

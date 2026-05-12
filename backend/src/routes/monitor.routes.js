@@ -19,7 +19,8 @@ router.get('/bancas/:drawId', monitorController.getBancaStats);
 router.get('/items/:drawId/filtered', monitorController.getItemStatsFiltered);
 router.get('/items/:drawId', monitorController.getItemStats);
 
-// Lista de tickets con filtros
+// Lista de tickets con filtros (Excel ANTES de JSON para evitar conflicto)
+router.get('/tickets/excel', monitorController.downloadTicketsExcel);
 router.get('/tickets', monitorController.getTicketList);
 
 // Reporte PDF (debe ir ANTES de /reporte para evitar conflicto de rutas)

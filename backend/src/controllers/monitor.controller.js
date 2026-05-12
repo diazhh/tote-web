@@ -4,6 +4,7 @@
 
 import monitorService from '../services/monitor.service.js';
 import accountingReportService from '../services/accounting-report.service.js';
+import ticketsExportService from '../services/tickets-export.service.js';
 import logger from '../lib/logger.js';
 
 class MonitorController {
@@ -357,11 +358,13 @@ class MonitorController {
    */
   async getAccountingReport(req, res) {
     try {
-      const { dateFrom, dateTo, gameId } = req.query;
+      const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
       const data = await accountingReportService.getAccountingReport({
         dateFrom,
         dateTo,
         gameId: gameId || null,
+        source: source || null,
+        apiSystemId: apiSystemId || null,
       });
       res.json({ success: true, data });
     } catch (error) {
@@ -379,11 +382,13 @@ class MonitorController {
    */
   async downloadAccountingExcel(req, res) {
     try {
-      const { dateFrom, dateTo, gameId } = req.query;
+      const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
       const buffer = await accountingReportService.buildAccountingExcel({
         dateFrom,
         dateTo,
         gameId: gameId || null,
+        source: source || null,
+        apiSystemId: apiSystemId || null,
       });
       const filename = `reporte-contable-${dateFrom}-${dateTo}.xlsx`;
       res.setHeader(
@@ -398,6 +403,37 @@ class MonitorController {
         return res.status(400).json({ success: false, error: error.message });
       }
       logger.error('Error en downloadAccountingExcel:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * GET /api/monitor/tickets/excel
+   * Exporta los tickets coincidentes con los filtros como .xlsx (sin paginación).
+   */
+  async downloadTicketsExcel(req, res) {
+    try {
+      const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
+      const buffer = await ticketsExportService.buildTicketsExcel({
+        dateFrom,
+        dateTo,
+        gameId: gameId || null,
+        source: source || null,
+        apiSystemId: apiSystemId || null,
+      });
+      const filename = `tickets-${dateFrom}-${dateTo}.xlsx`;
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Length', buffer.length);
+      res.send(buffer);
+    } catch (error) {
+      if (error.statusCode === 400) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      logger.error('Error en downloadTicketsExcel:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }
