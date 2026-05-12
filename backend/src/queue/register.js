@@ -102,9 +102,9 @@ export async function registerAllWorkers(boss) {
   // createQueue es necesario antes de schedule (la cola debe existir en pgboss.queue)
   await boss.createQueue('monitor-dlq');
   await boss.work('monitor-dlq', monitorDlqWorker);
-  // Schedule: cada 2 minutos
-  await boss.schedule('monitor-dlq', '*/2 * * * *', {}, { tz: 'America/Caracas' });
-  logger.info('[pg-boss] Monitor DLQ registrado (cada 2 min)');
+  // Trigger via cron Linux (ver /etc/cron.d/tote-triggers). boss.schedule
+  // de pg-boss v10 tiene drift bug — ver commit 0f8d3f0.
+  logger.info('[pg-boss] Monitor DLQ registrado (trigger via cron Linux, cada 2 min)');
 
   // Cleanup logs (security/retención) — siempre activo. Patrón createQueue +
   // work + schedule para evitar el bug latente de pg-boss v10 (ver nota más abajo).
