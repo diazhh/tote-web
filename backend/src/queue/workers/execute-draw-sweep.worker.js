@@ -14,7 +14,7 @@ import drawPauseService from '../../services/draw-pause.service.js';
 import { getBoss } from '../boss.js';
 import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
 import { getVenezuelaTimeString, getVenezuelaDateAsUTC, addMinutesToTime } from '../../lib/dateUtils.js';
-import { recoverPreselectIfMissing } from '../../jobs/execute-draw.job.js';
+import { recoverPreselectIfMissing } from '../../services/draw-recovery.service.js';
 
 export async function executeDrawSweepWorker(jobs) {
   const job = Array.isArray(jobs) ? jobs[0] : jobs;
