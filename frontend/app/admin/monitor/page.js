@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Building2, Hash, FileText, Calendar, Gamepad2, Clock,
   DollarSign, Trophy, Ticket, AlertTriangle, ChevronRight,
-  X, Eye, Layers, Shield
+  X, Eye, Layers, Shield, Search, ArrowUp, ArrowDown, ChevronDown,
+  Filter
 } from 'lucide-react';
 import ResponsiveTable from '@/components/common/ResponsiveTable';
 import ResponsiveTabs from '@/components/common/ResponsiveTabs';
@@ -38,6 +39,13 @@ export default function MonitorPage() {
   const [lastSeenData, setLastSeenData] = useState({});
   const [quotas, setQuotas] = useState([]);
   const [quotaModal, setQuotaModal] = useState({ open: false, item: null });
+
+  // Mobile UI state for Números tab
+  const [numbersSearch, setNumbersSearch] = useState('');
+  const [numbersFilter, setNumbersFilter] = useState('all'); // 'all' | 'with-tickets' | 'high-risk'
+  const [numbersSortBy, setNumbersSortBy] = useState('number'); // number | amount | prize | tripletas | lastSeen
+  const [numbersSortDir, setNumbersSortDir] = useState('asc');
+  const [expandedItemId, setExpandedItemId] = useState(null);
 
   useEffect(() => {
     fetchGames();
@@ -220,11 +228,74 @@ export default function MonitorPage() {
     return `${hours}:${minutes}`;
   };
 
-  const quotaByItem = new Map(quotas.map((q) => [q.gameItemId, q]));
+  const quotaByItem = useMemo(
+    () => new Map(quotas.map((q) => [q.gameItemId, q])),
+    [quotas]
+  );
   const getQuota = (itemId) => quotaByItem.get(itemId) || null;
 
   const currentDraw = draws.find((d) => d.id === selectedDraw);
   const canEditQuota = currentDraw && (currentDraw.status === 'SCHEDULED' || currentDraw.status === 'CLOSED');
+
+  // Filtered + sorted items for the mobile Números view
+  const filteredSortedItems = useMemo(() => {
+    if (!itemStats?.items) return [];
+    let arr = itemStats.items;
+    const totalSales = itemStats.totalSales || 0;
+    const dangerThreshold = totalSales * 0.7;
+
+    if (numbersSearch.trim()) {
+      const q = numbersSearch.trim().toLowerCase();
+      arr = arr.filter((i) =>
+        String(i.number).toLowerCase().includes(q) ||
+        (i.name || '').toLowerCase().includes(q)
+      );
+    }
+    if (numbersFilter === 'with-tickets') {
+      arr = arr.filter((i) => (i.ticketCount || 0) > 0);
+    } else if (numbersFilter === 'high-risk') {
+      arr = arr.filter((i) => {
+        const q = quotaByItem.get(i.itemId);
+        return q?.exceeded || i.totalPotentialPrize > dangerThreshold;
+      });
+    }
+
+    const dir = numbersSortDir === 'asc' ? 1 : -1;
+    const sorted = [...arr].sort((a, b) => {
+      switch (numbersSortBy) {
+        case 'amount':
+          return ((a.totalAmount || 0) - (b.totalAmount || 0)) * dir;
+        case 'prize':
+          return ((a.totalPotentialPrize || 0) - (b.totalPotentialPrize || 0)) * dir;
+        case 'tripletas':
+          return ((a.tripletaCount || 0) - (b.tripletaCount || 0)) * dir;
+        case 'lastSeen': {
+          const la = lastSeenData[a.number];
+          const lb = lastSeenData[b.number];
+          const da = la?.neverSeen ? Number.POSITIVE_INFINITY : (la?.daysAgo ?? -1);
+          const db = lb?.neverSeen ? Number.POSITIVE_INFINITY : (lb?.daysAgo ?? -1);
+          return (da - db) * dir;
+        }
+        case 'number':
+        default: {
+          const na = parseInt(a.number, 10);
+          const nb = parseInt(b.number, 10);
+          if (Number.isFinite(na) && Number.isFinite(nb)) return (na - nb) * dir;
+          return String(a.number).localeCompare(String(b.number)) * dir;
+        }
+      }
+    });
+    return sorted;
+  }, [itemStats, numbersSearch, numbersFilter, numbersSortBy, numbersSortDir, lastSeenData, quotaByItem]);
+
+  const toggleNumberSort = (field) => {
+    if (numbersSortBy === field) {
+      setNumbersSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setNumbersSortBy(field);
+      setNumbersSortDir(field === 'number' ? 'asc' : 'desc');
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -424,6 +495,274 @@ export default function MonitorPage() {
                     </div>
                   )}
 
+                  {/* Mobile UI: compact expandable cards with search, filters, sort */}
+                  <div className="md:hidden space-y-3">
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={numbersSearch}
+                        onChange={(e) => setNumbersSearch(e.target.value)}
+                        placeholder="Buscar número o nombre..."
+                        className="w-full pl-9 pr-9 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                      {numbersSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setNumbersSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                          aria-label="Limpiar búsqueda"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Filter chips */}
+                    <div className="flex flex-wrap gap-2 items-center">
+                      <Filter className="w-3.5 h-3.5 text-gray-400" />
+                      {[
+                        { v: 'all', l: 'Todos' },
+                        { v: 'with-tickets', l: 'Con tickets' },
+                        { v: 'high-risk', l: 'Alto riesgo' },
+                      ].map(({ v, l }) => {
+                        const active = numbersFilter === v;
+                        return (
+                          <button
+                            key={v}
+                            type="button"
+                            onClick={() => setNumbersFilter(v)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition ${
+                              active
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-white text-gray-700 border-gray-300'
+                            }`}
+                          >
+                            {l}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Sort buttons (horizontal scroll if needed) */}
+                    <div className="flex gap-1.5 items-center overflow-x-auto pb-1 -mx-1 px-1">
+                      <span className="text-[10px] font-semibold text-gray-500 uppercase shrink-0">Orden:</span>
+                      {[
+                        { f: 'number', l: '#' },
+                        { f: 'amount', l: 'Apostado' },
+                        { f: 'prize', l: 'Premio' },
+                        { f: 'tripletas', l: 'Tripletas' },
+                        { f: 'lastSeen', l: 'Último' },
+                      ].map(({ f, l }) => {
+                        const active = numbersSortBy === f;
+                        return (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => toggleNumberSort(f)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border shrink-0 transition ${
+                              active
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-white text-gray-700 border-gray-300'
+                            }`}
+                          >
+                            {l}
+                            {active && (numbersSortDir === 'asc'
+                              ? <ArrowUp className="w-3 h-3" />
+                              : <ArrowDown className="w-3 h-3" />)}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Count summary */}
+                    <div className="text-xs text-gray-500 px-1">
+                      {filteredSortedItems.length} de {itemStats.items.length} números
+                      {(numbersSearch || numbersFilter !== 'all') && (
+                        <button
+                          type="button"
+                          onClick={() => { setNumbersSearch(''); setNumbersFilter('all'); }}
+                          className="ml-2 text-blue-600 hover:underline"
+                        >
+                          Limpiar
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Cards */}
+                    {filteredSortedItems.length === 0 ? (
+                      <div className="text-center py-10 text-gray-500 bg-white rounded-lg border text-sm">
+                        No hay números que coincidan
+                      </div>
+                    ) : (
+                      <ul className="space-y-2">
+                        {filteredSortedItems.map((item) => {
+                          const q = getQuota(item.itemId);
+                          const isDangerous = item.totalPotentialPrize > itemStats.totalSales * 0.7;
+                          const exceeded = q?.exceeded;
+                          const expanded = expandedItemId === item.itemId;
+                          const lastSeen = lastSeenData[item.number];
+                          const isWinner = itemStats.winnerItem?.number === item.number;
+                          return (
+                            <li
+                              key={item.itemId}
+                              className={`bg-white rounded-lg border overflow-hidden ${
+                                isWinner ? 'border-green-400 bg-green-50' :
+                                exceeded ? 'border-red-400 bg-red-50' :
+                                isDangerous ? 'border-red-200 bg-red-50/50' :
+                                'border-gray-200'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                onClick={() => setExpandedItemId(expanded ? null : item.itemId)}
+                                className="w-full px-3 py-2.5 flex items-center gap-3 text-left active:bg-gray-50 transition"
+                              >
+                                <div className={`shrink-0 w-11 h-11 rounded-md flex items-center justify-center ${
+                                  isWinner ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-900'
+                                }`}>
+                                  <span className="font-mono font-bold text-base">{item.number}</span>
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-sm font-semibold text-gray-800 truncate">{item.name}</span>
+                                    {isWinner && <Trophy className="w-3.5 h-3.5 text-green-600 shrink-0" />}
+                                    {exceeded && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600 text-white shrink-0 font-semibold">EXC</span>
+                                    )}
+                                    {!exceeded && isDangerous && (
+                                      <AlertTriangle className="w-3.5 h-3.5 text-red-600 shrink-0" />
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mt-0.5 truncate">
+                                    Apost. <span className="font-medium text-gray-800">{formatCurrency(item.totalAmount)}</span>
+                                    {' · '}
+                                    Premio <span className={`font-semibold ${isDangerous ? 'text-red-600' : 'text-gray-800'}`}>
+                                      {formatCurrency(item.totalPotentialPrize)}
+                                    </span>
+                                  </div>
+                                </div>
+                                <ChevronDown className={`w-4 h-4 text-gray-400 shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                              </button>
+
+                              {expanded && (
+                                <div className="px-3 pb-3 border-t border-gray-100 pt-2.5 space-y-2.5 text-xs">
+                                  <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-gray-500">Tickets</span>
+                                      <span className="font-medium text-gray-900">{item.ticketCount}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-gray-500">% Venta</span>
+                                      <span className="font-medium text-gray-900">{item.percentageOfSales}%</span>
+                                    </div>
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-gray-500">Premio Pot.</span>
+                                      <span className="font-medium text-blue-700">{formatCurrency(item.potentialPrize)}</span>
+                                    </div>
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-gray-500">Tripletas</span>
+                                      <span className={`font-medium ${item.tripletaCount > 0 ? 'text-purple-600' : 'text-gray-400'}`}>
+                                        {item.tripletaCount}
+                                      </span>
+                                    </div>
+                                    {item.tripletaCount > 0 && (
+                                      <div className="flex justify-between gap-2 col-span-2">
+                                        <span className="text-gray-500">Premio Trip.</span>
+                                        <span className="font-medium text-purple-600">{formatCurrency(item.tripletaPrize)}</span>
+                                      </div>
+                                    )}
+                                    <div className="flex justify-between gap-2">
+                                      <span className="text-gray-500">Último</span>
+                                      <span>
+                                        {!lastSeen ? <span className="text-gray-400">—</span>
+                                          : lastSeen.neverSeen ? <span className="text-gray-400">Nunca</span>
+                                          : (
+                                            <button
+                                              type="button"
+                                              onClick={(e) => { e.stopPropagation(); handleViewNumberHistory(item.number); }}
+                                              className="text-blue-600 hover:underline font-medium"
+                                            >
+                                              {lastSeen.daysAgo === 0 ? 'Hoy' : lastSeen.daysAgo === 1 ? 'Ayer' : `${lastSeen.daysAgo}d`}
+                                            </button>
+                                          )}
+                                      </span>
+                                    </div>
+                                    {q && q.maxAmount != null && (
+                                      <>
+                                        <div className="flex justify-between gap-2">
+                                          <span className="text-gray-500">Cupo</span>
+                                          <span className="font-medium text-gray-900">{formatCurrency(q.maxAmount)}</span>
+                                        </div>
+                                        <div className="flex justify-between gap-2 col-span-2">
+                                          <span className="text-gray-500">Disponible</span>
+                                          {q.exceeded ? (
+                                            <span className="font-bold text-red-700">Excedido</span>
+                                          ) : (
+                                            <span className={`font-medium ${
+                                              q.maxAmount > 0 && (q.availableAmount / q.maxAmount) > 0.2
+                                                ? 'text-green-600'
+                                                : 'text-yellow-600'
+                                            }`}>
+                                              {formatCurrency(q.availableAmount)}
+                                            </span>
+                                          )}
+                                        </div>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100">
+                                    <button
+                                      type="button"
+                                      onClick={(e) => { e.stopPropagation(); handleViewTicketsByItem(item.itemId); }}
+                                      className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-md border border-blue-200 bg-blue-50 text-blue-700 text-xs font-medium"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" /> Tickets
+                                    </button>
+                                    {item.tripletaCount > 0 && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => { e.stopPropagation(); handleViewTripletas(item.itemId); }}
+                                        className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-md border border-purple-200 bg-purple-50 text-purple-700 text-xs font-medium"
+                                      >
+                                        <Layers className="w-3.5 h-3.5" /> Tripletas
+                                      </button>
+                                    )}
+                                    {canEditQuota && (
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setQuotaModal({
+                                            open: true,
+                                            item: {
+                                              gameItemId: item.itemId,
+                                              number: item.number,
+                                              name: item.name,
+                                              maxAmount: q?.maxAmount ?? null,
+                                              soldAmount: q?.soldAmount ?? item.totalAmount ?? 0,
+                                            },
+                                          });
+                                        }}
+                                        className="flex-1 inline-flex items-center justify-center gap-1 px-2 py-1.5 rounded-md border border-indigo-200 bg-indigo-50 text-indigo-700 text-xs font-medium"
+                                      >
+                                        <Shield className="w-3.5 h-3.5" /> Cupo
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    )}
+                  </div>
+
+                  {/* Desktop UI: original ResponsiveTable */}
+                  <div className="hidden md:block">
                   <ResponsiveTable
                     data={[...itemStats.items].sort((a, b) => parseInt(a.number) - parseInt(b.number))}
                     rowClassName={(item) => {
@@ -551,6 +890,7 @@ export default function MonitorPage() {
                     )}
                     emptyMessage="No hay datos de números"
                   />
+                  </div>
                 </div>
               )}
 

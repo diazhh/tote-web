@@ -3,7 +3,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Calendar, Gamepad2, DollarSign, Trophy, TrendingUp, TrendingDown,
-  FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Download, X, Eye
+  FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
+  Download, X, Eye, ArrowUp, ArrowDown, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
@@ -38,11 +39,15 @@ export default function ReportesPage() {
   const [pdfLoading, setPdfLoading] = useState(false);
 
   // --- Detail table state ---
-  const [sortDir, setSortDir] = useState('asc');   // 'asc' | 'desc'
+  const [sortBy, setSortBy]   = useState('date'); // 'date' | 'sales' | 'prize' | 'balance' | 'tickets'
+  const [sortDir, setSortDir] = useState('asc');  // 'asc' | 'desc'
   const [page, setPage]       = useState(1);
 
   // --- Draw detail modal (number breakdown) ---
   const [drawDetail, setDrawDetail] = useState({ open: false, data: null, loading: false });
+  const [modalSearch, setModalSearch] = useState('');
+  const [modalSortBy, setModalSortBy] = useState('number'); // number | amount | tickets | prize | pct
+  const [modalSortDir, setModalSortDir] = useState('asc');
 
   // --- Initial load: fetch games + systems for dropdowns ---
   useEffect(() => {
@@ -144,14 +149,79 @@ export default function ReportesPage() {
   // --- Sorted + paginated draws ---
   const sortedDraws = useMemo(() => {
     if (!report?.draws) return [];
+    const dir = sortDir === 'asc' ? 1 : -1;
     return [...report.draws].sort((a, b) => {
-      const aKey = `${a.drawDate}T${a.drawTime}`;
-      const bKey = `${b.drawDate}T${b.drawTime}`;
-      return sortDir === 'asc'
-        ? aKey.localeCompare(bKey)
-        : bKey.localeCompare(aKey);
+      switch (sortBy) {
+        case 'sales':   return ((a.totalSales || 0) - (b.totalSales || 0)) * dir;
+        case 'prize':   return ((a.totalPrize || 0) - (b.totalPrize || 0)) * dir;
+        case 'balance': return ((a.balance || 0)    - (b.balance || 0))    * dir;
+        case 'tickets': return ((a.ticketCount || 0) - (b.ticketCount || 0)) * dir;
+        case 'date':
+        default: {
+          const aKey = `${a.drawDate}T${a.drawTime}`;
+          const bKey = `${b.drawDate}T${b.drawTime}`;
+          return aKey.localeCompare(bKey) * dir;
+        }
+      }
     });
-  }, [report?.draws, sortDir]);
+  }, [report?.draws, sortBy, sortDir]);
+
+  const toggleDrawSort = (field) => {
+    if (sortBy === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDir(field === 'date' ? 'asc' : 'desc');
+    }
+    setPage(1);
+  };
+
+  // Modal: filtered + sorted items for desglose por número
+  const modalFilteredItems = useMemo(() => {
+    if (!drawDetail.data?.items) return [];
+    let arr = drawDetail.data.items;
+    if (modalSearch.trim()) {
+      const q = modalSearch.trim().toLowerCase();
+      arr = arr.filter(i =>
+        String(i.number).toLowerCase().includes(q) ||
+        (i.name || '').toLowerCase().includes(q)
+      );
+    }
+    const dir = modalSortDir === 'asc' ? 1 : -1;
+    return [...arr].sort((a, b) => {
+      switch (modalSortBy) {
+        case 'amount':  return ((a.totalAmount || 0) - (b.totalAmount || 0)) * dir;
+        case 'tickets': return ((a.ticketCount || 0) - (b.ticketCount || 0)) * dir;
+        case 'prize':   return ((a.potentialPrize || 0) - (b.potentialPrize || 0)) * dir;
+        case 'pct':     return ((a.percentageOfSales || 0) - (b.percentageOfSales || 0)) * dir;
+        case 'number':
+        default: {
+          const na = parseInt(a.number, 10);
+          const nb = parseInt(b.number, 10);
+          if (Number.isFinite(na) && Number.isFinite(nb)) return (na - nb) * dir;
+          return String(a.number).localeCompare(String(b.number)) * dir;
+        }
+      }
+    });
+  }, [drawDetail.data, modalSearch, modalSortBy, modalSortDir]);
+
+  const toggleModalSort = (field) => {
+    if (modalSortBy === field) {
+      setModalSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setModalSortBy(field);
+      setModalSortDir(field === 'number' ? 'asc' : 'desc');
+    }
+  };
+
+  // Reset modal filters when opening a new draw
+  useEffect(() => {
+    if (drawDetail.open && drawDetail.data) {
+      setModalSearch('');
+      setModalSortBy('number');
+      setModalSortDir('asc');
+    }
+  }, [drawDetail.data?.drawId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalPages    = Math.max(1, Math.ceil(sortedDraws.length / PAGE_SIZE));
   const paginatedDraws = sortedDraws.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -345,30 +415,60 @@ export default function ReportesPage() {
               <h3 className="text-sm font-semibold text-gray-700">Desglose por Juego</h3>
             </div>
             {report.byGame?.length > 0 ? (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Balance</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Sort.</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {report.byGame.map(row => (
-                    <tr key={row.gameId} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-2.5 font-medium text-gray-800">{row.game}</td>
-                      <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
-                      <td className="px-4 py-2.5 text-right text-red-600">{fmt(row.totalPrize)}</td>
-                      <td className={`px-4 py-2.5 text-right font-medium ${row.totalBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                        {fmt(row.totalBalance)}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-gray-500">{row.drawCount}</td>
+              <>
+                {/* Desktop table */}
+                <table className="hidden md:table w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Balance</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Sort.</th>
                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {report.byGame.map(row => (
+                      <tr key={row.gameId} className="hover:bg-gray-50/50">
+                        <td className="px-4 py-2.5 font-medium text-gray-800">{row.game}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
+                        <td className="px-4 py-2.5 text-right text-red-600">{fmt(row.totalPrize)}</td>
+                        <td className={`px-4 py-2.5 text-right font-medium ${row.totalBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {fmt(row.totalBalance)}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-500">{row.drawCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {/* Mobile cards */}
+                <ul className="md:hidden divide-y divide-gray-100">
+                  {report.byGame.map(row => (
+                    <li key={row.gameId} className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="font-semibold text-gray-800 text-sm truncate">{row.game}</span>
+                        <span className="text-[11px] text-gray-400 shrink-0">{row.drawCount} sort.</span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs">
+                        <div>
+                          <div className="text-gray-500">Ventas</div>
+                          <div className="font-medium text-gray-800">{fmt(row.totalSales)}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Premios</div>
+                          <div className="font-medium text-red-600">{fmt(row.totalPrize)}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Balance</div>
+                          <div className={`font-bold ${row.totalBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {fmt(row.totalBalance)}
+                          </div>
+                        </div>
+                      </div>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+                </ul>
+              </>
             ) : (
               <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin datos para el período</p>
             )}
@@ -380,26 +480,43 @@ export default function ReportesPage() {
               <h3 className="text-sm font-semibold text-gray-700">Desglose por Fuente</h3>
             </div>
             {report.bySource?.length > 0 ? (
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Fuente</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
-                    <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {report.bySource.map(row => (
-                    <tr key={row.source} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-2.5 font-medium text-gray-800">
-                        {SOURCE_LABELS[row.source] ?? row.source}
-                      </td>
-                      <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
-                      <td className="px-4 py-2.5 text-right text-gray-500">{row.ticketCount}</td>
+              <>
+                {/* Desktop table */}
+                <table className="hidden md:table w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Fuente</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {report.bySource.map(row => (
+                      <tr key={row.source} className="hover:bg-gray-50/50">
+                        <td className="px-4 py-2.5 font-medium text-gray-800">
+                          {SOURCE_LABELS[row.source] ?? row.source}
+                        </td>
+                        <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
+                        <td className="px-4 py-2.5 text-right text-gray-500">{row.ticketCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {/* Mobile cards */}
+                <ul className="md:hidden divide-y divide-gray-100">
+                  {report.bySource.map(row => (
+                    <li key={row.source} className="px-4 py-3 flex items-center justify-between gap-3">
+                      <span className="font-medium text-gray-800 text-sm truncate">
+                        {SOURCE_LABELS[row.source] ?? row.source}
+                      </span>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-semibold text-gray-800">{fmt(row.totalSales)}</div>
+                        <div className="text-[11px] text-gray-500">{row.ticketCount} tickets</div>
+                      </div>
+                    </li>
                   ))}
-                </tbody>
-              </table>
+                </ul>
+              </>
             ) : (
               <p className="px-4 py-6 text-sm text-gray-400 text-center">Sin datos para el período</p>
             )}
@@ -410,7 +527,7 @@ export default function ReportesPage() {
       {/* Detail table — DETL-01 / DETL-02 / DETL-03 */}
       {report && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+          <div className="px-4 py-3 border-b border-gray-100 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
             <h3 className="text-sm font-semibold text-gray-700">
               Detalle por Sorteo
               {sortedDraws.length > 0 && (
@@ -419,19 +536,42 @@ export default function ReportesPage() {
                 </span>
               )}
             </h3>
-            {/* Sort toggle — DETL-03 */}
-            <button
-              onClick={() => { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); setPage(1); }}
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-            >
-              Fecha
-              {sortDir === 'asc' ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
+            {/* Multi-key sort */}
+            <div className="flex gap-1.5 items-center overflow-x-auto -mx-1 px-1 pb-0.5">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase shrink-0">Orden:</span>
+              {[
+                { f: 'date',    l: 'Fecha' },
+                { f: 'sales',   l: 'Ventas' },
+                { f: 'prize',   l: 'Premios' },
+                { f: 'balance', l: 'Balance' },
+                { f: 'tickets', l: 'Tickets' },
+              ].map(({ f, l }) => {
+                const active = sortBy === f;
+                return (
+                  <button
+                    key={f}
+                    type="button"
+                    onClick={() => toggleDrawSort(f)}
+                    className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border shrink-0 transition ${
+                      active
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-gray-700 border-gray-300'
+                    }`}
+                  >
+                    {l}
+                    {active && (sortDir === 'asc'
+                      ? <ArrowUp className="w-3 h-3" />
+                      : <ArrowDown className="w-3 h-3" />)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {sortedDraws.length > 0 ? (
             <>
-              <div className="overflow-x-auto">
+              {/* Desktop table */}
+              <div className="hidden md:block overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
@@ -473,6 +613,53 @@ export default function ReportesPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile cards */}
+              <ul className="md:hidden divide-y divide-gray-100">
+                {paginatedDraws.map(draw => (
+                  <li
+                    key={draw.drawId}
+                    onClick={() => handleDrawClick(draw.drawId)}
+                    className="px-4 py-3 active:bg-gray-50 cursor-pointer"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xs text-gray-500 shrink-0">{fmtDate(draw.drawDate)}</span>
+                        <span className="text-sm font-semibold text-gray-900 shrink-0">{draw.drawTime?.slice(0,5) ?? '—'}</span>
+                        {statusBadge(draw.status)}
+                      </div>
+                      <Eye className="w-4 h-4 text-blue-600 shrink-0" />
+                    </div>
+                    <div className="text-sm font-medium text-gray-800 truncate mb-1">
+                      {draw.game}
+                      {draw.winnerItem && (
+                        <span className="ml-1 text-xs text-gray-500 font-normal">
+                          · 🏆 {draw.winnerItem.number}
+                        </span>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <div className="text-gray-500">Ventas</div>
+                        <div className="font-medium text-gray-800">{fmt(draw.totalSales)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Premios</div>
+                        <div className="font-medium text-red-600">{fmt(draw.totalPrize)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500">Balance</div>
+                        <div className={`font-bold ${draw.balance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {fmt(draw.balance)}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-[11px] text-gray-400 mt-1">
+                      {draw.ticketCount} tickets
+                    </div>
+                  </li>
+                ))}
+              </ul>
 
               {/* Pagination — DETL-02 */}
               {totalPages > 1 && (
@@ -519,24 +706,27 @@ export default function ReportesPage() {
 
       {/* Modal: Desglose por Número */}
       {drawDetail.open && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[85vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50">
+          <div className="bg-white sm:rounded-lg shadow-xl max-w-4xl w-full sm:mx-4 max-h-[90vh] sm:max-h-[85vh] rounded-t-2xl flex flex-col">
+            <div className="flex items-start justify-between p-3 sm:p-4 border-b gap-2">
+              <div className="min-w-0 flex-1">
                 {drawDetail.data ? (
                   <>
-                    {drawDetail.data.game} — {drawDetail.data.drawTime}
-                    <span className="ml-2 text-sm font-normal text-gray-500">
-                      Total: {fmt(drawDetail.data.totalSales)} | {drawDetail.data.ticketCount} tickets
-                    </span>
+                    <h3 className="text-base sm:text-lg font-semibold truncate">
+                      {drawDetail.data.game} — {drawDetail.data.drawTime}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                      {fmt(drawDetail.data.totalSales)} · {drawDetail.data.ticketCount} tickets
+                    </p>
                   </>
-                ) : 'Cargando...'}
-              </h3>
-              <button onClick={() => setDrawDetail({ open: false, data: null, loading: false })} className="text-gray-500 hover:text-gray-700">
+                ) : <h3 className="text-base font-semibold">Cargando...</h3>}
+              </div>
+              <button onClick={() => setDrawDetail({ open: false, data: null, loading: false })} className="text-gray-500 hover:text-gray-700 shrink-0 p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 overflow-y-auto max-h-[70vh]">
+
+            <div className="p-3 sm:p-4 overflow-y-auto flex-1">
               {drawDetail.loading ? (
                 <div className="flex justify-center py-12">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
@@ -544,50 +734,155 @@ export default function ReportesPage() {
               ) : drawDetail.data?.items?.length > 0 ? (
                 <>
                   {drawDetail.data.winnerItem && (
-                    <div className="mb-4 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm">
-                      Ganador: <span className="font-bold">{drawDetail.data.winnerItem.number} — {drawDetail.data.winnerItem.name}</span>
+                    <div className="mb-3 px-3 py-2 bg-green-50 border border-green-200 rounded-lg text-sm flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-green-600 shrink-0" />
+                      <span>Ganador: <span className="font-bold">{drawDetail.data.winnerItem.number} — {drawDetail.data.winnerItem.name}</span></span>
                     </div>
                   )}
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">#</th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nombre</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Apostado</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Tickets</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Premio Pot.</th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">% Venta</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-50">
-                      {[...drawDetail.data.items]
-                        .sort((a, b) => parseInt(a.number) - parseInt(b.number))
-                        .map(item => {
+
+                  {/* Search + sort controls */}
+                  <div className="space-y-2 mb-3 sticky top-0 bg-white pb-2 z-10">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={modalSearch}
+                        onChange={(e) => setModalSearch(e.target.value)}
+                        placeholder="Buscar número o nombre..."
+                        className="w-full pl-9 pr-9 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"
+                      />
+                      {modalSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setModalSearch('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                          aria-label="Limpiar búsqueda"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5 items-center overflow-x-auto pb-0.5">
+                      <span className="text-[10px] font-semibold text-gray-400 uppercase shrink-0">Orden:</span>
+                      {[
+                        { f: 'number',  l: '#' },
+                        { f: 'amount',  l: 'Apostado' },
+                        { f: 'tickets', l: 'Tickets' },
+                        { f: 'prize',   l: 'Premio' },
+                        { f: 'pct',     l: '%' },
+                      ].map(({ f, l }) => {
+                        const active = modalSortBy === f;
+                        return (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => toggleModalSort(f)}
+                            className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs border shrink-0 transition ${
+                              active
+                                ? 'bg-blue-600 text-white border-blue-600'
+                                : 'bg-white text-gray-700 border-gray-300'
+                            }`}
+                          >
+                            {l}
+                            {active && (modalSortDir === 'asc'
+                              ? <ArrowUp className="w-3 h-3" />
+                              : <ArrowDown className="w-3 h-3" />)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {modalFilteredItems.length} de {drawDetail.data.items.length} números
+                    </div>
+                  </div>
+
+                  {modalFilteredItems.length === 0 ? (
+                    <p className="text-center text-gray-400 py-8 text-sm">No hay coincidencias</p>
+                  ) : (
+                    <>
+                      {/* Desktop table */}
+                      <table className="hidden md:table w-full text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">#</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Nombre</th>
+                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Apostado</th>
+                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Tickets</th>
+                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">Premio Pot.</th>
+                            <th className="px-3 py-2 text-right text-xs font-medium text-gray-500">% Venta</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {modalFilteredItems.map(item => {
+                            const isDangerous = drawDetail.data.totalSales > 0 && item.potentialPrize > drawDetail.data.totalSales * 0.7;
+                            return (
+                              <tr key={item.itemId} className={isDangerous ? 'bg-red-50' : 'hover:bg-gray-50/50'}>
+                                <td className="px-3 py-2 font-bold">{item.number}</td>
+                                <td className="px-3 py-2 text-gray-700">{item.name}</td>
+                                <td className="px-3 py-2 text-right font-medium">{fmt(item.totalAmount)}</td>
+                                <td className="px-3 py-2 text-right text-gray-500">{item.ticketCount}</td>
+                                <td className={`px-3 py-2 text-right font-medium ${isDangerous ? 'text-red-600' : 'text-blue-600'}`}>
+                                  {fmt(item.potentialPrize)}
+                                </td>
+                                <td className="px-3 py-2 text-right text-gray-500">{item.percentageOfSales}%</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+
+                      {/* Mobile cards */}
+                      <ul className="md:hidden space-y-2">
+                        {modalFilteredItems.map(item => {
                           const isDangerous = drawDetail.data.totalSales > 0 && item.potentialPrize > drawDetail.data.totalSales * 0.7;
+                          const isWinner = drawDetail.data.winnerItem?.number === item.number;
                           return (
-                            <tr key={item.itemId} className={isDangerous ? 'bg-red-50' : 'hover:bg-gray-50/50'}>
-                              <td className="px-3 py-2 font-bold">{item.number}</td>
-                              <td className="px-3 py-2 text-gray-700">{item.name}</td>
-                              <td className="px-3 py-2 text-right font-medium">{fmt(item.totalAmount)}</td>
-                              <td className="px-3 py-2 text-right text-gray-500">{item.ticketCount}</td>
-                              <td className={`px-3 py-2 text-right font-medium ${isDangerous ? 'text-red-600' : 'text-blue-600'}`}>
-                                {fmt(item.potentialPrize)}
-                              </td>
-                              <td className="px-3 py-2 text-right text-gray-500">{item.percentageOfSales}%</td>
-                            </tr>
+                            <li
+                              key={item.itemId}
+                              className={`rounded-lg border p-2.5 flex items-center gap-3 ${
+                                isWinner ? 'border-green-400 bg-green-50' :
+                                isDangerous ? 'border-red-300 bg-red-50' :
+                                'border-gray-200 bg-white'
+                              }`}
+                            >
+                              <div className={`shrink-0 w-11 h-11 rounded-md flex items-center justify-center font-mono font-bold text-base ${
+                                isWinner ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-900'
+                              }`}>
+                                {item.number}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-semibold text-gray-800 truncate flex items-center gap-1">
+                                  {item.name}
+                                  {isWinner && <Trophy className="w-3.5 h-3.5 text-green-600 shrink-0" />}
+                                </div>
+                                <div className="text-[11px] text-gray-500 mt-0.5">
+                                  Apost. <span className="font-medium text-gray-700">{fmt(item.totalAmount)}</span>
+                                  {' · '}{item.ticketCount} tickets
+                                  {' · '}{item.percentageOfSales}%
+                                </div>
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div className="text-[10px] text-gray-400 uppercase">Premio</div>
+                                <div className={`text-sm font-bold ${isDangerous ? 'text-red-600' : 'text-blue-600'}`}>
+                                  {fmt(item.potentialPrize)}
+                                </div>
+                              </div>
+                            </li>
                           );
                         })}
-                    </tbody>
-                  </table>
+                      </ul>
+                    </>
+                  )}
                 </>
               ) : (
                 <p className="text-center text-gray-400 py-8">No hay datos de números para este sorteo</p>
               )}
             </div>
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
+
+            <div className="p-3 sm:p-4 border-t bg-gray-50 flex justify-end">
               <button
                 onClick={() => setDrawDetail({ open: false, data: null, loading: false })}
-                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300"
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 text-sm"
               >
                 Cerrar
               </button>
