@@ -48,9 +48,9 @@ class GenerateDailyDrawsJob {
   /**
    * Ejecutar el job manualmente
    */
-  async execute() {
+  async execute({ viaWorker = false } = {}) {
     try {
-      if (process.env.PGBOSS_GENERATE_DAILY_DRAWS === 'true') {
+      if (process.env.PGBOSS_GENERATE_DAILY_DRAWS === 'true' && !viaWorker) {
         const boss = getBoss();
         const dateKey = new Date().toISOString().slice(0, 10);
         await boss.send(QUEUES.GENERATE_DAILY_DRAWS, {}, {

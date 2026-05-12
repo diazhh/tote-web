@@ -79,9 +79,9 @@ class SyncApiTicketsJob {
    * - Si son las 5:50pm, sincroniza el sorteo de las 6:00pm
    * - A las 5:55pm cierra el sorteo y deja de sincronizar
    */
-  async execute() {
+  async execute({ viaWorker = false } = {}) {
     try {
-      if (process.env.PGBOSS_SYNC_API_TICKETS === 'true') {
+      if (process.env.PGBOSS_SYNC_API_TICKETS === 'true' && !viaWorker) {
         const boss = getBoss();
         const tickKey = new Date().toISOString().slice(0, 16);
         await boss.send(QUEUES.SYNC_API_TICKETS, {}, {
