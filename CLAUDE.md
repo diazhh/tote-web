@@ -46,8 +46,8 @@ npm run lint                   # ESLint
 - `controllers/` (40 files) - Request handling, validation, delegates to services
 - `services/` (55+ files) - Core business logic
 - `lib/` - Shared utilities: `prisma.js` (singleton), `socket.js`, `imageGenerator.js` (Sharp-based), `logger.js` (Winston), `dateUtils.js`
-- `jobs/` - Legacy Croner-based scheduled jobs (8 jobs)
-- `queue/` - pg-boss PostgreSQL job queue (replacement for Croner)
+- `jobs/` - Croner-based scheduled jobs. Post-migration only 3 are scheduled here (`simulate-bets`, `test-bets`, `special-images`). The other `*.job.js` files remain on disk as **libraries** that the pg-boss workers import for sweep/sync logic — they are no longer scheduled by Croner.
+- `queue/` - pg-boss PostgreSQL job queue. All draw lifecycle / external-API scheduling now lives here, triggered by cron Linux (see below).
 
 **Draw lifecycle:** `SCHEDULED` -> `CLOSED` -> `DRAWN` -> `CANCELLED`
 
@@ -55,7 +55,19 @@ The `PUBLISHED` status has been removed. Draws are considered complete at `DRAWN
 
 **Execute-draw pipeline (pg-boss):** Image generation -> Admin notification -> Social channel publish -> Prize processing -> Stats calculation. Each step is a separate queue worker in `queue/workers/`. Prize processing is the critical step that stops the pipeline on failure.
 
-**Job queue migration (Croner -> pg-boss):** Controlled by `PGBOSS_*` env flags in 6 phases. When a flag is `false`/absent, the legacy Croner job runs. See `.env.example` for phase ordering. Queue names and retry configs are in `queue/constants.js`, worker registration in `queue/register.js`.
+**Job queue migration (Croner -> pg-boss) — COMPLETED 2026-05-12:** All draw lifecycle and external-API scheduling now runs through a unified pipeline:
+
+```
+/etc/cron.d/tote-triggers  (VPS 94, cron Linux)
+        ↓ invokes
+backend/src/queue/trigger-pgboss-cron.mjs
+        ↓ boss.send()
+backend/src/queue/workers/*.worker.js
+```
+
+Backend is the **executor**, not the scheduler. The legacy `backend/src/jobs/*.job.js` files for migrated jobs (`execute-draw`, `generate-daily-draws`, `sync-api-tickets`, `sync-api-planning`, `sync-scrape-tickets`) are kept on disk because the corresponding workers still import them as a library for the inline sync/sweep logic — but they are NOT `.start()`ed by Croner. Queue names and retry configs are in `queue/constants.js`, worker registration in `queue/register.js`. The `PGBOSS_*` env flags are no longer load-bearing (migration is complete on all envs).
+
+To inspect the live schedule on the VPS: `ssh 94 "cat /etc/cron.d/tote-triggers"`.
 
 ### Frontend (`frontend/`)
 
