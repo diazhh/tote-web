@@ -1,5 +1,7 @@
 /**
- * Unit test for the inline recovery branch in execute-draw.
+ * Unit test for the inline recovery helper used by execute-draw-sweep.
+ * Originally lived in jobs/execute-draw.job.js; extracted to
+ * services/draw-recovery.service.js as part of the post-migration cleanup.
  */
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
 
@@ -20,21 +22,12 @@ jest.unstable_mockModule('../lib/logger.js', () => ({
 jest.unstable_mockModule('../services/prewinner-selection.service.js', () => ({
   default: mockSelector,
 }));
-// Heavy downstream services pulled in transitively by execute-draw.job.js.
-// Stub them so the import chain resolves without touching DB/network code.
-jest.unstable_mockModule('../services/admin-notification.service.js', () => ({ default: {} }));
-jest.unstable_mockModule('../services/prize-processor.service.js', () => ({ default: {} }));
-jest.unstable_mockModule('../services/draw-stats.service.js', () => ({ default: {} }));
-jest.unstable_mockModule('../services/system-config.service.js', () => ({ default: {} }));
-jest.unstable_mockModule('../services/draw-pause.service.js', () => ({ default: {} }));
-jest.unstable_mockModule('../queue/boss.js', () => ({ getBoss: jest.fn() }));
-jest.unstable_mockModule('../lib/socket.js', () => ({ emitToAll: jest.fn(), emitToGame: jest.fn() }));
 
-describe('execute-draw recovery branch', () => {
+describe('draw-recovery service', () => {
   let recoverPreselectIfMissing;
 
   beforeAll(async () => {
-    ({ recoverPreselectIfMissing } = await import('../jobs/execute-draw.job.js'));
+    ({ recoverPreselectIfMissing } = await import('../services/draw-recovery.service.js'));
   });
 
   beforeEach(() => {
