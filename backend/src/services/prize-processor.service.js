@@ -56,14 +56,25 @@ class PrizeProcessorService {
         // ──────────────────────────────────────────────────────────────────
 
         // Obtener SOLO los detalles que pertenecen a este sorteo.
-        // Filtramos por TicketDetail.drawId (no por Ticket.drawId): un ticket
-        // multi-play puede tener details apuntando a distintos sorteos, y solo
-        // los que correspondan a `drawId` deben evaluarse contra este winner.
+        //
+        // Solo el adapter de virtuales (WEBHOOK_PUSH) popula TicketDetail.drawId
+        // — su flujo multi-play permite que un mismo ticket tenga details en
+        // distintos sorteos, por lo que el detail necesita su propio drawId.
+        // Los demás flujos (TAQUILLA_ONLINE, EXTERNAL_API, EXTERNAL_SCRAPE)
+        // dejan TicketDetail.drawId en NULL porque todos los details de un
+        // ticket comparten el Ticket.drawId.
+        //
+        // Por eso: si td.drawId está set, debe coincidir con `drawId` (filtro
+        // multi-play); si td.drawId es NULL, fallback a comparar ticket.drawId.
+        //
         // EXCLUIR tickets de tripleta externa (se verifican con lógica especial)
         const allTicketDetails = await tx.ticketDetail.findMany({
           where: {
-            drawId,
-            status: 'ACTIVE'
+            status: 'ACTIVE',
+            OR: [
+              { drawId },
+              { drawId: null, ticket: { drawId } },
+            ],
           },
           include: {
             gameItem: true,
