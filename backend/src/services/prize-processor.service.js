@@ -43,10 +43,16 @@ class PrizeProcessorService {
         const neighborIds = new Set();
 
         if (hasAprox && draw.winnerItem) {
-          const winNum = parseInt(draw.winnerItem.number, 10);
-          const max    = 999;
-          const n1Str  = String(winNum === 0 ? max : winNum - 1).padStart(3, '0');
-          const n2Str  = String(winNum === max ? 0 : winNum + 1).padStart(3, '0');
+          // Derivar el rango y el padding del ancho del número ganador para
+          // soportar juegos de 2 (TERMINAL: 00-99) o 3 dígitos (TRIPLE: 000-999).
+          const winNumStr = String(draw.winnerItem.number);
+          const winNum    = parseInt(winNumStr, 10);
+          const numLen    = winNumStr.length;
+          const max       = Math.pow(10, numLen) - 1;
+          const n1        = winNum === 0   ? max : winNum - 1;
+          const n2        = winNum === max ? 0   : winNum + 1;
+          const n1Str     = String(n1).padStart(numLen, '0');
+          const n2Str     = String(n2).padStart(numLen, '0');
           const neighbors = await tx.gameItem.findMany({
             where: { gameId: draw.game.id, number: { in: [n1Str, n2Str] } },
             select: { id: true },
