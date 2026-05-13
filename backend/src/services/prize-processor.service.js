@@ -55,11 +55,14 @@ class PrizeProcessorService {
         }
         // ──────────────────────────────────────────────────────────────────
 
-        // Obtener SOLO los detalles de tickets que pertenecen a este sorteo
+        // Obtener SOLO los detalles que pertenecen a este sorteo.
+        // Filtramos por TicketDetail.drawId (no por Ticket.drawId): un ticket
+        // multi-play puede tener details apuntando a distintos sorteos, y solo
+        // los que correspondan a `drawId` deben evaluarse contra este winner.
         // EXCLUIR tickets de tripleta externa (se verifican con lógica especial)
         const allTicketDetails = await tx.ticketDetail.findMany({
           where: {
-            ticket: { drawId },
+            drawId,
             status: 'ACTIVE'
           },
           include: {
