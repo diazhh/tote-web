@@ -30,6 +30,20 @@ const DRY_RUN = process.argv.includes('--dry-run');
 const TERMINAL_SLUG = 'terminal-pantera';
 const APROX_CONFIG = { enabled: true, multiplier: 5 };
 
+// Optional --from=YYYY-MM-DD and --to=YYYY-MM-DD (inclusive). Limits which
+// draws are reconsidered for backfill. Config update siempre se aplica.
+function parseDateArg(prefix) {
+  const arg = process.argv.find((a) => a.startsWith(prefix));
+  if (!arg) return null;
+  const value = arg.slice(prefix.length);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new Error(`Invalid date for ${prefix} — expected YYYY-MM-DD, got "${value}"`);
+  }
+  return value;
+}
+const DATE_FROM = parseDateArg('--from=');
+const DATE_TO   = parseDateArg('--to=');
+
 function log(msg, data) {
   const stamp = new Date().toISOString();
   if (data !== undefined) console.log(`[${stamp}] ${msg}`, JSON.stringify(data, null, 2));
@@ -61,17 +75,25 @@ async function ensureAproxConfig() {
   return game;
 }
 
-async function detectAproxVictims(gameId) {
+async function detectAproxVictims(gameId, dateFrom, dateTo) {
   // Details LOST cuyo número es adyacente (con wrap-around) al ganador del draw.
   // Casteo a int con regex chequeo para evitar fallar si algún número tiene
-  // formato no numérico.
-  const rows = await prisma.$queryRaw`
+  // formato no numérico. Filtros opcionales por rango de drawDate.
+  const fromClause = dateFrom ? `AND d."drawDate" >= '${dateFrom}'::date` : '';
+  const toClause   = dateTo   ? `AND d."drawDate" <= '${dateTo}'::date`   : '';
+
+  // gameId interpolado vía template tag para parámetro seguro; las fechas
+  // ya están validadas por parseDateArg (regex YYYY-MM-DD), por lo que la
+  // inyección está acotada.
+  const rows = await prisma.$queryRawUnsafe(
+    `
     SELECT td.id           AS detail_id,
            td."ticketId"   AS ticket_id,
            td."drawId"     AS detail_draw_id,
            t."drawId"      AS ticket_draw_id,
            gi.number       AS apostado,
            wi.number       AS ganador,
+           d."drawDate"    AS draw_date,
            td.amount,
            td.multiplier
     FROM "TicketDetail" td
@@ -79,7 +101,7 @@ async function detectAproxVictims(gameId) {
     JOIN "Draw" d     ON d.id = COALESCE(td."drawId", t."drawId")
     JOIN "GameItem" gi ON gi.id = td."gameItemId"
     JOIN "GameItem" wi ON wi.id = d."winnerItemId"
-    WHERE d."gameId" = ${gameId}
+    WHERE d."gameId" = $1
       AND td.status = 'LOST'
       AND gi.number ~ '^[0-9]+$'
       AND wi.number ~ '^[0-9]+$'
@@ -88,7 +110,11 @@ async function detectAproxVictims(gameId) {
         OR (gi.number::int = 0  AND wi.number::int = 99)
         OR (gi.number::int = 99 AND wi.number::int = 0)
       )
-  `;
+      ${fromClause}
+      ${toClause}
+    `,
+    gameId,
+  );
   return rows;
 }
 
@@ -99,7 +125,11 @@ async function main() {
   const game = await ensureAproxConfig();
 
   // Paso 2: detectar víctimas
-  const victims = await detectAproxVictims(game.id);
+  const rangeMsg = (DATE_FROM || DATE_TO)
+    ? ` (range: ${DATE_FROM || '∅'} → ${DATE_TO || '∅'})`
+    : ' (all history)';
+  log(`Scanning for aprox victims${rangeMsg}...`);
+  const victims = await detectAproxVictims(game.id, DATE_FROM, DATE_TO);
   log(`Aprox victims (LOST details ±1 from winner): ${victims.length}`);
 
   const drawIds = new Set(victims.map((v) => v.detail_draw_id || v.ticket_draw_id));
