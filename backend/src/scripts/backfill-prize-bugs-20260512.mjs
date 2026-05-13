@@ -73,14 +73,18 @@ async function detectBug1Victims() {
 }
 
 async function detectBug2Draws() {
-  // Draws en DRAWN con tickets ACTIVE no-tripleta-externa.
-  // Filtramos en SQL las tripletas externas (source=EXTERNAL_API + providerData.type=TRIPLETA).
+  // Draws cuyos TicketDetail ACTIVE apuntan a ellos (directamente via td.drawId
+  // o indirectamente via ticket.drawId cuando td.drawId es NULL). Esto cubre
+  // tanto stranded por bug#2 puro como tickets multi-play con un detail
+  // huérfano en un draw distinto al ticket.drawId.
+  // Excluye tripletas externas (lógica de premio distinta).
   const rows = await prisma.$queryRaw`
     SELECT DISTINCT d.id, d."drawDate", d."drawTime"
-    FROM "Draw" d
-    JOIN "Ticket" t ON t."drawId" = d.id
-    WHERE d.status = 'DRAWN'
-      AND t.status = 'ACTIVE'
+    FROM "TicketDetail" td
+    JOIN "Ticket" t ON t.id = td."ticketId"
+    JOIN "Draw" d ON d.id = COALESCE(td."drawId", t."drawId")
+    WHERE td.status = 'ACTIVE'
+      AND d.status = 'DRAWN'
       AND NOT (
         t.source = 'EXTERNAL_API'
         AND t."providerData" IS NOT NULL
