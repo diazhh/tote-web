@@ -212,10 +212,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 11-01-PLAN.md — Prisma schema additions (DrawFinancial + DrawFinancialProvider) + [BLOCKING] local migration + decimal.js
-- [ ] 11-02-PLAN.md — draw-financial.service.js (TicketDetail.drawId aggregation, NULL-aware upsert, PrizesNotProcessedError) + calculate-draw-financials.worker.js (two-phase routing) + constants.js + register.js (real worker + Phase 12 commission placeholder) + unit tests
-- [ ] 11-03-PLAN.md — Pipeline integration: phase-SALES boss.send in close-and-ingest (3 return paths) + phase-PRIZES boss.send in step-process-prizes + integration test against live local DB
-- [ ] 11-04-PLAN.md — backfill-draw-financials.mjs (chunked + resumable, --dry-run + --confirm gates, F-10 enum guard, full reconciliation CSV) + 11-DEPLOY.md production deploy procedure
+- [x] 11-01-PLAN.md — Prisma schema additions (DrawFinancial + DrawFinancialProvider) + [BLOCKING] local migration + decimal.js
+- [x] 11-02-PLAN.md — draw-financial.service.js (TicketDetail.drawId aggregation, NULL-aware upsert, PrizesNotProcessedError) + calculate-draw-financials.worker.js (two-phase routing) + constants.js + register.js (real worker + Phase 12 commission placeholder) + unit tests
+- [x] 11-03-PLAN.md — Pipeline integration: phase-SALES boss.send in close-and-ingest (3 return paths) + phase-PRIZES boss.send in step-process-prizes + integration test against live local DB
+- [x] 11-04-PLAN.md — backfill-draw-financials.mjs (chunked + resumable, --dry-run + --confirm gates, F-10 enum guard, full reconciliation CSV) + 11-DEPLOY.md production deploy procedure
 **Pitfall mitigations**: F-1 (prizesProcessed guard), F-2 (upsert pattern in both worker and backfill), F-3 (TicketDetail.drawId aggregation), F-10 (DRAWN-only enum check in backfill), F-11 (boss.createQueue before boss.work), F-13 (service function pattern, not Croner class)
 
 ---
@@ -231,7 +231,13 @@ Plans:
   4. Every Monday at 06:00 VE, a `ProviderWeeklySettlement` row appears (status DRAFT) for each provider with ledger activity in the previous ISO week; re-running the cron upserts rather than duplicating
   5. Admin can view per-draw commission ledger filtered by provider and date range, drill into a weekly settlement, confirm it (status moves to CONFIRMED, amount frozen), and export to Excel/PDF
   6. After running the commission backfill script for 2026-04-17 to deployment date, `ProviderCommissionLedger` contains rows only for draws on or after that date; no ledger rows exist for older draws
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 12-01-PLAN.md — Schema: 4 commission models (Config + Tier + Ledger + Settlement) with (18,8)/append-only/configSnapshot/(isoYear,isoWeek), 2 enums, back-relations on ApiSystem and Draw, [BLOCKING] migrate + prisma generate, dateUtils.js VE ISO-week helpers with F-15 tests
+- [ ] 12-02-PLAN.md — commission.service.js (4 formula evaluators incl. TIERED, effective-config lookup, D-08 upsert, Excel builder), calculate-provider-commission worker (race-guarded), weekly-settlement-snapshot worker (state-conditional), constants.js + register.js (swap placeholder, F-11 createQueue-before-work), unit tests
+- [ ] 12-03-PLAN.md — Pipeline wiring: 3rd parallel boss.send in step-process-prizes both branches, trigger-pgboss-cron.mjs allowlist, commission.controller.js + commission.routes.js (admin auth, F-5 append-only, D-03 backend-enforced state machine, AuditLog writes), /api/commissions mount in index.js, integration test against local prod-mirror DB
+- [ ] 12-04-PLAN.md — Frontend (provider Comisiones tab + /admin/comisiones with Liquidaciones+Ledger tabs + settlement drill-down with Confirmar/Ajustar/Excel/PDF), backfill-provider-commissions.mjs (F-17 enforced, --dry-run/--confirm, reconciliation CSV), 12-DEPLOY.md (LOCAL-ONLY documentation), [CHECKPOINT] human verification of backfill + UI smoke
 **Pitfall mitigations**: F-4 (NUMERIC(18,8) precision, decimal.js ROUND_HALF_UP), F-5 (effectiveFrom append-only config), F-9 (compensating negative rows for cancellations), F-12 (/etc/cron.d/tote-triggers update in deploy checklist), F-15 (ISO week boundary pinned in dateUtils.js), F-17 (go-live constant 2026-04-17; no ledger rows before this date)
 **Note on parallel execution**: Phase 13 schema migration can begin once this phase's Prisma migration (`ProviderWeeklySettlement`) is deployed. Phase 13 does not need Phase 12's workers or UI to be complete.
 **UI hint**: yes
@@ -288,7 +294,7 @@ Phases 1-10 execute in numeric order. v1.3 phases: 11 → 12 → 13 (in parallel
 | 8. Adapter Implementation | v1.2 | 0/2 | Not started | - |
 | 9. Response Contract | v1.2 | 0/1 | Not started | - |
 | 10. Production Deployment | v1.2 | 0/1 | Not started | - |
-| 11. DrawFinancial Foundation | v1.3 | 0/TBD | Not started | - |
-| 12. Provider Commission Engine | v1.3 | 0/TBD | Not started | - |
+| 11. DrawFinancial Foundation | v1.3 | 4/4 | Complete   | 2026-05-15 |
+| 12. Provider Commission Engine | v1.3 | 0/4 | Planned | - |
 | 13. Exchange Rate + Accounting Ledger | v1.3 | 0/TBD | Not started | - |
 | 14. Report Refactor + Weekly P&L | v1.3 | 0/TBD | Not started | - |
