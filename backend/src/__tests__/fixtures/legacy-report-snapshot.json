@@ -1,0 +1,850 @@
+{
+  "_description": "Phase 14 Plan 14-02 — P-A regression net for monitor.service.js#getDailyReport legacy branch. Captured BEFORE the useMaterialized branch refactor; post-refactor _getDailyReportLegacy with the same _input MUST produce a JSON.stringify-equal _response.",
+  "_capturedAt": "2026-05-15T23:55:46.540Z",
+  "_input": {
+    "dateFrom": "2026-05-14",
+    "dateTo": "2026-05-14",
+    "gameId": null,
+    "source": null,
+    "apiSystemId": null
+  },
+  "_response": {
+    "dateFrom": "2026-05-14",
+    "dateTo": "2026-05-14",
+    "gameId": null,
+    "source": null,
+    "apiSystemId": null,
+    "draws": [
+      {
+        "drawId": "d375ae72-2182-41df-bb8d-5c5f4d8f0bb8",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "08:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "15",
+          "name": "ZORRO"
+        },
+        "totalSales": 26345,
+        "totalPrize": 10730,
+        "balance": 15615,
+        "ticketCount": 69
+      },
+      {
+        "drawId": "c29196fa-219f-40c0-88d5-f2e2b84b3653",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "08:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "35",
+          "name": "JIRAFA"
+        },
+        "totalSales": 3330,
+        "totalPrize": 600,
+        "balance": 2730,
+        "ticketCount": 34
+      },
+      {
+        "drawId": "7c5ea175-7ee3-4172-bc36-ffd7b52e6e6a",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "08:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "601",
+          "name": "601"
+        },
+        "totalSales": 13890,
+        "totalPrize": 1400,
+        "balance": 12490,
+        "ticketCount": 195
+      },
+      {
+        "drawId": "f4647860-5b79-4ef6-b69b-f9ea03aa2e5c",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "08:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "01",
+          "name": "01"
+        },
+        "totalSales": 2400,
+        "totalPrize": 300,
+        "balance": 2100,
+        "ticketCount": 45
+      },
+      {
+        "drawId": "01a554a3-8444-4c17-b86b-15e6031eaa5f",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "09:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "12",
+          "name": "CABALLO"
+        },
+        "totalSales": 4750,
+        "totalPrize": 2250,
+        "balance": 2500,
+        "ticketCount": 24
+      },
+      {
+        "drawId": "8019ffb6-0d2e-40ac-90df-de65cdd184c2",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "09:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "97",
+          "name": "97"
+        },
+        "totalSales": 4475,
+        "totalPrize": 0,
+        "balance": 4475,
+        "ticketCount": 61
+      },
+      {
+        "drawId": "01db470d-2c04-4b19-893f-d3c5cfc0fcaa",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "09:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "14",
+          "name": "PALOMA"
+        },
+        "totalSales": 25172.95,
+        "totalPrize": 97563.45,
+        "balance": -72390.5,
+        "ticketCount": 63
+      },
+      {
+        "drawId": "8e37a71b-9f0a-406a-a45d-3a161035c90c",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "09:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "597",
+          "name": "597"
+        },
+        "totalSales": 16310,
+        "totalPrize": 850,
+        "balance": 15460,
+        "ticketCount": 219
+      },
+      {
+        "drawId": "d1172be8-8c7b-44dc-9962-f6b5070fc80d",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "10:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "18",
+          "name": "BURRO"
+        },
+        "totalSales": 6095,
+        "totalPrize": 3000,
+        "balance": 3095,
+        "ticketCount": 29
+      },
+      {
+        "drawId": "8f14f92e-1e13-40a7-9a41-9c7e986a7910",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "10:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "36",
+          "name": "CULEBRA"
+        },
+        "totalSales": 33545,
+        "totalPrize": 5550,
+        "balance": 27995,
+        "ticketCount": 83
+      },
+      {
+        "drawId": "8d3e4ad9-1d59-4e04-876b-306b35e7bbfa",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "10:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "352",
+          "name": "352"
+        },
+        "totalSales": 12930,
+        "totalPrize": 250,
+        "balance": 12680,
+        "ticketCount": 222
+      },
+      {
+        "drawId": "00486842-54dd-4054-a2eb-da74875327be",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "10:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "52",
+          "name": "52"
+        },
+        "totalSales": 3915,
+        "totalPrize": 150,
+        "balance": 3765,
+        "ticketCount": 64
+      },
+      {
+        "drawId": "faeacce2-dfb6-4f27-a2b4-00cf146913cb",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "11:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "24",
+          "name": "IGUANA"
+        },
+        "totalSales": 2405,
+        "totalPrize": 1500,
+        "balance": 905,
+        "ticketCount": 16
+      },
+      {
+        "drawId": "5faf07d2-865d-4b7e-a9e7-0d27d22e43cd",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "11:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "11",
+          "name": "GATO"
+        },
+        "totalSales": 27435,
+        "totalPrize": 2590,
+        "balance": 24845,
+        "ticketCount": 62
+      },
+      {
+        "drawId": "c4ae145e-7cf3-4a56-b444-e9396a871338",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "11:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "29",
+          "name": "29"
+        },
+        "totalSales": 2675,
+        "totalPrize": 750,
+        "balance": 1925,
+        "ticketCount": 50
+      },
+      {
+        "drawId": "a31e07a3-8c88-4a6e-9437-d623b4777e38",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "11:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "029",
+          "name": "029"
+        },
+        "totalSales": 12520,
+        "totalPrize": 6500,
+        "balance": 6020,
+        "ticketCount": 200
+      },
+      {
+        "drawId": "70a5cf59-d652-4ba5-833a-c40d254923a4",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "12:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "35",
+          "name": "JIRAFA"
+        },
+        "totalSales": 20769,
+        "totalPrize": 18500,
+        "balance": 2269,
+        "ticketCount": 41
+      },
+      {
+        "drawId": "d2cd4129-d4c5-4c02-abc4-04290fa04986",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "12:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "992",
+          "name": "992"
+        },
+        "totalSales": 12090,
+        "totalPrize": 0,
+        "balance": 12090,
+        "ticketCount": 188
+      },
+      {
+        "drawId": "adf8b492-d857-4ea4-a779-effe80745033",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "12:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "27",
+          "name": "PERRO"
+        },
+        "totalSales": 2465,
+        "totalPrize": 1500,
+        "balance": 965,
+        "ticketCount": 21
+      },
+      {
+        "drawId": "e7b0d22e-eb45-462f-a1c2-6b9b14e145e4",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "12:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "92",
+          "name": "92"
+        },
+        "totalSales": 4535,
+        "totalPrize": 8800,
+        "balance": -4265,
+        "ticketCount": 70
+      },
+      {
+        "drawId": "34681543-af9f-471c-a528-cbc9c125f055",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "13:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "16",
+          "name": "OSO"
+        },
+        "totalSales": 13420,
+        "totalPrize": 8510,
+        "balance": 4910,
+        "ticketCount": 27
+      },
+      {
+        "drawId": "3eee8c28-b329-46ee-8efa-b3e145115cea",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "13:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "36",
+          "name": "CULEBRA"
+        },
+        "totalSales": 4870,
+        "totalPrize": 1500,
+        "balance": 3370,
+        "ticketCount": 20
+      },
+      {
+        "drawId": "89c41501-07e2-450b-80ca-24b6ff68dab4",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "13:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "462",
+          "name": "462"
+        },
+        "totalSales": 7830,
+        "totalPrize": 0,
+        "balance": 7830,
+        "ticketCount": 154
+      },
+      {
+        "drawId": "99486597-0b2a-407c-9096-ead5340d142e",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "13:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "62",
+          "name": "62"
+        },
+        "totalSales": 3473,
+        "totalPrize": 200,
+        "balance": 3273,
+        "ticketCount": 64
+      },
+      {
+        "drawId": "721f3167-3002-47e2-9cd2-d3291ff5e507",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "14:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "71",
+          "name": "71"
+        },
+        "totalSales": 3178,
+        "totalPrize": 38650,
+        "balance": -35472,
+        "ticketCount": 51
+      },
+      {
+        "drawId": "48d9ad83-8d6f-4bf7-821d-e2ca441b2ccd",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "14:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "571",
+          "name": "571"
+        },
+        "totalSales": 7990,
+        "totalPrize": 0,
+        "balance": 7990,
+        "ticketCount": 152
+      },
+      {
+        "drawId": "3a2c673c-1a05-4c60-8ef0-f84f178e03a8",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "14:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "01",
+          "name": "CARNERO"
+        },
+        "totalSales": 18745,
+        "totalPrize": 2220,
+        "balance": 16525,
+        "ticketCount": 35
+      },
+      {
+        "drawId": "88b31447-437d-4df4-a044-c34695586d19",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "14:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "19",
+          "name": "CHIVO"
+        },
+        "totalSales": 3390,
+        "totalPrize": 900,
+        "balance": 2490,
+        "ticketCount": 22
+      },
+      {
+        "drawId": "3cb4d249-c81b-4147-bf65-be4f85fbf992",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "15:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "89",
+          "name": "89"
+        },
+        "totalSales": 2035,
+        "totalPrize": 150,
+        "balance": 1885,
+        "ticketCount": 33
+      },
+      {
+        "drawId": "d1bada9e-714d-4eb4-9a88-1427b930e2cd",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "15:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "02",
+          "name": "TORO"
+        },
+        "totalSales": 7925,
+        "totalPrize": 3600,
+        "balance": 4325,
+        "ticketCount": 38
+      },
+      {
+        "drawId": "ac685bec-a8e4-40a6-8423-69a8b51d303e",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "15:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "41",
+          "name": "CONEJO"
+        },
+        "totalSales": 13240,
+        "totalPrize": 1110,
+        "balance": 12130,
+        "ticketCount": 39
+      },
+      {
+        "drawId": "f26d18e2-cf95-409d-92ad-df0b2f955450",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "15:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "789",
+          "name": "789"
+        },
+        "totalSales": 8437,
+        "totalPrize": 0,
+        "balance": 8437,
+        "ticketCount": 144
+      },
+      {
+        "drawId": "07b9bd19-828e-43ba-ae60-005c054ed604",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "16:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "214",
+          "name": "214"
+        },
+        "totalSales": 7230,
+        "totalPrize": 0,
+        "balance": 7230,
+        "ticketCount": 148
+      },
+      {
+        "drawId": "1fdbb1e2-e9ef-4e10-b6e3-d438ea7f1de1",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "16:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "09",
+          "name": "ÁGUILA"
+        },
+        "totalSales": 4770,
+        "totalPrize": 3150,
+        "balance": 1620,
+        "ticketCount": 19
+      },
+      {
+        "drawId": "08ab99a5-3b2e-47bb-adb5-a7f9c8ebe7a1",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "16:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "14",
+          "name": "14"
+        },
+        "totalSales": 2315,
+        "totalPrize": 10750,
+        "balance": -8435,
+        "ticketCount": 48
+      },
+      {
+        "drawId": "dea4153e-5a6a-4189-bb74-0514ac73ac49",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "16:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "32",
+          "name": "ARDILLA"
+        },
+        "totalSales": 15015,
+        "totalPrize": 9620,
+        "balance": 5395,
+        "ticketCount": 37
+      },
+      {
+        "drawId": "c035c6af-07ba-4a9d-ad6a-07d01bf8b9e8",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "17:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "61",
+          "name": "61"
+        },
+        "totalSales": 3085,
+        "totalPrize": 1900,
+        "balance": 1185,
+        "ticketCount": 34
+      },
+      {
+        "drawId": "27de5db6-f6fe-4627-958f-11cf6bccf3b8",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "17:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "161",
+          "name": "161"
+        },
+        "totalSales": 8660,
+        "totalPrize": 12000,
+        "balance": -3340,
+        "ticketCount": 157
+      },
+      {
+        "drawId": "ef67c194-e6fe-4ce0-b2ec-5003dcf8bb0b",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "17:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "31",
+          "name": "LAPA"
+        },
+        "totalSales": 4112,
+        "totalPrize": 2340,
+        "balance": 1772,
+        "ticketCount": 15
+      },
+      {
+        "drawId": "62ddd561-708a-4f37-a2f9-5ca028abe322",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "17:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "46",
+          "name": "TIBURON"
+        },
+        "totalSales": 53720,
+        "totalPrize": 25530,
+        "balance": 28190,
+        "ticketCount": 92
+      },
+      {
+        "drawId": "00e2ae84-16eb-45aa-8f6a-e7f38f769b1f",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "18:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "0",
+          "name": "DELFIN"
+        },
+        "totalSales": 53149,
+        "totalPrize": 370,
+        "balance": 52779,
+        "ticketCount": 82
+      },
+      {
+        "drawId": "cfdeb688-2dc2-4829-8497-b488e8b56269",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "18:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "0",
+          "name": "DELFÍN"
+        },
+        "totalSales": 7084,
+        "totalPrize": 2400,
+        "balance": 4684,
+        "ticketCount": 25
+      },
+      {
+        "drawId": "d7179c91-ab84-4cff-b207-232f2ca822ef",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "18:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "673",
+          "name": "673"
+        },
+        "totalSales": 10900,
+        "totalPrize": 650,
+        "balance": 10250,
+        "ticketCount": 176
+      },
+      {
+        "drawId": "5ea082e0-c8e7-4a2f-aa61-9ab524bad6ea",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "18:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "73",
+          "name": "73"
+        },
+        "totalSales": 2270,
+        "totalPrize": 10650,
+        "balance": -8380,
+        "ticketCount": 52
+      },
+      {
+        "drawId": "d4f9648f-b05f-4693-8dcb-c1c13bf140b0",
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "19:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "38",
+          "name": "TURPIAL"
+        },
+        "totalSales": 30251,
+        "totalPrize": 12950,
+        "balance": 17301,
+        "ticketCount": 55
+      },
+      {
+        "drawId": "9ef4edfb-09d0-4482-b7ea-e23836dc9b9a",
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "19:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "245",
+          "name": "245"
+        },
+        "totalSales": 15910,
+        "totalPrize": 150,
+        "balance": 15760,
+        "ticketCount": 223
+      },
+      {
+        "drawId": "94dd7894-43d1-4c4b-aa32-39d106b06649",
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "19:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "45",
+          "name": "45"
+        },
+        "totalSales": 6089,
+        "totalPrize": 12350,
+        "balance": -6261,
+        "ticketCount": 65
+      },
+      {
+        "drawId": "a6c33129-c424-4e42-bf8a-701e76bb28a2",
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "drawDate": "2026-05-14T00:00:00.000Z",
+        "drawTime": "19:00:00",
+        "status": "DRAWN",
+        "winnerItem": {
+          "number": "06",
+          "name": "RANA"
+        },
+        "totalSales": 5370,
+        "totalPrize": 1500,
+        "balance": 3870,
+        "ticketCount": 24
+      }
+    ],
+    "totals": {
+      "totalSales": 562514.95,
+      "totalPrize": 325933.45,
+      "totalBalance": 236581.5,
+      "totalTickets": 3787,
+      "drawCount": 48
+    },
+    "byGame": [
+      {
+        "gameId": "61580ccf-5a2d-4d10-877e-4883515135e4",
+        "game": "LOTTOPANTERA",
+        "totalSales": 330806.95,
+        "totalPrize": 195243.45,
+        "totalBalance": 135563.5,
+        "totalTickets": 685,
+        "drawCount": 12
+      },
+      {
+        "gameId": "d953f80c-4335-4bc9-9f78-9b56193286fe",
+        "game": "LOTOANIMALITO",
+        "totalSales": 56566,
+        "totalPrize": 24240,
+        "totalBalance": 32326,
+        "totalTickets": 287,
+        "drawCount": 12
+      },
+      {
+        "gameId": "69efc4d7-52cb-41a6-951d-be299590f393",
+        "game": "TRIPLE PANTERA",
+        "totalSales": 134697,
+        "totalPrize": 21800,
+        "totalBalance": 112897,
+        "totalTickets": 2178,
+        "drawCount": 12
+      },
+      {
+        "gameId": "741ef8e9-129b-446b-abad-d00f68323f1c",
+        "game": "TERMINAL PANTERA",
+        "totalSales": 40445,
+        "totalPrize": 84650,
+        "totalBalance": -44205,
+        "totalTickets": 637,
+        "drawCount": 12
+      }
+    ],
+    "bySource": [
+      {
+        "source": "WEBHOOK_PUSH",
+        "totalSales": 283284.95,
+        "ticketCount": 955
+      },
+      {
+        "source": "EXTERNAL_API",
+        "totalSales": 245895,
+        "ticketCount": 1198
+      },
+      {
+        "source": "EXTERNAL_SCRAPE",
+        "totalSales": 33335,
+        "ticketCount": 1634
+      }
+    ]
+  }
+}

@@ -3,9 +3,42 @@
  * Proporciona estadísticas por bancas, números y reportes diarios
  */
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import { startOfDayDate, endOfDayDate, getVenezuelaDateAsUTC } from '../lib/dateUtils.js';
+
+/**
+ * Shared apiSystem PULL-vs-PUSH/SCRAPE resolution helper (Plan 14-02 Task 1, O4).
+ *
+ * Centralizes the legacy resolution block (was inline at lines 463-485 of getDailyReport
+ * and 60-88 of accounting-report.service.js) so both the legacy and materialized branches —
+ * and both services — share an identical implementation.
+ *
+ * @param {string|null} apiSystemId
+ * @returns {Promise<{
+ *   pushProviderFilter: boolean,
+ *   drawIdsForPull: string[]|null
+ * }>}
+ *   - pushProviderFilter=true → caller filters tickets by apiSystemId (PUSH/SCRAPE direct attribution)
+ *   - drawIdsForPull non-null  → caller narrows draws by `where.id = { in: drawIdsForPull }` (PULL via ApiDrawMapping)
+ *   - both false/null when apiSystemId is null (no filter)
+ */
+export async function resolveApiSystemFilter(apiSystemId) {
+  if (!apiSystemId) return { pushProviderFilter: false, drawIdsForPull: null };
+  const apiSystem = await prisma.apiSystem.findUnique({
+    where: { id: apiSystemId },
+    select: { mode: true },
+  });
+  if (apiSystem?.mode === 'PUSH' || apiSystem?.mode === 'SCRAPE') {
+    return { pushProviderFilter: true, drawIdsForPull: null };
+  }
+  const mappings = await prisma.apiDrawMapping.findMany({
+    where: { apiConfig: { apiSystemId } },
+    select: { drawId: true },
+  });
+  return { pushProviderFilter: false, drawIdsForPull: mappings.map((m) => m.drawId) };
+}
 
 class MonitorService {
   /**
@@ -440,7 +473,24 @@ class MonitorService {
    * @param {string} [params.source]      - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH (BACK-02)
    * @param {string} [params.apiSystemId] - filter draws by ApiSystem UUID (BACK-02)
    */
-  async getDailyReport({ date = null, dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null } = {}) {
+  async getDailyReport({ date = null, dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, useMaterialized = false } = {}) {
+    if (useMaterialized) {
+      return this._getDailyReportMaterialized({ date, dateFrom, dateTo, gameId, source, apiSystemId });
+    }
+    return this._getDailyReportLegacy({ date, dateFrom, dateTo, gameId, source, apiSystemId });
+  }
+
+  /**
+   * LEGACY branch — verbatim move of the pre-refactor getDailyReport body.
+   *
+   * P-A regression net: `legacy-report-snapshot.json` pins this method's response shape.
+   * Any byte-level drift in JSON.stringify(result) fails the snapshot test (daily-report-legacy-snapshot.test.js).
+   *
+   * The ONLY structural change from the pre-refactor body is that the inline
+   * apiSystem PULL-vs-PUSH/SCRAPE resolution (was lines 463-485) is replaced with
+   * a call to the shared `resolveApiSystemFilter` helper — same downstream effects.
+   */
+  async _getDailyReportLegacy({ date = null, dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null } = {}) {
     try {
       const where = {};
 
@@ -459,20 +509,16 @@ class MonitorService {
         where.gameId = gameId;
       }
 
-      // apiSystemId: resolve differently for PULL vs PUSH/SCRAPE providers
+      // apiSystemId: resolve differently for PULL vs PUSH/SCRAPE providers (via shared helper).
       let pushProviderFilter = false;
       if (apiSystemId) {
-        const apiSystem = await prisma.apiSystem.findUnique({ where: { id: apiSystemId }, select: { mode: true } });
-        if (apiSystem?.mode === 'PUSH' || apiSystem?.mode === 'SCRAPE') {
+        const resolved = await resolveApiSystemFilter(apiSystemId);
+        if (resolved.pushProviderFilter) {
           // PUSH and SCRAPE providers set Ticket.apiSystemId directly — filter by that
           pushProviderFilter = true;
         } else {
           // PULL providers: resolve to draw IDs via ApiDrawMapping (BACK-02)
-          const mappings = await prisma.apiDrawMapping.findMany({
-            where: { apiConfig: { apiSystemId } },
-            select: { drawId: true }
-          });
-          if (mappings.length === 0) {
+          if (resolved.drawIdsForPull.length === 0) {
             return {
               dateFrom, dateTo, gameId: gameId || null,
               source: source || null, apiSystemId,
@@ -480,7 +526,7 @@ class MonitorService {
               byGame: [], bySource: []
             };
           }
-          where.id = { in: mappings.map(m => m.drawId) };
+          where.id = { in: resolved.drawIdsForPull };
         }
       }
 
@@ -607,6 +653,229 @@ class MonitorService {
       };
     } catch (error) {
       logger.error('Error obteniendo reporte:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * MATERIALIZED branch — reads from DrawFinancial + DrawFinancialProvider (Phase 11).
+   *
+   * Eliminates the v1.2 multi-draw attribution bug at the source: DrawFinancial.totalSales
+   * is aggregated upstream via TicketDetail.drawId (NOT Ticket.drawId), so a single ticket
+   * whose details span multiple draws is split correctly across them (FIN-REPORT-02).
+   *
+   * Response shape is IDENTICAL to _getDailyReportLegacy (FIN-REPORT-03): same top-level keys,
+   * same per-draw fields, same totals/byGame/bySource shape.
+   *
+   * Falls back to the legacy branch when:
+   *   - `source` filter is provided: per-ticket source attribution is not preserved in
+   *     DrawFinancialProvider (which keys on apiSystemId only). The legacy branch handles it.
+   */
+  async _getDailyReportMaterialized({ date = null, dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null } = {}) {
+    // Source filter: fall back to legacy because materialized aggregates lose per-ticket source.
+    if (source) {
+      logger.warn(`[monitor.service] _getDailyReportMaterialized: source filter '${source}' not supported by materialized branch — falling back to legacy`);
+      return this._getDailyReportLegacy({ date, dateFrom, dateTo, gameId, source, apiSystemId });
+    }
+
+    try {
+      // Date range vs. legacy single-date — same input handling as legacy.
+      let fromDateStr = null;
+      let toDateStr   = null;
+      if (dateFrom && dateTo) {
+        fromDateStr = dateFrom;
+        toDateStr   = dateTo;
+      } else if (date) {
+        const dateStr = typeof date === 'string' ? date.split('T')[0] : date.toISOString().split('T')[0];
+        fromDateStr = dateStr;
+        toDateStr   = dateStr;
+      } else {
+        // No date filter at all — extremely rare; default to nothing
+        return {
+          dateFrom: null, dateTo: null,
+          gameId: gameId || null, source: null, apiSystemId: apiSystemId || null,
+          draws: [], totals: { totalSales: 0, totalPrize: 0, totalBalance: 0, totalTickets: 0, drawCount: 0 },
+          byGame: [], bySource: []
+        };
+      }
+
+      const fromDate = new Date(fromDateStr + 'T00:00:00.000Z');
+      const toDate   = new Date(toDateStr   + 'T00:00:00.000Z');
+
+      // Resolve apiSystem filter via the shared helper (same as legacy).
+      const resolved = await resolveApiSystemFilter(apiSystemId);
+
+      if (apiSystemId && !resolved.pushProviderFilter && resolved.drawIdsForPull.length === 0) {
+        return {
+          dateFrom: fromDateStr, dateTo: toDateStr,
+          gameId: gameId || null, source: null, apiSystemId,
+          draws: [], totals: { totalSales: 0, totalPrize: 0, totalBalance: 0, totalTickets: 0, drawCount: 0 },
+          byGame: [], bySource: []
+        };
+      }
+
+      // Build dynamic SQL fragments via Prisma.sql (parameterized — no string concat).
+      const gameFilter = gameId
+        ? Prisma.sql`AND d."gameId" = ${gameId}`
+        : Prisma.empty;
+      const pullDrawFilter = (apiSystemId && !resolved.pushProviderFilter)
+        ? Prisma.sql`AND d.id IN (${Prisma.join(resolved.drawIdsForPull)})`
+        : Prisma.empty;
+
+      // Single $queryRaw against Draw LEFT JOIN DrawFinancial — the materialized aggregate.
+      // COALESCE wraps every SUM/value so empty-data days (P-C) return 0, not NULL.
+      const rows = await prisma.$queryRaw`
+        SELECT d.id                                                 AS "drawId",
+               d."gameId"                                            AS "gameId",
+               g.name                                                AS "game",
+               d."drawDate"                                          AS "drawDate",
+               d."drawTime"                                          AS "drawTime",
+               d.status::text                                        AS "status",
+               d."winnerItemId"                                      AS "winnerItemId",
+               wi.number                                             AS "winnerNumber",
+               wi.name                                               AS "winnerName",
+               COALESCE(df."totalSales", 0)::numeric(12,2)           AS "totalSales",
+               COALESCE(df."totalPrize", 0)::numeric(12,2)           AS "totalPrize",
+               COALESCE(df."ticketCount", 0)::int                    AS "ticketCount"
+        FROM   "Draw" d
+        JOIN   "Game" g          ON g.id = d."gameId"
+        LEFT JOIN "GameItem" wi  ON wi.id = d."winnerItemId"
+        LEFT JOIN "DrawFinancial" df ON df."drawId" = d.id
+        WHERE  d."drawDate" >= ${fromDate}
+          AND  d."drawDate" <= ${toDate}
+          ${gameFilter}
+          ${pullDrawFilter}
+        ORDER  BY d."drawDate" ASC, d."drawTime" ASC
+      `;
+
+      // If a PUSH/SCRAPE apiSystem filter is active, replace the per-draw totals with
+      // the provider-specific aggregate from DrawFinancialProvider.
+      let providerOverride = null;
+      if (apiSystemId && resolved.pushProviderFilter) {
+        const drawIds = rows.map((r) => r.drawId);
+        if (drawIds.length > 0) {
+          const providerRows = await prisma.drawFinancialProvider.findMany({
+            where: { apiSystemId, drawId: { in: drawIds } },
+            select: { drawId: true, totalSales: true, totalPrize: true, ticketCount: true },
+          });
+          providerOverride = new Map(providerRows.map((p) => [p.drawId, p]));
+        } else {
+          providerOverride = new Map();
+        }
+      }
+
+      // Build the by-source bucket from DrawFinancialProvider rows joined with ApiSystem.
+      // apiSystem.mode → source mapping:
+      //   PUSH   → WEBHOOK_PUSH
+      //   SCRAPE → EXTERNAL_SCRAPE
+      //   PULL   → EXTERNAL_API
+      //   null apiSystemId → TAQUILLA_ONLINE (D-06 Phase 11 house bucket)
+      const drawIds = rows.map((r) => r.drawId);
+      const providerAgg = drawIds.length > 0
+        ? await prisma.drawFinancialProvider.findMany({
+            where: {
+              drawId: { in: drawIds },
+              ...(apiSystemId && resolved.pushProviderFilter ? { apiSystemId } : {}),
+            },
+            select: {
+              drawId: true, apiSystemId: true, totalSales: true, ticketCount: true,
+              apiSystem: { select: { mode: true } },
+            },
+          })
+        : [];
+
+      const bySourceMap = {};
+      for (const row of providerAgg) {
+        let src;
+        if (row.apiSystemId === null) src = 'TAQUILLA_ONLINE';
+        else if (row.apiSystem?.mode === 'PUSH')   src = 'WEBHOOK_PUSH';
+        else if (row.apiSystem?.mode === 'SCRAPE') src = 'EXTERNAL_SCRAPE';
+        else                                       src = 'EXTERNAL_API';
+        if (!bySourceMap[src]) {
+          bySourceMap[src] = { source: src, totalSales: 0, ticketCount: 0 };
+        }
+        bySourceMap[src].totalSales  += parseFloat(row.totalSales);
+        bySourceMap[src].ticketCount += row.ticketCount;
+      }
+
+      // Compose per-draw response (same shape as legacy).
+      const report = [];
+      const byGameMap = {};
+
+      for (const row of rows) {
+        let totalSales = parseFloat(row.totalSales);
+        let totalPrize = parseFloat(row.totalPrize);
+        let ticketCount = parseInt(row.ticketCount, 10);
+
+        if (providerOverride) {
+          const override = providerOverride.get(row.drawId);
+          if (override) {
+            totalSales  = parseFloat(override.totalSales);
+            totalPrize  = parseFloat(override.totalPrize);
+            ticketCount = override.ticketCount;
+          } else {
+            totalSales = 0;
+            totalPrize = 0;
+            ticketCount = 0;
+          }
+        }
+
+        const balance = totalSales - totalPrize;
+
+        report.push({
+          drawId:      row.drawId,
+          gameId:      row.gameId,
+          game:        row.game,
+          drawDate:    row.drawDate,
+          drawTime:    row.drawTime,
+          status:      row.status,
+          winnerItem:  row.winnerItemId ? { number: row.winnerNumber, name: row.winnerName } : null,
+          totalSales,
+          totalPrize,
+          balance,
+          ticketCount,
+        });
+
+        if (!byGameMap[row.gameId]) {
+          byGameMap[row.gameId] = {
+            gameId:       row.gameId,
+            game:         row.game,
+            totalSales:   0,
+            totalPrize:   0,
+            totalBalance: 0,
+            totalTickets: 0,
+            drawCount:    0,
+          };
+        }
+        const g = byGameMap[row.gameId];
+        g.totalSales   += totalSales;
+        g.totalPrize   += totalPrize;
+        g.totalBalance += balance;
+        g.totalTickets += ticketCount;
+        g.drawCount++;
+      }
+
+      const totals = {
+        totalSales:   report.reduce((sum, r) => sum + r.totalSales,  0),
+        totalPrize:   report.reduce((sum, r) => sum + r.totalPrize,  0),
+        totalBalance: report.reduce((sum, r) => sum + r.balance,     0),
+        totalTickets: report.reduce((sum, r) => sum + r.ticketCount, 0),
+        drawCount:    report.length,
+      };
+
+      return {
+        dateFrom: fromDateStr,
+        dateTo:   toDateStr,
+        gameId:      gameId      || null,
+        source:      null,
+        apiSystemId: apiSystemId || null,
+        draws:   report,
+        totals,
+        byGame:   Object.values(byGameMap),
+        bySource: Object.values(bySourceMap),
+      };
+    } catch (error) {
+      logger.error('Error obteniendo reporte (materialized):', error);
       throw error;
     }
   }
