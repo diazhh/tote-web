@@ -91,6 +91,27 @@ export async function registerAllWorkers(boss) {
     logger.info('[pg-boss] Pipeline execute-draw registrado (trigger via cron Linux, teamSize=3)');
   }
 
+  // Phase 11: DrawFinancial materialization (calculate-draw-financials) +
+  // Phase 12 placeholder (calculate-provider-commission). Always-on per CLAUDE.md
+  // ("PGBOSS_* env flags are no longer load-bearing"). F-11 demands createQueue
+  // BEFORE work — both queues are registered here so a Phase 12 deploy that swaps
+  // the commission worker logic doesn't need to touch register.js again.
+  const { calculateDrawFinancialsWorker } = await import('./workers/calculate-draw-financials.worker.js');
+
+  await boss.createQueue(QUEUES.CALCULATE_DRAW_FINANCIALS);
+  await boss.createQueue(QUEUES.CALCULATE_PROVIDER_COMMISSION); // D-15 placeholder
+
+  await boss.work(QUEUES.CALCULATE_DRAW_FINANCIALS, QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS], calculateDrawFinancialsWorker);
+
+  // Phase 12 placeholder — no-op handler. MUST NOT throw under any circumstance (D-15);
+  // an exception here would dead-letter Phase 12's first test send and break the deploy.
+  await boss.work(QUEUES.CALCULATE_PROVIDER_COMMISSION, QUEUE_CONFIGS[QUEUES.CALCULATE_PROVIDER_COMMISSION], async (jobs) => {
+    const job = Array.isArray(jobs) ? jobs[0] : jobs;
+    logger.info(`[calculate-provider-commission] phase-12 placeholder, drawId=${job.data?.drawId}`);
+    return { placeholder: true };
+  });
+  logger.info('[pg-boss] Workers calculate-draw-financials + commission-placeholder registrados');
+
   // Retry failed publications — siempre activo, cada 5 minutos
   const { retryFailedPublicationsWorker } = await import('./workers/retry-failed-publications.worker.js');
   await boss.createQueue(QUEUES.RETRY_FAILED_PUBLICATIONS);

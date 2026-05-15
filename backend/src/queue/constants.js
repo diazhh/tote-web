@@ -11,6 +11,11 @@ export const QUEUES = {
   STEP_PUBLISH_DRAW: 'step-publish-draw',
   STEP_PROCESS_PRIZES: 'step-process-prizes',
   STEP_CALCULATE_STATS: 'step-calculate-stats',
+  // Phase 11 (FIN-AGG): materialized DrawFinancial aggregate, two-phase (SALES + PRIZES)
+  CALCULATE_DRAW_FINANCIALS: 'calculate-draw-financials',
+  // Phase 12 placeholder (D-15) — registered now to prevent F-11 silent-drop on Phase 12's
+  // first deploy. Worker logic is a no-op until Phase 12 swaps in commission calculation.
+  CALCULATE_PROVIDER_COMMISSION: 'calculate-provider-commission',
   SYNC_API_PLANNING: 'sync-api-planning',
   SYNC_API_TICKETS: 'sync-api-tickets',
   SYNC_SCRAPE_TICKETS: 'sync-scrape-tickets',
@@ -95,6 +100,20 @@ export const QUEUE_CONFIGS = {
     expireInMinutes: 10,
   },
   [QUEUES.STEP_CALCULATE_STATS]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 2,
+  },
+  [QUEUES.CALCULATE_DRAW_FINANCIALS]: {
+    // Slightly larger window than STEP_CALCULATE_STATS — two-phase + per-provider upserts.
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 3,
+  },
+  [QUEUES.CALCULATE_PROVIDER_COMMISSION]: {
+    // Phase 12 placeholder — fast handler, no real work yet.
     retryLimit: 3,
     retryDelay: 5,
     retryBackoff: true,
