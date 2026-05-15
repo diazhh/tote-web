@@ -305,10 +305,12 @@ async function main() {
       DRY_RUN ? 'dry-run' : 'confirm'
     }`
   );
+  // ledgerWritten reflects ACTUAL rows persisted to ProviderCommissionLedger.
+  // In confirm mode that equals csvRows.length (we query the table after the
+  // write). In dry-run mode no rows are written, so report 0.
+  const ledgerWritten = DRY_RUN ? 0 : csvRows.length;
   log(
-    `SUMMARY: ledgerWritten=${
-      DRY_RUN ? 0 : processed - errors
-    }, skipped(no_config)=${totalSkipped}, errors=${errors}, drawsConsidered=${remaining.length}`
+    `SUMMARY: ledgerWritten=${ledgerWritten}, skipped(no_config)=${totalSkipped}, errors=${errors}, drawsConsidered=${remaining.length}, drawsIterated=${processed}`
   );
 
   if (DRY_RUN) {
