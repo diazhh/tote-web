@@ -209,7 +209,13 @@ Plans:
   3. Re-running the worker for an existing draw updates the row (upsert) rather than throwing a duplicate-key error
   4. The worker refuses to write `totalPrize` for a draw where `Draw.prizesProcessed = false` and throws an explicit error instead of writing a zero-prize row
   5. After running the backfill script, `SELECT COUNT(*) FROM DrawFinancial` matches the count of DRAWN draws in the database; a 10-draw spot-check SQL confirms totals match manual `TicketDetail` sums
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 11-01-PLAN.md — Prisma schema additions (DrawFinancial + DrawFinancialProvider) + [BLOCKING] local migration + decimal.js
+- [ ] 11-02-PLAN.md — draw-financial.service.js (TicketDetail.drawId aggregation, NULL-aware upsert, PrizesNotProcessedError) + calculate-draw-financials.worker.js (two-phase routing) + constants.js + register.js (real worker + Phase 12 commission placeholder) + unit tests
+- [ ] 11-03-PLAN.md — Pipeline integration: phase-SALES boss.send in close-and-ingest (3 return paths) + phase-PRIZES boss.send in step-process-prizes + integration test against live local DB
+- [ ] 11-04-PLAN.md — backfill-draw-financials.mjs (chunked + resumable, --dry-run + --confirm gates, F-10 enum guard, full reconciliation CSV) + 11-DEPLOY.md production deploy procedure
 **Pitfall mitigations**: F-1 (prizesProcessed guard), F-2 (upsert pattern in both worker and backfill), F-3 (TicketDetail.drawId aggregation), F-10 (DRAWN-only enum check in backfill), F-11 (boss.createQueue before boss.work), F-13 (service function pattern, not Croner class)
 
 ---
