@@ -12,6 +12,7 @@ import { getBoss } from './queue/boss.js';
 import { registerAllWorkers } from './queue/register.js';
 import whatsappBaileysService from './services/whatsapp-baileys.service.js';
 import adminTelegramBotService from './services/admin-telegram-bot.service.js';
+import { staticStorageGuard } from './middlewares/static-storage-guard.middleware.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -133,6 +134,9 @@ const __dirname = path.dirname(__filename);
 // Imágenes generadas — cacheables por 1 día (los assets no cambian una vez
 // publicados). Sin esto, cada hit del feed social repetía el bytes desde Node,
 // drenando ancho de banda del VPS.
+// P-1 guard — block public access to /storage/receipts/* before the static
+// handler runs. Receipts are auth-gated via /api/contabilidad/asientos/:id/attachments/:attId.
+app.use('/storage', staticStorageGuard);
 app.use('/storage', express.static(path.join(__dirname, '../storage'), {
   maxAge: '1d',
   immutable: true,
