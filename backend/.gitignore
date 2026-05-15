@@ -17,6 +17,7 @@ build/
 # Storage
 storage/output/
 storage/whatsapp-sessions/
+storage/backfill-reports/*.csv
 *.log
 
 # IDE
