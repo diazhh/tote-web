@@ -362,6 +362,12 @@ model User {
   movements             PlayerMovement[] // Historial de movimientos (trazabilidad)
   playerStats           PlayerStats? // Estadísticas acumuladas
 
+  // Phase 13: Exchange Rate + Accounting Ledger back-relations
+  exchangeRatesCreated ExchangeRate[]
+  categoriesCreated    Category[]
+  accountingEntries    AccountingEntry[]
+  attachmentsUploaded  AccountingEntryAttachment[]
+
   // Portal de proveedores: vincula el User con el ApiSystem al que pertenece (solo PROVIDER role)
   apiSystemId String?
   apiSystem   ApiSystem? @relation(fields: [apiSystemId], references: [id])
@@ -1307,6 +1313,9 @@ model ProviderWeeklySettlement {
 
   apiSystem ApiSystem @relation(fields: [apiSystemId], references: [id])
 
+  // Phase 13: PAYMENT-type AccountingEntry rows linked to this settlement (D-03)
+  payments AccountingEntry[]
+
   @@unique([apiSystemId, isoYear, isoWeek]) // D-06 / FIN-COMM-07
   @@index([isoYear, isoWeek])
   @@index([apiSystemId, status])
@@ -1466,4 +1475,132 @@ model DrawItemQuota {
 
   @@unique([drawId, gameItemId])
   @@index([drawId])
+}
+
+// ============================================
+// PHASE 13: EXCHANGE RATE + ACCOUNTING LEDGER
+// ============================================
+// Domain: admin registra tasas BsF/USD inmutables (BCV/PARALELO/OTRO) y asientos
+// contables (INCOME/EXPENSE/PAYMENT) en BsF o USD con adjuntos de comprobante.
+// Append-only — correcciones via reversal entry, nunca UPDATE/DELETE histórico.
+// PAYMENT opcionalmente enlaza a ProviderWeeklySettlement (Phase 12).
+// CONTEXT.md D-01..D-07, REQUIREMENTS FIN-RATE-01..05 + FIN-LEDGER-01..09.
+
+enum AccountingEntryType {
+  INCOME
+  EXPENSE
+  PAYMENT
+}
+
+enum ExchangeRateType {
+  BCV
+  PARALELO
+  OTRO
+}
+
+enum AccountingCurrency {
+  BsF
+  USD
+}
+
+// Tasa de cambio diaria inmutable (FIN-RATE-02). NO @@unique en date — D-01 permite
+// múltiples rateType por fecha. Lookup chokepoint = (date, createdAt DESC LIMIT 1).
+model ExchangeRate {
+  id           String           @id @default(uuid())
+  date         DateTime         @db.Date // DATE column — sin time/TZ trap
+  rateBsPerUsd Decimal          @db.Decimal(18, 8) // F-4 precisión
+  rateType     ExchangeRateType // F-8 — columna desde día uno
+  notes        String?
+  createdById  String
+  createdAt    DateTime         @default(now())
+
+  createdBy         User              @relation(fields: [createdById], references: [id])
+  accountingEntries AccountingEntry[]
+
+  @@index([date, createdAt(sort: Desc)]) // D-01 picker — last loaded of the day
+  @@index([rateType, date])
+}
+
+// Categorías configurables por tipo de asiento (D-02). Soft-delete via isActive
+// para preservar etiquetas históricas en asientos ya creados.
+model Category {
+  id          String              @id @default(uuid())
+  name        String
+  appliesTo   AccountingEntryType
+  isActive    Boolean             @default(true) // D-02 — nunca hard-delete
+  createdById String
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  createdBy User              @relation(fields: [createdById], references: [id])
+  entries   AccountingEntry[]
+
+  @@unique([appliesTo, name])
+  @@index([appliesTo, isActive])
+}
+
+// Asiento contable. amountBsF + entryDate + exchangeRateId son INMUTABLES post-create
+// (FIN-LEDGER-09). description + categoryId + attachments son editables.
+// Reversal via D-06: nueva fila con monto negativo + reversesId apuntando al original.
+// PAYMENT opcionalmente enlaza a ProviderWeeklySettlement (D-03).
+model AccountingEntry {
+  id               String              @id @default(uuid())
+  type             AccountingEntryType
+  entryDate        DateTime            @db.Date // pure DATE — A2
+  categoryId       String
+  amountBsF        Decimal             @db.Decimal(18, 8) // IMMUTABLE
+  originalAmount   Decimal?            @db.Decimal(18, 8) // null para BsF-native
+  originalCurrency AccountingCurrency
+  exchangeRateId   String? // null para BsF-native; LOCKED at create (F-7)
+  description      String // EDITABLE (FIN-LEDGER-09)
+  createdById      String
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  // Reversal (D-06) — self-relation
+  reversesId     String? @unique // FK al asiento que este row reversa
+  reversedById   String? @unique // FK al row de reversal que reversó ESTE
+  reversalReason String?
+
+  // PAYMENT → Settlement (D-03) — opcional, N pagos por settlement
+  settlementId String?
+
+  // Número secuencial humano-legible para descripciones de reversal y exports
+  sequentialNo Int @unique @default(autoincrement())
+
+  // Relaciones
+  category     Category                    @relation(fields: [categoryId], references: [id])
+  exchangeRate ExchangeRate?               @relation(fields: [exchangeRateId], references: [id])
+  createdBy    User                        @relation(fields: [createdById], references: [id])
+  settlement   ProviderWeeklySettlement?   @relation(fields: [settlementId], references: [id])
+  attachments  AccountingEntryAttachment[]
+
+  // Self-relation named "EntryReversal" (Prisma canonical idiom):
+  // FK side declara fields/references; back-side es fields-less.
+  reverses   AccountingEntry? @relation("EntryReversal", fields: [reversesId], references: [id])
+  reversedBy AccountingEntry? @relation("EntryReversal")
+
+  @@index([entryDate, type])
+  @@index([categoryId, entryDate])
+  @@index([settlementId])
+  @@index([type, entryDate])
+}
+
+// Adjunto (PDF/JPG/PNG, max 5MB) — N por asiento (D-04). mimeType validado por
+// file-type byte inspection — NUNCA confiar req.file.mimetype del cliente (F-14).
+// filename es UUID-based; originalName preservado solo para UI.
+model AccountingEntryAttachment {
+  id           String   @id @default(uuid())
+  entryId      String
+  filename     String // UUID-based, e.g. "a1b2c3d4-e5f6.pdf"
+  originalName String // operator-supplied
+  mimeType     String // byte-validated
+  sizeBytes    Int
+  uploadedById String
+  uploadedAt   DateTime @default(now())
+
+  entry      AccountingEntry @relation(fields: [entryId], references: [id], onDelete: Cascade) // D-04 defensivo
+  uploadedBy User            @relation(fields: [uploadedById], references: [id])
+
+  @@index([entryId])
 }
