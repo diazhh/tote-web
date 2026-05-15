@@ -21,6 +21,13 @@ export async function stepProcessPrizesWorker(jobs) {
       singletonKey: `stats-${drawId}`,
       ...QUEUE_CONFIGS[QUEUES.STEP_CALCULATE_STATS],
     });
+
+    // Phase 11 (D-11): parallel-trigger DrawFinancial phase PRIZES
+    await boss.send(QUEUES.CALCULATE_DRAW_FINANCIALS, { drawId, phase: 'PRIZES' }, {
+      singletonKey: `df-prizes-${drawId}`,
+      ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
+    });
+
     return { skipped: true, reason: 'already_processed' };
   }
 
@@ -43,6 +50,12 @@ export async function stepProcessPrizesWorker(jobs) {
   await boss.send(QUEUES.STEP_CALCULATE_STATS, { drawId }, {
     singletonKey: `stats-${drawId}`,
     ...QUEUE_CONFIGS[QUEUES.STEP_CALCULATE_STATS],
+  });
+
+  // Phase 11 (D-11): parallel-trigger DrawFinancial phase PRIZES
+  await boss.send(QUEUES.CALCULATE_DRAW_FINANCIALS, { drawId, phase: 'PRIZES' }, {
+    singletonKey: `df-prizes-${drawId}`,
+    ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
   });
 
   return { success: true, drawId, ...result };
