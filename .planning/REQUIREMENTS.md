@@ -100,4 +100,43 @@ Explicit exclusions with reasoning:
 
 | REQ-ID | Phase | Status |
 |--------|-------|--------|
-| (Filled by roadmapper) | | |
+| FIN-AGG-01 | Phase 11 | Pending |
+| FIN-AGG-02 | Phase 11 | Pending |
+| FIN-AGG-03 | Phase 11 | Pending |
+| FIN-AGG-04 | Phase 11 | Pending |
+| FIN-AGG-05 | Phase 11 | Pending |
+| FIN-AGG-06 | Phase 11 | Pending |
+| FIN-AGG-07 | Phase 11 | Pending |
+| FIN-COMM-01 | Phase 12 | Pending |
+| FIN-COMM-02 | Phase 12 | Pending |
+| FIN-COMM-03 | Phase 12 | Pending |
+| FIN-COMM-04 | Phase 12 | Pending |
+| FIN-COMM-05 | Phase 12 | Pending |
+| FIN-COMM-06 | Phase 12 | Pending |
+| FIN-COMM-07 | Phase 12 | Pending |
+| FIN-COMM-08 | Phase 12 | Pending |
+| FIN-COMM-09 | Phase 12 | Pending |
+| FIN-COMM-10 | Phase 12 | Pending |
+| FIN-COMM-11 | Phase 12 | Pending |
+| FIN-COMM-12 | Phase 12 | Pending |
+| FIN-RATE-01 | Phase 13 | Pending |
+| FIN-RATE-02 | Phase 13 | Pending |
+| FIN-RATE-03 | Phase 13 | Pending |
+| FIN-RATE-04 | Phase 13 | Pending |
+| FIN-RATE-05 | Phase 13 | Pending |
+| FIN-LEDGER-01 | Phase 13 | Pending |
+| FIN-LEDGER-02 | Phase 13 | Pending |
+| FIN-LEDGER-03 | Phase 13 | Pending |
+| FIN-LEDGER-04 | Phase 13 | Pending |
+| FIN-LEDGER-05 | Phase 13 | Pending |
+| FIN-LEDGER-06 | Phase 13 | Pending |
+| FIN-LEDGER-07 | Phase 13 | Pending |
+| FIN-LEDGER-08 | Phase 13 | Pending |
+| FIN-LEDGER-09 | Phase 13 | Pending |
+| FIN-REPORT-01 | Phase 14 | Pending |
+| FIN-REPORT-02 | Phase 14 | Pending |
+| FIN-REPORT-03 | Phase 14 | Pending |
+| FIN-REPORT-04 | Phase 14 | Pending |
+| FIN-REPORT-05 | Phase 14 | Pending |
+| FIN-REPORT-06 | Phase 14 | Pending |
+| FIN-REPORT-07 | Phase 14 | Pending |

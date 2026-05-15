@@ -5,6 +5,7 @@
 - ✅ **v1.0 Multi-Provider Webhook System** - Phases 1-4 (shipped 2026-04-01)
 - ✅ **v1.1 Reports Dashboard** - Phases 5-7 (shipped 2026-04-07)
 - 🚧 **v1.2 Webhook Provider Integration (Virtuales)** - Phases 8-10 (in progress)
+- 🔜 **v1.3 Capa Financiera y Contabilidad** - Phases 11-14 (planned)
 
 ## Phases
 
@@ -186,10 +187,88 @@ Plans:
 Plans:
 - [ ] 10-01-PLAN.md — Production deploy (rename adapter, git pull, pm2 restart) + E2E test with provider + verify tickets appear in reports
 
+---
+
+## Phase Details
+
+### 🔜 v1.3 Capa Financiera y Contabilidad
+
+**Milestone Goal:** Materializar agregados financieros por sorteo en DB para acelerar reportes, calcular comisiones automáticas por proveedor con liquidación semanal, e introducir un módulo contable multi-moneda (BsF funcional) con gestión de pagos, gastos y tasa de cambio.
+
+**Build order rationale:** DrawFinancial aggregates (Phase 11) are the foundation that commission calculations (Phase 12) read from. Exchange rates and accounting entries (Phase 13) can begin as soon as Phase 12's schema migration lands — the only cross-phase FK dependency is `AccountingEntry → ProviderWeeklySettlement`, so Phase 13 schema work runs in parallel with Phase 12 workers and UI. The report refactor (Phase 14) is gated last because flipping `REPORT_USE_MATERIALIZED=true` before the Phase 11 backfill is validated would expose zeros for all historical draws.
+
+---
+
+### Phase 11: DrawFinancial Foundation
+**Goal**: Every completed draw has a materialized `DrawFinancial` row in the database — including all ~2600 historical draws — computed via `TicketDetail.drawId` so multi-draw tickets are correctly attributed from day one
+**Depends on**: Phase 10 (v1.2 complete)
+**Requirements**: FIN-AGG-01, FIN-AGG-02, FIN-AGG-03, FIN-AGG-04, FIN-AGG-05, FIN-AGG-06, FIN-AGG-07
+**Success Criteria** (what must be TRUE):
+  1. After a draw closes, a `DrawFinancial` row exists with `totalSales` and `ticketCount` populated; after prizes process, the same row is updated with `totalPrize`, `utility`, and `totalizedAt`
+  2. For any draw, `SELECT SUM(amount) FROM TicketDetail WHERE drawId = :id` matches `DrawFinancial.totalSales` — discrepancies flag that the worker aggregated via `Ticket.drawId` instead
+  3. Re-running the worker for an existing draw updates the row (upsert) rather than throwing a duplicate-key error
+  4. The worker refuses to write `totalPrize` for a draw where `Draw.prizesProcessed = false` and throws an explicit error instead of writing a zero-prize row
+  5. After running the backfill script, `SELECT COUNT(*) FROM DrawFinancial` matches the count of DRAWN draws in the database; a 10-draw spot-check SQL confirms totals match manual `TicketDetail` sums
+**Plans**: TBD
+**Pitfall mitigations**: F-1 (prizesProcessed guard), F-2 (upsert pattern in both worker and backfill), F-3 (TicketDetail.drawId aggregation), F-10 (DRAWN-only enum check in backfill), F-11 (boss.createQueue before boss.work), F-13 (service function pattern, not Croner class)
+
+---
+
+### Phase 12: Provider Commission Engine
+**Goal**: Commissions are calculated automatically per draw, frozen in a weekly settlement ledger, and fully manageable from the admin UI — including TIERED bracket formulas and a historical backfill from 2026-04-17
+**Depends on**: Phase 11 (DrawFinancial rows and DrawFinancialProvider rows must exist)
+**Requirements**: FIN-COMM-01, FIN-COMM-02, FIN-COMM-03, FIN-COMM-04, FIN-COMM-05, FIN-COMM-06, FIN-COMM-07, FIN-COMM-08, FIN-COMM-09, FIN-COMM-10, FIN-COMM-11, FIN-COMM-12
+**Success Criteria** (what must be TRUE):
+  1. Admin can create a commission config for a provider, choose formula type (SALES_PCT, UTILITY_PCT, SALES_AND_UTILITY_PCT, or TIERED), enter rates/brackets, and the config appears in the provider list immediately; changing the formula creates a new versioned row without altering the previous one
+  2. After a draw totalizes, a `ProviderCommissionLedger` row appears for each provider that has tickets in that draw, with `amount` calculated using the commission config effective at `draw.drawnAt` (not the current config)
+  3. A provider with no commission config produces a warning log and a skipped ledger entry — the draw pipeline does not stop or retry
+  4. Every Monday at 06:00 VE, a `ProviderWeeklySettlement` row appears (status DRAFT) for each provider with ledger activity in the previous ISO week; re-running the cron upserts rather than duplicating
+  5. Admin can view per-draw commission ledger filtered by provider and date range, drill into a weekly settlement, confirm it (status moves to CONFIRMED, amount frozen), and export to Excel/PDF
+  6. After running the commission backfill script for 2026-04-17 to deployment date, `ProviderCommissionLedger` contains rows only for draws on or after that date; no ledger rows exist for older draws
+**Plans**: TBD
+**Pitfall mitigations**: F-4 (NUMERIC(18,8) precision, decimal.js ROUND_HALF_UP), F-5 (effectiveFrom append-only config), F-9 (compensating negative rows for cancellations), F-12 (/etc/cron.d/tote-triggers update in deploy checklist), F-15 (ISO week boundary pinned in dateUtils.js), F-17 (go-live constant 2026-04-17; no ledger rows before this date)
+**Note on parallel execution**: Phase 13 schema migration can begin once this phase's Prisma migration (`ProviderWeeklySettlement`) is deployed. Phase 13 does not need Phase 12's workers or UI to be complete.
+**UI hint**: yes
+
+---
+
+### Phase 13: Exchange Rate + Accounting Ledger
+**Goal**: Admin can record daily exchange rates (immutable, typed by BCV/PARALELO/OTRO) and create accounting entries in BsF or USD with receipt attachments — all stored with full audit trail and linked to commission settlements when applicable
+**Depends on**: Phase 12 schema migration (ProviderWeeklySettlement model must exist for the PAYMENT→settlement FK); can run in parallel with Phase 12 workers and UI work
+**Requirements**: FIN-RATE-01, FIN-RATE-02, FIN-RATE-03, FIN-RATE-04, FIN-RATE-05, FIN-LEDGER-01, FIN-LEDGER-02, FIN-LEDGER-03, FIN-LEDGER-04, FIN-LEDGER-05, FIN-LEDGER-06, FIN-LEDGER-07, FIN-LEDGER-08, FIN-LEDGER-09
+**Success Criteria** (what must be TRUE):
+  1. Admin can enter a daily rate with date, rateBsPerUsd, rateType (BCV/PARALELO/OTRO), and optional notes; the rate is visible in the historical timeline immediately; attempting to POST to the same date again creates a new row, it does not overwrite the existing one
+  2. Submitting a USD-denominated accounting entry on a date with no `ExchangeRate` row is blocked — the UI shows "No hay tasa de cambio para [date] — ingrese la tasa primero" and the submit button is disabled; the backend rejects it too
+  3. Admin can create an INCOME, EXPENSE, or PAYMENT entry; USD entries automatically populate `amountBsF` using the rate for `entryDate`; the stored `amountBsF` never changes when a later rate is entered
+  4. Admin can upload a PDF, JPG, or PNG receipt (max 5MB); the file is stored as `storage/receipts/YYYY/MM/{uuid}.ext`; uploading an `.html` or `.php` file is rejected with a 422 error
+  5. Receipt files are served only through an admin-authenticated route; a direct URL to `storage/receipts/` without auth returns 401
+**Plans**: TBD
+**Pitfall mitigations**: F-6 (block USD entry when no rate for date), F-7 (historical USD eq = amountBsF / historicalRate, never re-converted), F-8 (rateType field on ExchangeRate from day one), F-14 (MIME validation, UUID filename, 5MB limit, storage outside web root), F-16 (no Account model; categories are configurable strings only)
+**UI hint**: yes
+
+---
+
+### Phase 14: Report Refactor + Weekly P&L
+**Goal**: Reports read from materialized `DrawFinancial` data eliminating the multi-draw attribution bug, and admin can view a weekly P&L dashboard combining draw income, commissions, and accounting entries with drill-down and export
+**Depends on**: Phases 11, 12, 13 all complete AND Phase 11 backfill validated in production (2 weeks minimum of live DrawFinancial data; 10-draw spot-check passes)
+**Requirements**: FIN-REPORT-01, FIN-REPORT-02, FIN-REPORT-03, FIN-REPORT-04, FIN-REPORT-05, FIN-REPORT-06, FIN-REPORT-07
+**Success Criteria** (what must be TRUE):
+  1. With `REPORT_USE_MATERIALIZED=true`, the daily report and accounting report return the same totals as before for draws with single-provider tickets; for draws with multi-play webhook tickets the per-draw figures are now correct (the multi-draw attribution bug is gone)
+  2. Setting `REPORT_USE_MATERIALIZED=false` reverts to the previous aggregation path with unchanged response shapes — existing `/reportes/` and `/reportes-contable/` endpoints remain untouched
+  3. The draw detail page shows a financial card with materialized sales, prizes, utility, ticket count, and per-provider breakdown sourced from `DrawFinancial` + `DrawFinancialProvider`
+  4. Admin can view a weekly P&L dashboard: draw income (from DrawFinancial) minus commissions (from ProviderWeeklySettlement) minus expenses (from AccountingEntry) equals net BsF balance with a USD equivalent column; the rate type used is labeled on screen
+  5. Admin can click a week row to drill down into the underlying commission ledger entries and accounting entries for that week; each drill-down opens a filtered list
+**Plans**: TBD
+**Prerequisite gate**: Do NOT flip `REPORT_USE_MATERIALIZED=true` until: (a) Phase 11 backfill confirmed complete via `SELECT COUNT(*) FROM DrawFinancial` vs DRAWN draw count, (b) at least 2 weeks of live DrawFinancial rows collected after Phase 11 deploy, (c) 10-draw spot-check SQL passes. Document gate passage in deploy notes before enabling.
+**Pitfall mitigations**: F-7 (USD equivalent = amountBsF / historicalRate, tested with 6-month-old entries)
+**UI hint**: yes
+
+---
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 → 9 → 10
+Phases 1-10 execute in numeric order. v1.3 phases: 11 → 12 → 13 (in parallel after Phase 12 schema) → 14
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -203,3 +282,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8 →
 | 8. Adapter Implementation | v1.2 | 0/2 | Not started | - |
 | 9. Response Contract | v1.2 | 0/1 | Not started | - |
 | 10. Production Deployment | v1.2 | 0/1 | Not started | - |
+| 11. DrawFinancial Foundation | v1.3 | 0/TBD | Not started | - |
+| 12. Provider Commission Engine | v1.3 | 0/TBD | Not started | - |
+| 13. Exchange Rate + Accounting Ledger | v1.3 | 0/TBD | Not started | - |
+| 14. Report Refactor + Weekly P&L | v1.3 | 0/TBD | Not started | - |
