@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15)
 
 **Core value:** Reliable draw lifecycle management
-**Current focus:** Phase 11 — drawfinancial-foundation
+**Current focus:** Phase 12 — provider-commission-engine — COMPLETE (local)
 
 ## Current Position
 
-Phase: 11 (drawfinancial-foundation) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 11
-Last activity: 2026-05-15 -- Phase 11 execution started
+Phase: 12 (provider-commission-engine) — COMPLETE
+Plan: 4 of 4 — complete
+Status: Phase 12 software in place locally; production deploy pending (12-DEPLOY.md is the runbook)
+Last activity: 2026-05-15 -- Phase 12 Plan 4 SUMMARY committed (frontend UI + backfill + DEPLOY)
 
 ```
-Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (0/4 phases)
+Progress: [█████░░░░░░░░░░░░░░░] 25% (1/4 phases of v1.3 done — Phase 12)
 ```
 
 ## Performance Metrics
@@ -56,8 +56,8 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (0/4
 | 8. Adapter Implementation | 2 | Complete |
 | 9. Response Contract | TBD | Not started |
 | 10. Production Deployment | TBD | Not started |
-| 11. DrawFinancial Foundation | TBD | Not started |
-| 12. Provider Commission Engine | TBD | Not started |
+| 11. DrawFinancial Foundation | 4 | Complete (local; deploy pending per 11-DEPLOY.md) |
+| 12. Provider Commission Engine | 4 | Complete (local; deploy pending per 12-DEPLOY.md) |
 | 13. Exchange Rate + Accounting Ledger | TBD | Not started |
 | 14. Report Refactor + Weekly P&L | TBD | Not started |
 
@@ -83,16 +83,26 @@ Progress: [░░░░░░░░░░░░░░░░░░░░] 0% (0/4
 - **v1.3 receipt storage**: backend/storage/receipts/YYYY/MM/{uuid}.ext — outside web root, admin-auth-gated serve route
 - **v1.3 REPORT_USE_MATERIALIZED gate**: flag stays false until (a) backfill complete, (b) 2 weeks live data, (c) 10-draw spot-check passes
 
+### Phase 12 — Provider Commission Engine (COMPLETE locally, 2026-05-15)
+
+- Local backfill outcome: 132 candidate draws (DRAWN + prizesProcessed + drawnAt >= 2026-04-17), 185 (provider, draw) pairs, **0 ledger rows written** because the prod-mirror DB has zero `ProviderCommissionConfig` rows. All 185 pairs went through the D-01 silent-skip path with `logger.warn('[commission] no_config_at_drawnAt', ...)` and no ledger row. This is the correct behavior — when production is configured with at least one effective commission config per provider, the same script will write real ledger rows.
+- F-17 invariant verified: `SELECT MIN(d."drawnAt") FROM "ProviderCommissionLedger" cl JOIN "Draw" d ON d.id = cl."drawId"` returns empty (zero rows), so the GO_LIVE invariant trivially holds. Defense-in-depth check inside the backfill script passed (zero pre-GO_LIVE ledger rows exist).
+- (provider, week) pairs silently skipped: every (apiSystem, draw) combination in the 132 candidate set, because no provider has a ProviderCommissionConfig in the local DB. Detailed list is in the dry-run reconciliation CSV at `backend/storage/backfill-reports/provider-commission-recon-2026-05-15T23-03-59-842Z.csv`.
+- Frontend lint: project has no ESLint config — `npm run lint` requires interactive setup. Documented as a deviation in Plan 12-04 SUMMARY; substitute verification via grep gates + visual code review passed.
+- Operator notes: no production execution this session. Next step is the 12-DEPLOY.md runbook (LOCAL-ONLY → VPS 94 supervised session). Production status caveat (`status IN ('DRAWN', 'PUBLISHED')`) must be reviewed before `--confirm` against production.
+
 ### Pending Todos
 
-- Plan Phase 11 before starting implementation (`/gsd-discuss-phase 11`)
+- Production deploy of Phase 11 + Phase 12 (see 11-DEPLOY.md + 12-DEPLOY.md, supervised operator session)
+- Seed at least one `ProviderCommissionConfig` per active provider before the first Monday 06:00 VE settlement snapshot (otherwise the snapshot worker produces empty settlements for those providers)
+- Initialize Next.js ESLint config (one-off — accept the "Strict" preset prompt and commit `.eslintrc.json`)
 
 ### Blockers/Concerns
 
-None.
+None for Phase 12. Phase 13 (Exchange Rate + Accounting Ledger) is independent and can begin.
 
 ## Session Continuity
 
-Last session: 2026-05-15T17:54:21.445Z
-Stopped at: Phase 11 planned (4 plans, verified)
-Resume file: .planning/phases/11-drawfinancial-foundation/11-01-PLAN.md
+Last session: 2026-05-15T23:05:00Z
+Stopped at: Phase 12 — Plan 4 complete (SUMMARY written, all 4 commits reachable, frontend UI + backfill + DEPLOY runbook landed)
+Resume file: 12-DEPLOY.md (production runbook, NOT yet executed)
