@@ -15,6 +15,8 @@ import apiIntegrationService from '../../services/api-integration.service.js';
 import adminNotificationService from '../../services/admin-notification.service.js';
 import systemConfigService from '../../services/system-config.service.js';
 import drawPauseService from '../../services/draw-pause.service.js';
+import { getBoss } from '../boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../constants.js';
 
 async function closeTerminalDraw(draw) {
   const closed = await prisma.draw.updateMany({
@@ -70,6 +72,22 @@ async function closeTerminalDraw(draw) {
   }).catch(() => { /* best-effort */ });
 
   logger.info(`🔒 [close-and-ingest] ${draw.game.name} - ${draw.drawTime} cerrado | Terminal | ${imported} tickets`);
+
+  // Phase 11 (D-10): fire-and-forget phase-SALES trigger. Never blocks the close.
+  try {
+    const boss = getBoss();
+    await boss.send(
+      QUEUES.CALCULATE_DRAW_FINANCIALS,
+      { drawId: draw.id, phase: 'SALES' },
+      {
+        singletonKey: `df-sales-${draw.id}`,
+        ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
+      },
+    );
+  } catch (e) {
+    logger.warn(`[close-and-ingest] df-sales trigger falló (best-effort) drawId=${draw.id}: ${e.message}`);
+  }
+
   return { closed: true, method: 'terminal', srqIngested: imported };
 }
 
@@ -170,6 +188,22 @@ export async function closeAndIngestWorker(jobs) {
     }
 
     logger.info(`🔒 [close-and-ingest] ${updated.game.name} - ${updated.drawTime} cerrado | admin preselect: ${updated.preselectedItem.number}`);
+
+    // Phase 11 (D-10): fire-and-forget phase-SALES trigger. Never blocks the close.
+    try {
+      const boss = getBoss();
+      await boss.send(
+        QUEUES.CALCULATE_DRAW_FINANCIALS,
+        { drawId, phase: 'SALES' },
+        {
+          singletonKey: `df-sales-${drawId}`,
+          ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
+        },
+      );
+    } catch (e) {
+      logger.warn(`[close-and-ingest] df-sales trigger falló (best-effort) drawId=${drawId}: ${e.message}`);
+    }
+
     return { closed: true, method: 'admin_preselect' };
   }
 
@@ -202,5 +236,21 @@ export async function closeAndIngestWorker(jobs) {
   }
 
   logger.info(`🔒 [close-and-ingest] ${updated.game.name} - ${updated.drawTime} cerrado | esperando preselect | SRQ ingest: ${srq1}+${srq2}`);
+
+  // Phase 11 (D-10): fire-and-forget phase-SALES trigger. Never blocks the close.
+  try {
+    const boss = getBoss();
+    await boss.send(
+      QUEUES.CALCULATE_DRAW_FINANCIALS,
+      { drawId, phase: 'SALES' },
+      {
+        singletonKey: `df-sales-${drawId}`,
+        ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
+      },
+    );
+  } catch (e) {
+    logger.warn(`[close-and-ingest] df-sales trigger falló (best-effort) drawId=${drawId}: ${e.message}`);
+  }
+
   return { closed: true, method: 'awaiting_preselect', srqIngested: srq1 + srq2 };
 }
