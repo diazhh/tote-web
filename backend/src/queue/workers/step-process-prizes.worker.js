@@ -28,6 +28,12 @@ export async function stepProcessPrizesWorker(jobs) {
       ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
     });
 
+    // Phase 12: parallel-trigger provider commission. Worker has DrawFinancialNotReadyError race-guard (Pitfall 7) — pg-boss retries 3× with backoff if PRIZES has not committed.
+    await boss.send(QUEUES.CALCULATE_PROVIDER_COMMISSION, { drawId }, {
+      singletonKey: `comm-${drawId}`,
+      ...QUEUE_CONFIGS[QUEUES.CALCULATE_PROVIDER_COMMISSION],
+    });
+
     return { skipped: true, reason: 'already_processed' };
   }
 
@@ -56,6 +62,12 @@ export async function stepProcessPrizesWorker(jobs) {
   await boss.send(QUEUES.CALCULATE_DRAW_FINANCIALS, { drawId, phase: 'PRIZES' }, {
     singletonKey: `df-prizes-${drawId}`,
     ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
+  });
+
+  // Phase 12: parallel-trigger provider commission. Worker has DrawFinancialNotReadyError race-guard (Pitfall 7) — pg-boss retries 3× with backoff if PRIZES has not committed.
+  await boss.send(QUEUES.CALCULATE_PROVIDER_COMMISSION, { drawId }, {
+    singletonKey: `comm-${drawId}`,
+    ...QUEUE_CONFIGS[QUEUES.CALCULATE_PROVIDER_COMMISSION],
   });
 
   return { success: true, drawId, ...result };

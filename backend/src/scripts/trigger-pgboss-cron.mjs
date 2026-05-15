@@ -42,6 +42,8 @@ const ALLOWED_QUEUES = new Set([
   'retry-failed-publications',
   'monitor-dlq',
   'cleanup-logs',
+  // Phase 12 — weekly settlement snapshot, fired Monday 06:00 VE via /etc/cron.d/tote-triggers
+  'weekly-settlement-snapshot',
 ]);
 
 if (!ALLOWED_QUEUES.has(queueName)) {
