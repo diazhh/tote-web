@@ -1,226 +1,290 @@
 # Project Research Summary
 
-**Project:** Multi-provider webhook ingestion system (tote-web PUSH extension)
-**Domain:** PUSH-based webhook receiver integrated into existing Express/Prisma lottery backend
-**Researched:** 2026-04-01
+**Project:** Tote-Web v1.3 — Capa Financiera y Contabilidad
+**Domain:** Financial layer added to a live Venezuelan lottery operator — materialized aggregates, provider commissions, multi-currency accounting
+**Researched:** 2026-05-15
 **Confidence:** HIGH
+
+---
 
 ## Executive Summary
 
-This project adds a PUSH-based webhook ingestion layer to an existing lottery management platform that currently polls one provider (SRQ) via a PULL mechanism. The recommended approach is entirely additive: no existing packages need replacing, no major refactors are required. All cryptographic and validation needs are covered by Node.js built-in `crypto`, `express.json({ verify })` raw body capture, and the already-installed `express-rate-limit` and `zod` packages. The new subsystem introduces a file-based adapter pattern (one file per provider slug) that allows new providers to be onboarded by dropping a file into `webhooks/adapters/` — no registry, no configuration changes.
+v1.3 adds a financial intelligence layer on top of an already-operational lottery draw pipeline. The core problem is that all financial reporting currently runs O(N draws × M tickets) aggregations at query time over ~2,600+ historical draws — a bottleneck that grows with every new draw. The solution is a materialized `DrawFinancial` row populated by pg-boss workers at two hook points (draw close for sales, prize processing for P&L), which becomes the shared foundation for commission calculations and accounting reports. This is a "read-from-precalculated" refactor pattern, not a greenfield build: the domain logic already exists in `accounting-report.service.js`; the change is in where the aggregation happens.
 
-The two highest-risk decisions are architectural: whether to process tickets synchronously or asynchronously, and how to prevent the existing SRQ PULL sync from clobbering PUSH-created tickets. Both must be resolved in Phase 1, before any adapter ships. The synchronous path is simpler but creates a retry storm risk during the draw-close window (5:55–6:00 PM) when the DB is maximally loaded. The PULL/PUSH coexistence risk is concrete: `sync-api-tickets.job.js` runs `deleteMany({ source: 'EXTERNAL_API' })` every 5 minutes; this will silently delete any webhook-created tickets unless the `deleteMany` is source-scoped before the first PUSH provider goes live.
+The recommended approach builds in strict dependency order across four phases. Phase 1 creates the materialized aggregate foundation (including a historical backfill of ~2,600 draws). Phase 2 builds the commission engine on top of those aggregates. Phase 3 adds the multi-currency accounting ledger. Phase 4 completes the loop by refactoring existing report services to read from materialized data and adds the weekly P&L view. Each phase is independently deployable and gated by an env flag, so the live draw pipeline is never at risk. Two new npm packages are needed: `decimal.js` (commission math) and `multer` (receipt upload). Everything else is already installed.
 
-The overall build is well-understood: 9 sequential components in a clear dependency order, all fitting within the existing codebase conventions. The admin UI work is an extension of the existing provider management page and follows established Next.js + TailwindCSS patterns already present in the repo. Confidence is high across all research areas because the architecture research was based on direct codebase inspection rather than external guesswork.
+The critical risks are: (1) the multi-draw ticket attribution bug — if the DrawFinancial worker aggregates via `Ticket.drawId` instead of `TicketDetail.drawId`, it replicates an existing data bug into the new canonical source of truth; (2) the pg-boss `createQueue` silent drop — prior incidents have been caused by registering a worker without first calling `boss.createQueue()`, which causes all queued jobs to return `null` and disappear silently; (3) the production `PUBLISHED` enum removal — the backfill script will crash immediately on VPS 94 if it references `PUBLISHED`, which no longer exists in the production enum. These three must be addressed in Phase 1 before any production data is touched.
+
+---
 
 ## Key Findings
 
 ### Recommended Stack
 
-No new packages are required. The existing stack covers every technical need: raw body capture via the `verify` option of `express.json()` (built into Express 4.16+), HMAC and token cryptography via Node.js built-in `crypto`, per-provider rate limiting via the already-installed `express-rate-limit@^7.4.1` with `keyGenerator`, and adapter payload validation via `zod@^3.23.8` with `safeParse`. The only code change to existing infrastructure is adding the `verify` callback to the global `express.json()` call in `src/index.js`.
+The stack additions for this milestone are minimal. All report export tooling (ExcelJS 4.4.0, PDFKit 0.17.2), scheduling (date-fns 4.1.0, date-fns-tz 3.2.0), and ORM (Prisma with `Decimal @db.Decimal`) are already installed. The only two packages to add are `decimal.js` (for commission formula arithmetic with proper rounding modes) and `multer` (for receipt file upload). The frontend already has `recharts` for any chart needs; `Intl.NumberFormat` handles BsF/USD display formatting without adding a currency library.
 
-**Core technologies:**
-- `express.json({ verify })` built-in: raw body preservation — canonical pattern from Stripe/GitHub docs, zero dependencies
-- Node.js `crypto.randomBytes` + `timingSafeEqual`: token generation and comparison — required to prevent timing attacks; never use `===`
-- `express-rate-limit` (already installed): per-provider rate limiting via `keyGenerator: (req) => req.apiSystem.slug` — isolates webhook traffic from browser API budget
-- `zod` (already installed): adapter-level payload validation via `safeParse` — never throws, returns discriminated union
-- `uuid` (already installed): `WebhookLog` record IDs
+**What to install — complete list:**
+
+| Package | Version | Location | Command | Reason |
+|---------|---------|----------|---------|--------|
+| `decimal.js` | 10.6.0 | backend | `npm install decimal.js` | Prisma internally uses decimal.js — same type avoids conversion. Required for TIERED bracket rounding modes (ROUND_HALF_UP). |
+| `multer` | 2.1.1 | backend | `npm install multer` | Receipt/invoice file upload for `AccountingEntry.attachmentUrl`. No upload middleware exists today. |
+
+**What NOT to add:** dinero.js (overkill — BsF and USD are separate columns, not currency-typed), superjson (solves RSC problem this project does not have), MinIO/R2 (admin receipt volume is dozens/month; VPS local disk is adequate), Luxon (date-fns already covers ISO weeks), accounting.js/currency.js (Intl.NumberFormat is sufficient for display).
+
+**Decimal column precision convention:**
+- `Decimal @db.Decimal(15, 4)` for rate/percentage config fields (`commissionRate`, `rateBsPerUsd`, tiered bracket thresholds)
+- `Decimal @db.Decimal(12, 2)` for final ledger amounts (`DrawFinancial.totalSales`, `AccountingEntry.amountBsF`)
+- `NUMERIC(18, 8)` for commission ledger amounts in `ProviderCommissionLedger` — full precision to avoid rounding accumulation at settlement time
+
+**Decision Points requiring explicit resolution before any code is written:**
+- **DP-1:** Decimal precision tiers (above) — must be consistent across all new models
+- **DP-2:** Receipt storage URL: relative path `storage/receipts/YYYY-MM/uuid.ext` (not absolute, not full URL)
+- **DP-3:** `ProviderWeeklySettlement` must have `@@unique([apiSystemId, isoYear, isoWeek])` for idempotent upsert on settlement cron re-run
 
 ### Expected Features
 
-**Must have (table stakes):**
-- `POST /api/webhooks/:slug` endpoint with `X-Webhook-Token` header auth — the core receiver; providers cannot connect without it
-- Raw payload logged to `WebhookLog` on every request before any processing — idempotency source and discovery audit trail
-- Discovery mode: return 200 and log when no adapter file exists — prevents payload loss during provider onboarding
-- Provider CRUD UI extensions: PULL/PUSH mode toggle, slug field, token generation button — operators cannot onboard providers without these
-- Webhook log viewer in admin dashboard: table with provider, time, status, payload preview — operators need visibility into what arrived
-- Schema migration: `ApiSystem` gets `slug`, `webhookToken`, `mode`; new `WebhookLog` model — hard dependency for everything else
+The four feature categories map cleanly to the four build phases. The dependency chain is strict: commissions cannot be calculated without DrawFinancial aggregates; the weekly P&L cannot be assembled without both commission ledgers and accounting entries; the report refactor is not safe without the backfill completing successfully.
 
-**Should have (differentiators):**
-- Payload inspector modal in log viewer: formatted JSON view with copy-to-clipboard — accelerates adapter development
-- Replay feature: re-run stored `rawPayload` through current adapter without waiting for provider resend — critical during adapter bugs
-- Processing status on log entries: RECEIVED / PROCESSED / NO_ADAPTER / DUPLICATE / ERROR / UNRESOLVABLE_DRAW — operational clarity
-- Adapter status badge per provider (Adapter ready vs Discovery mode) — derived from filesystem check
+**Must have (table stakes — v1.3 is not useful without these):**
 
-**Defer (v2+):**
-- Webhook metrics dashboard (volume per provider, error rates) — deferred until 3+ providers live
-- HMAC signature verification — deferred; regional lottery providers unlikely to implement it
-- Log retention policy / auto-cleanup — deferred until log table grows large enough to matter
-- Provider health status (last seen, error rate) — deferred until monitoring burden emerges
+DrawFinancial:
+- `totalSales`, `totalPrize`, `utility`, `ticketCount`, `closedAt`, `totalizedAt` per draw
+- Worker `calculate-draw-financials` hooked into the existing pipeline (phase A at close, phase B at prize processing)
+- Backfill script for all ~2,600 historical DRAWN draws
+- `getDailyReport` and `getAccountingReport` refactored behind `REPORT_USE_MATERIALIZED` flag
+
+Commissions:
+- Commission formula config per `ApiSystem`: `SALES_PCT`, `UTILITY_PCT`, `SALES_AND_UTILITY_PCT`
+- Per-draw `ProviderCommissionLedger` rows written post-totalization
+- Weekly `ProviderWeeklySettlement` snapshots on Monday cron
+- Admin UI: configure formulas, view ledger, confirm settlements
+
+Accounting:
+- `ExchangeRate` table (one rate per day, manual entry, immutable, with `rateType` field)
+- `AccountingEntry` (INCOME/EXPENSE/PAYMENT) in BsF with optional `originalAmount`/`originalCurrency`
+- Receipt/voucher attachment upload (PDF/JPEG/PNG, 5MB max, UUID filename, stored outside web root)
+- Weekly P&L view: draw income (from DrawFinancial) minus commissions (from settlement) minus expenses (from entries) = BsF balance + USD equivalent column
+
+**Should have (build if time allows):**
+- `DrawFinancialProvider` sub-table for per-provider sales/prize breakdown (needed for commission worker to avoid full-table join)
+- Settlement PDF export (reuse existing ExcelJS pattern)
+- Commission approval workflow: PENDING -> CONFIRMED -> PAID with `paymentReference` field
+- `AccountingCategory` CRUD in admin settings (configurable categories without code change)
+- Monthly cohort devaluation view
+
+**Defer to v1.4:**
+- `TIERED` commission formula (requires `ProviderCommissionTier` table; complex; low urgency for current providers)
+- Recurring expense templates
+- BCV rate auto-scraping (explicitly excluded in PROJECT.md)
+- Retroactive rate change with commission re-calculation
+
+**The ERP boundary (must not cross):** no double-entry bookkeeping, no chart of accounts, no tax calculations, no bank reconciliation, no payroll, no multi-entity consolidation, no budgeting.
 
 ### Architecture Approach
 
-The architecture is a standard layered webhook receiver: an Express router mounts at `/api/webhooks` with its own `express.raw()` body capture middleware before the global `express.json()` runs. A dedicated `webhook-auth.middleware.js` handles token lookup (DB query against `ApiSystem`) and attaches `req.apiSystem`. `webhook.service.js` executes the core flow: log raw payload, attempt dynamic import of `webhooks/adapters/{slug}.adapter.js`, run normalization if adapter found, create ticket via Prisma transaction. All responses to the provider return HTTP 200 regardless of processing outcome — errors are surfaced in `WebhookLog.status`, never via HTTP error codes.
+The architecture extends the existing cron Linux -> `trigger-pgboss-cron.mjs` -> pg-boss workers pipeline with three new workers, two new schema modules, and a flag-gated report refactor. All new workers are wired as pipeline chain steps (called via `boss.send()` from existing workers) or as new cron entries for periodic snapshots. The existing report service signatures are preserved; only the internal data source changes.
 
 **Major components:**
-1. `middlewares/webhook-auth.middleware.js` — token lookup, attaches `req.apiSystem`; separate from JWT `auth.middleware.js`
-2. `services/webhook.service.js` — log raw payload, dynamic adapter import, ticket creation, status update
-3. `webhooks/adapters/{slug}.adapter.js` — per-provider payload normalization; file presence = adapter ready, file absent = discovery mode
-4. `prisma schema: ApiSystem` (modified) — adds `slug`, `webhookToken`, `mode` (PULL/PUSH), `isActive` fields
-5. `prisma schema: WebhookLog` (new) — raw payload storage with status enum and `ticketId` FK for idempotency
-6. `frontend/app/admin/proveedores/webhook-logs/page.js` (new) — admin log viewer
-7. `controllers/provider.controller.js` (modified) — adds `generateToken()` and `getWebhookLogs()` methods
+
+1. **`calculate-draw-financials` worker** — Two-phase: phase SALES triggered from `close-and-ingest.worker.js` (best-effort, wrapped in try/catch), phase PRIZES triggered from `step-process-prizes.worker.js` alongside existing `STEP_CALCULATE_STATS`. Single worker file, routes by `job.data.phase`. Upserts `DrawFinancial` and `DrawFinancialProvider` by `drawId`. On phase PRIZES completion, chains to commission worker.
+
+2. **`calculate-provider-commission` worker** — Reads `DrawFinancialProvider` for the draw, looks up `ProviderCommissionConfig` effective at `draw.drawnAt` (not current config), applies formula, upserts `ProviderCommissionLedger`. No-ops with log if no config exists for a provider — does not block the pipeline.
+
+3. **`weekly-settlement-snapshot` worker** — Triggered by new Monday 06:00 VE cron entry. Sums `ProviderCommissionLedger.amount` by provider for the previous ISO week, upserts `ProviderWeeklySettlement(status: DRAFT)`. Admin manually confirms settlements.
+
+4. **`accounting.service.js`** — Entry creation with currency conversion logic. Enforces rate lookup by `entryDate`. Blocks USD-denominated entries if no `ExchangeRate` row exists for today (does not default to yesterday's rate).
+
+5. **Report refactor (flag-gated)** — `REPORT_USE_MATERIALIZED=true` env flag swaps the internal aggregation in `accounting-report.service.js` and `monitor.service.js` from `prisma.draw.findMany({ include: tickets })` to `prisma.drawFinancial.findMany()`. Old path kept for rollback. Report service signatures unchanged.
+
+6. **New admin frontend section** — `/admin/financiero/` umbrella with sub-routes: `sorteos/` (per-draw financial view), `comisiones/` (commission config + ledger), `comisiones/liquidaciones/` (weekly settlements), `contabilidad/` (accounting entries + P&L), `contabilidad/tasa-cambio/` (exchange rates). Added to existing `layout.js` nav as "Financiero" section below "Reportes".
+
+**Modified files (surgical, no regressions):**
+
+| File | Change | Risk |
+|------|--------|------|
+| `queue/workers/close-and-ingest.worker.js` | One `boss.send()` inside try/catch after close | Low |
+| `queue/workers/step-process-prizes.worker.js` | One `boss.send()` alongside existing chain | Low |
+| `queue/constants.js` + `register.js` | Three new queue names + worker registrations | Additive |
+| `scripts/trigger-pgboss-cron.mjs` | New queue names in `ALLOWED_QUEUES` | Additive |
+| `services/accounting-report.service.js` | Flag-gated path swap | Medium — test required |
+| `services/monitor.service.js` | Flag-gated path swap | Medium — test required |
+| `frontend/app/admin/layout.js` | New nav section | Additive |
+| VPS `/etc/cron.d/tote-triggers` | Monday settlement cron line | Deploy step, not in git |
+
+**Untouched:** `step-calculate-stats.worker.js`, `execute-draw*.worker.js`, `prize-processor.service.js`, all webhook adapters, all SRQ sync workers.
 
 ### Critical Pitfalls
 
-1. **PULL + PUSH race condition** — `sync-api-tickets.job.js` runs `deleteMany({ source: 'EXTERNAL_API' })` every 5 minutes. Before the first PUSH provider goes live, this `deleteMany` must be source-scoped to only delete `EXTERNAL_API` tickets, not `WEBHOOK_PUSH` tickets. Add a DB unique constraint `@@unique([drawId, externalTicketId, source])` to reject duplicates at the DB level regardless of timing.
+**Top 5 risks the roadmap MUST address — in order of severity:**
 
-2. **Duplicate tickets from provider retries (no idempotency)** — Providers guarantee at-least-once delivery. Without idempotency, retry after a network blip creates a second Ticket row for the same bet. Prevention: store `webhookEventId` (provider's delivery ID) in `WebhookLog`; check it before processing; use Prisma `$transaction` with unique constraint enforcement; always return 200 even for duplicates.
+1. **F-3: Multi-draw ticket attribution bug replication (Phase 1)** — The existing `accounting-report.service.js` aggregates `Ticket.totalAmount` by `Ticket.drawId`, which overcounts sales for multi-play tickets. If the DrawFinancial worker does the same, the bug becomes canonical. The fix: aggregate via `TicketDetail.drawId` always: `SUM(td.amount) FROM TicketDetail td JOIN Ticket t ON t.id = td.ticketId WHERE td.drawId = :drawId AND t.status != 'CANCELLED'`. Must be the primary aggregation method from day one, enforced with a test.
 
-3. **Slow adapter causes timeout retry storm during draw-close** — The draw-close window (5:55–6:00 PM) is when the DB is busiest and when providers most likely send final bet webhooks. Synchronous ticket creation during this window risks exceeding provider response timeouts (typically 5 seconds), triggering retries that compound load. Decision: lock the sync-vs-async architecture in Phase 1; if sync, add a 3-second adapter execution timeout with async fallback.
+2. **F-11: pg-boss createQueue silent job loss (Phase 1)** — `boss.work()` does NOT create the queue row in `pgboss.queue`. `boss.send()` returns `null` and the job disappears silently if the row does not exist. Every new worker registration in `register.js` must call `await boss.createQueue(QUEUES.X)` immediately before `await boss.work(QUEUES.X, ...)`. Smoke test after deploy: `SELECT name FROM pgboss.queue;` — all new queue names must be present.
 
-4. **Token leaked in logs** — The existing Winston request logger logs enough context that a provider mistakenly sending the token in the query string will expose it in `combined.log`. Prevention: enforce header-only token (`X-Webhook-Token`); add a log sanitizer; store tokens hashed (bcrypt already in project at `^5.1.1`); show token only once in admin UI.
+3. **F-10: PUBLISHED enum error on production (Phase 2 — backfill)** — VPS 94 production enum is `{SCHEDULED, CLOSED, DRAWN, CANCELLED}` — `PUBLISHED` was removed. Any query with `status = 'PUBLISHED'` throws a PostgreSQL enum cast error (not 0 rows — a crash). Backfill script must filter by `status = 'DRAWN'` only, and must run an enum check as its first line.
 
-5. **Missing draw mapping silently discards bets** — Adapter cannot map provider draw ID to local `Draw` UUID if `ApiDrawMapping` is not populated. Must log `WebhookLog.status = 'UNRESOLVABLE_DRAW'` with raw provider draw ID instead of silently discarding. Send Telegram admin alert when this status appears. Include in Phase 1.
+4. **F-1: Aggregate written before prize processing completes (Phase 1)** — If the DrawFinancial worker runs when `draw.prizesProcessed = false`, it produces a row with `totalPrize = 0` and reports 100% margin. The worker must guard: `if (!draw.prizesProcessed) throw new Error('prizes not processed yet')`. Check phase B completion via `DrawFinancial.totalizedAt IS NOT NULL`, not by adding a new boolean to `Draw`.
 
-6. **Venezuela timezone mismatch** — Providers may send timestamps in UTC; `Draw.drawDate` stores Venezuela calendar date as UTC midnight. Draws at 8:00 PM Venezuela (00:00 UTC next day) will fail to resolve. All adapters must normalize timestamps using `lib/dateUtils.getVenezuelaDateAsUTC()` before draw lookup. Document this as the adapter interface contract.
+5. **F-5: Commission config change retroactive application (Phase 2)** — `ProviderCommissionConfig` must be append-only with `effectiveFrom DateTime`. Commission calculation looks up the config effective at `draw.drawnAt`, not the current config. Settlement snapshots sum `ProviderCommissionLedger` rows (already computed at draw time), not re-apply the current config to the week's total.
+
+**Additional pitfalls requiring design decisions (full details in PITFALLS.md):**
+- F-4: Commission rounding accumulation — use `NUMERIC(18,8)` in `ProviderCommissionLedger`; apply formula to weekly aggregate total, not per-ticket
+- F-6: Missing exchange rate — block USD-denominated entries if no rate exists for today; never silently default to yesterday
+- F-7: Historical rate re-conversion — USD equivalent = `amountBsF / historicalRate` (immutable at entry time), never `originalAmount / currentRate`
+- F-8: Tasa paralela vs BCV unlabeled — `ExchangeRate` needs `rateType` field from day one; reports must display which rate type was used
+- F-13: Worker recursion via `.execute()` — implement all new logic as service functions, not Croner-style classes
+- F-14: Receipt upload security — MIME type validation server-side, UUID filename, 5MB limit, store outside web root
+
+---
 
 ## Implications for Roadmap
 
-Based on research, the dependency order is strict and well-defined. Six of the critical pitfalls must be addressed in Phase 1 — not Phase 2 or later. The admin UI work can be parallelized with adapter development in a later phase.
+The dependency chain is rigid: commission calculation requires DrawFinancial aggregates; weekly P&L requires both commissions and accounting entries; the report refactor requires the backfill to be complete and validated. This dictates a four-phase order with no flexibility on sequencing.
 
-### Phase 1: Webhook Infrastructure Foundation
+### Phase 1: DrawFinancial Foundation
 
-**Rationale:** Everything else depends on this. Schema migration unblocks all subsequent work. The PULL/PUSH race condition and idempotency constraints must be in place before any provider sends live traffic — retrofitting these after the first adapter ships causes data integrity incidents in a real-money system.
+**Rationale:** Everything in this milestone depends on `DrawFinancial`. Data quality bugs (F-1, F-3) and infrastructure bugs (F-11) must be solved here — not retrofitted later after the commission and accounting layers are built on top of bad data.
 
-**Delivers:** A working webhook endpoint that safely receives, logs, and acknowledges payloads from any provider with a valid token; discovery mode for providers without adapters; source-scoped SRQ sync that won't clobber PUSH tickets.
+**Delivers:**
+- New Prisma models: `DrawFinancial`, `DrawFinancialProvider`
+- Worker `calculate-draw-financials` (phase SALES + phase PRIZES) registered with `boss.createQueue()` and wired into existing pipeline
+- Backfill script `backfill-draw-financials.mjs` with production-safe guards (enum check, prizesProcessed guard, upsert pattern)
+- Commission queue registered as no-op placeholder (prevents F-11 from blocking Phase 2 deployment)
+- `decimal.js` and `multer` added to `backend/package.json`
 
-**Addresses features from FEATURES.md:**
-- `ApiSystem` schema extension (slug, webhookToken, mode, isActive) — P1 blocker
-- `WebhookLog` Prisma model with full status enum including `UNRESOLVABLE_DRAW` — P1 blocker
-- `POST /api/webhooks/:slug` with token auth middleware — P1 core
-- Discovery mode (log + 200 when no adapter) — P1 core
-- `WEBHOOK_PUSH` enum value in `TicketSource`
+**Must implement correctly:**
+- Aggregation via `TicketDetail.drawId` (fixes F-3 at the source)
+- `prizesProcessed = true` guard (prevents F-1)
+- `boss.createQueue()` before `boss.work()` (prevents F-11)
+- `status = 'DRAWN'` only in backfill, with startup enum check (prevents F-10)
+- Service function pattern, not Croner-style class (prevents F-13)
 
-**Avoids (from PITFALLS.md):**
-- PULL/PUSH race: source-scope `deleteMany` in `sync-api-tickets.job.js` before endpoint is live
-- Duplicate tickets: DB unique constraint `@@unique([drawId, externalTicketId, source])` + idempotency check in service
-- Token leaks: header-only enforcement, log sanitizer, bcrypt storage
-- Missing draw mapping: `UNRESOLVABLE_DRAW` status + Telegram alert hook
-- Timezone: `getVenezuelaDateAsUTC()` utility documented as adapter contract
-- Sync/async decision: locked in this phase (recommendation: log + return 200 first, process asynchronously)
+**Avoids deploying Phase 2 before:** Backfill completes and spot-check SQL confirms `DrawFinancial.totalSales` matches manual `SUM(TicketDetail.amount WHERE drawId = ...)` for at least 10 sampled draws.
 
-**Build order within this phase** (from ARCHITECTURE.md):
-1. Schema migration (unblocks everything)
-2. `webhooks/adapters/` directory stub
-3. `webhook-auth.middleware.js`
-4. `webhook.service.js`
-5. `webhook.controller.js` + `webhook.routes.js`
-6. Register route in `index.js` (before global `express.json()`)
-7. Modify `sync-api-tickets.job.js` source-scope (safety prerequisite before route is live)
+### Phase 2: Provider Commission Engine
 
-### Phase 2: Admin Provider Management Extensions
+**Rationale:** Depends on Phase 1 (`DrawFinancial` + `DrawFinancialProvider` rows must exist). Commission config schema must be versioned from the start (F-5) — this cannot be retrofitted.
 
-**Rationale:** Operators need to onboard providers (generate tokens, set slugs, toggle PULL/PUSH mode) and see what payloads are arriving. This unblocks adapter development by giving developers raw payload samples to work from. Should be built before the first real adapter, not after.
+**Delivers:**
+- New Prisma models: `ProviderCommissionConfig` (append-only, `effectiveFrom`), `ProviderCommissionLedger` (NUMERIC(18,8)), `ProviderWeeklySettlement` (DRAFT/CONFIRMED/ADJUSTED)
+- Worker `calculate-provider-commission` — reads `DrawFinancialProvider`, applies formula with `decimal.js`, upserts ledger
+- Worker `weekly-settlement-snapshot` — Monday cron trigger on VPS `/etc/cron.d/tote-triggers`
+- API: commission config CRUD, ledger viewer, settlement list + confirm action
+- Frontend: `/admin/financiero/comisiones/` + `/admin/financiero/comisiones/liquidaciones/`
 
-**Delivers:** Extended provider management UI with token generation, PULL/PUSH mode toggle, slug field; webhook log viewer with status filtering; payload inspector modal.
+**Must implement correctly:**
+- `ProviderCommissionConfig` is append-only with `effectiveFrom` (F-5)
+- `ProviderCommissionLedger.amount` as `NUMERIC(18,8)` (F-4)
+- Missing config = skip with log, not error (pipeline must not block)
+- Deploy checklist includes `/etc/cron.d/tote-triggers` update (F-12) and `pgboss.queue` verification (F-11)
+- Commission go-live date as an explicit constant — do NOT write ledger rows for pre-go-live draws (F-17)
 
-**Addresses features from FEATURES.md:**
-- Provider CRUD UI extensions (mode, token gen, slug) — P1
-- Token generation UI (show-once UX, bcrypt hash on save) — P1
-- Webhook log viewer — P1
-- Payload inspector modal — P2
+### Phase 3: Exchange Rate + Accounting Ledger
 
-**Uses (from STACK.md):**
-- `crypto.randomBytes(32).toString('hex')` for token generation in `provider.controller.js`
-- Masked token display (show once after generation, `tote_...f3a2` thereafter)
+**Rationale:** Depends on commission model (an `AccountingEntry` of type PAYMENT optionally links to a `ProviderWeeklySettlement`). Schema-level can be developed in parallel with Phase 2 at the schema level, but the FK linkage requires Phase 2 models to exist.
 
-**Implements (from ARCHITECTURE.md):**
-- `GET /api/providers/webhook-logs` + `POST /api/providers/systems/:id/generate-token`
-- `frontend/app/admin/proveedores/page.js` modifications
-- `frontend/app/admin/proveedores/webhook-logs/page.js` (new)
+**Delivers:**
+- New Prisma models: `ExchangeRate` (with `rateType` field from day one, immutable after creation), `AccountingCategory`, `AccountingEntry`
+- `multer` receipt upload middleware, stored at `storage/receipts/YYYY/MM/uuid.ext`
+- `accounting.service.js` with rate-required validation for USD entries
+- API: exchange rate CRUD, accounting entry CRUD, receipt upload + serve (auth-gated)
+- Frontend: `/admin/financiero/contabilidad/` + `/admin/financiero/contabilidad/tasa-cambio/`
 
-**Avoids (from PITFALLS.md):**
-- Token visible in admin list: return only masked token in API responses after creation
-- Token shown multiple times: show-once copy pattern in UI
+**Must implement correctly:**
+- `rateType` field on `ExchangeRate` from day one — not added later (F-8)
+- USD entries require `exchangeRateId` in schema, not only UI (F-6)
+- Receipt security: server-side MIME validation, UUID filename, 5MB limit, stored outside web root (F-14)
+- ExchangeRate rows are immutable after creation — no UPDATE endpoint, only INSERT
 
-### Phase 3: First Adapter + Ticket Creation
+### Phase 4: Report Refactor + Weekly P&L View
 
-**Rationale:** Adapter development can only start after Phase 1 infrastructure is live and Phase 2 UI is providing real payload samples from discovery mode. This phase wires the first real provider end-to-end and validates the entire pipeline with live data.
+**Rationale:** Requires all prior phases deployed AND backfill validated in production. This is the payoff — reports become O(1) per draw, the multi-draw bug disappears transparently, and the weekly P&L becomes possible.
 
-**Delivers:** First concrete adapter for one provider; real ticket creation from webhook payloads; duplicate detection validation with live data; replay feature for adapter development iteration.
+**Prerequisite gate:** `REPORT_USE_MATERIALIZED` flag stays `false` until: (a) Phase 1 backfill confirmed complete, (b) at least 2 weeks of live DrawFinancial data collected, (c) spot-check of 10+ draws confirms DrawFinancial totals match raw Ticket sums.
 
-**Addresses features from FEATURES.md:**
-- Real-time ticket creation via adapter — P2 (after discovery data)
-- Processing status tracking (DUPLICATE detection via `ticketId` FK) — P2
-- Replay feature — P2
-- Adapter status indicator badge — P2
+**Delivers:**
+- `REPORT_USE_MATERIALIZED=true` flag path in `accounting-report.service.js` and `monitor.service.js`
+- Old aggregation path kept behind `if (!useMaterialized)` for rollback
+- New API endpoint `GET /api/admin/financiero/reporte-semanal`
+- Frontend: `/admin/financiero/sorteos/` (per-draw financial view), `/admin/financiero/reporte-semanal/` (weekly P&L dashboard)
 
-**Avoids (from PITFALLS.md):**
-- Venezuela timezone: adapter unit tests with 8:00 PM boundary case
-- N+1 queries in adapter: batch `gameItem` lookups before processing details
-- Provider cancellation events: adapter must handle `anulado` events
-
-### Phase 4: Operational Hardening
-
-**Rationale:** After at least one adapter is live and producing tickets, operational concerns become real. Log growth, monitoring gaps, and security hardening can be addressed with production data to guide decisions.
-
-**Delivers:** Log retention policy; provider health status display; replay button in log viewer; WebhookLog growth management; timestamp validation (anti-replay attack).
-
-**Addresses features from FEATURES.md:**
-- Webhook log retention policy — v2+
-- Provider health status (last seen, error rate) — v2+
-- Webhook metrics dashboard — v2+ (defer until 3+ providers)
-
-**Avoids (from PITFALLS.md):**
-- Unbounded `WebhookLog` growth: retention job + index on `(apiSystemId, createdAt)`
-- Timestamp validation: `X-Webhook-Timestamp` header enforcement, 300-second window
-- IP allowlist per provider in `ApiSystem` (if needed)
+**Must implement correctly:**
+- `USD equivalent = amountBsF / historicalRate` — never `originalAmount / currentRate` (F-7)
+- Report service tested with historical entries to confirm no retroactive re-conversion
+- Old report endpoints (`/reportes/`, `/reportes-contable/`) remain untouched
 
 ### Phase Ordering Rationale
 
-- **Schema first in Phase 1** because every other component depends on `ApiSystem.slug`, `ApiSystem.webhookToken`, and `WebhookLog`. This is the hard blocker documented in both FEATURES.md and ARCHITECTURE.md.
-- **PULL sync fix before route goes live** because the race condition (PITFALL 1) can silently delete real-money bets from the first day. This must precede any live provider traffic.
-- **Admin UI in Phase 2, not Phase 1** because it depends on the backend API endpoints from Phase 1, and its absence doesn't block the webhook endpoint from functioning.
-- **First adapter in Phase 3** because adapter development benefits from real payload samples captured in discovery mode during Phase 1/2. Writing an adapter blind (before seeing real provider payloads) leads to normalizer errors and requires multiple redeploys.
-- **Operational hardening in Phase 4** because the right retention policy and monitoring thresholds can only be determined from real production traffic volume.
+- **Strict data dependency chain:** DrawFinancial -> commission ledger -> settlement -> weekly P&L. Building out of order would require retroactive data fixes at each step.
+- **Risk isolation:** Each phase is independently deployable behind env flags. If Phase 2 commission calculations produce unexpected results, Phases 3 and 4 are unaffected.
+- **Backfill before refactor:** Flipping `REPORT_USE_MATERIALIZED=true` before the backfill completes would make existing reports show zeros for historical draws. Phase ordering enforces this cannot happen.
+- **Schema decisions are permanent:** The `rateType` field (ExchangeRate), `effectiveFrom` (ProviderCommissionConfig), and `NUMERIC(18,8)` precision (ProviderCommissionLedger) must be baked into initial migrations. These cannot be added as follow-on migrations without re-running historical calculations.
 
 ### Research Flags
 
-Phases likely needing deeper research during planning:
-- **Phase 3 (First adapter):** Provider-specific payload format is unknown until discovery mode produces real samples. Adapter design cannot be fully specified until the target provider's payload structure is documented or observed. Flag for research when the specific provider is identified.
-- **Phase 4 (Operational hardening):** Log retention requirements depend on regulatory/compliance context (lottery platforms in Venezuela may have record-keeping requirements). Verify before choosing a retention window.
-
 Phases with standard patterns (skip research-phase):
-- **Phase 1 (Webhook infrastructure):** All patterns are well-documented and verified in STACK.md and ARCHITECTURE.md. Dynamic import, token auth, raw body capture — all have direct codebase precedents.
-- **Phase 2 (Admin UI):** Follows existing Next.js + TailwindCSS + Zustand patterns already in `frontend/app/admin/`. No new UI patterns required.
+- **Phase 1:** Codebase inspection is the primary source. Hook points, upsert pattern, worker registration, and pipeline chaining are all well-documented in existing workers. No new technology.
+- **Phase 4:** Flag-gated service swap is a well-understood technique. No new technology.
+
+Phases that may benefit from brief planning-phase research:
+- **Phase 2 — TIERED commission formula:** If the operator wants TIERED in v1.3 (rather than v1.4), the `ProviderCommissionTier` table design needs a dedicated planning session before the schema migration is written.
+- **Phase 3 — Receipt storage backup:** No backup procedure for VPS 94 has been documented for the `storage/` directory. Establish before Phase 3 deploys.
+
+---
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | All packages verified against existing `package.json`; no new installs required; patterns from official Stripe/Node.js docs |
-| Features | MEDIUM | Table stakes features are well-understood; betting-specific webhook features are inferred from patterns (no direct lottery webhook documentation found) |
-| Architecture | HIGH | Based on direct codebase inspection; component boundaries derived from existing file structure; dynamic import pattern already used in `queue/register.js` |
-| Pitfalls | HIGH | PULL/PULL race condition and idempotency pitfalls verified against actual source code in `sync-api-tickets.job.js` and `api-integration.service.js`; not theoretical |
+| Stack | HIGH | Only 2 new packages. Versions verified via npm. Prisma/decimal.js internal relationship confirmed. All other dependencies confirmed installed. |
+| Features | HIGH | Feature list directly from PROJECT.md scope + codebase inspection of existing services. Venezuela economic context confirmed by multiple sources. |
+| Architecture | HIGH | Based entirely on direct codebase inspection of all relevant workers, services, and queue infrastructure. Hook points, idempotency keys, and failure modes all verified against actual code. |
+| Pitfalls | HIGH | All critical pitfalls are verified against production memory files (pg-boss bug, enum bug, recursion pattern). Not theoretical risks — documented prior incidents. |
 
-**Overall confidence:** HIGH
+**Overall confidence: HIGH**
 
-### Gaps to Address
+### Open Questions to Address Before or During Planning
 
-- **Provider payload format:** No research can determine what the first PUSH provider's webhook payload looks like. Discovery mode is specifically designed to capture this. Phase 3 adapter work is blocked on payload samples from production discovery mode.
-- **Sync vs. async processing decision:** Research documents both options but the final decision depends on measured DB response times during draw-close load on production hardware. The recommendation is async (log first, process in background), but this should be confirmed with a load test before Phase 1 ships.
-- **Token storage: plain vs. hashed:** Research recommends hashed storage (bcrypt already in project). Final decision should be made with the operator — if tokens must be displayable after creation for provider configuration retrieval, hashing makes re-display impossible without regeneration.
-- **`ApiSystem` slug for existing SRQ record:** Migration requires backfilling `slug = 'srq'` for the existing SRQ `ApiSystem` row. The migration strategy (nullable-first vs. default value) must be confirmed before the Phase 1 migration runs against production.
+1. **TIERED tier schema shape:** FEATURES.md recommends deferring TIERED to v1.4. ARCHITECTURE.md's Phase 2 schema shows `ProviderCommissionConfig.tiers Json?` as a placeholder. If the operator needs TIERED in v1.3, a `ProviderCommissionTier(configId, minSales, maxSales, rate)` table is the correct design but adds a model and join. **Decision needed before Phase 2 schema migration is written.**
+
+2. **TAQUILLA_ONLINE ticket attribution in DrawFinancialProvider:** Only tickets with `Ticket.apiSystemId IS NOT NULL` get `DrawFinancialProvider` rows. TAQUILLA_ONLINE tickets (online players, `apiSystemId = null`) are excluded from per-provider breakdown. The weekly P&L "income" comes from `DrawFinancial.totalSales` (all sources) while "commission expense" comes from `ProviderCommissionLedger` (provider tickets only). This is architecturally correct but the split must be clearly labeled in the UI — otherwise the admin will think commissions are charged on all ticket sales. **Decision needed: how to label these totals in the weekly P&L view.**
+
+3. **Disk usage on VPS 94 for receipts:** At 50 files/month x 5MB max = 250MB/month theoretical max, roughly 3GB/year. **Action before Phase 3:** run `df -h` and `du -sh /var/proyectos/tote-web/backend/storage/` on VPS 94. If available disk is under 10GB, establish a retention policy or plan for disk expansion before enabling uploads.
+
+4. **ProviderCommissionConfig go-live date:** Commission ledger rows should not be written for historical draws (F-17). The go-live date must be an explicit constant in the Phase 2 configuration or migration. **Decision needed:** exact ISO date from which commissions apply (typically the date Phase 2 deploys to production).
+
+---
 
 ## Sources
 
-### Primary (HIGH confidence)
-- Node.js Crypto API Docs — `randomBytes`, `createHmac`, `timingSafeEqual`
-- Stripe Webhook Signature Docs — raw body + `timingSafeEqual` canonical pattern
-- express-rate-limit Configuration Docs — `keyGenerator` API, v7 feature set
-- Tote-web codebase: `backend/src/index.js`, `backend/prisma/schema.prisma`, `backend/src/middlewares/auth.middleware.js`, `backend/src/services/api-integration.service.js`, `backend/src/jobs/sync-api-tickets.job.js`, `backend/src/queue/register.js`, `frontend/app/admin/proveedores/page.js`
+### Primary (HIGH confidence — direct codebase inspection)
 
-### Secondary (MEDIUM confidence)
-- Hookdeck — webhook idempotency, webhook data integrity guides
-- Svix — webhook timeout best practices, security best practices
-- webhooks.fyi — replay prevention, provider best practices
-- Beeceptor, SystemDesignHandbook.com — webhook architecture patterns
-- DEV Community — HMAC signing, webhook-at-scale patterns
+- `backend/src/queue/workers/step-process-prizes.worker.js` — pipeline chaining, prizesProcessed flag
+- `backend/src/queue/workers/step-calculate-stats.worker.js` — parallel output pattern
+- `backend/src/queue/workers/close-and-ingest.worker.js` — close atomicity, best-effort pattern
+- `backend/src/queue/register.js` — worker registration pattern with env flags
+- `backend/src/queue/constants.js` — queue naming conventions
+- `backend/src/scripts/trigger-pgboss-cron.mjs` — ALLOWED_QUEUES pattern
+- `backend/src/services/accounting-report.service.js` — current O(N x M) aggregation being replaced
+- `backend/src/services/monitor.service.js` — getDailyReport aggregation
+- `backend/prisma/schema.prisma` — existing model structure and Decimal field patterns
+- `.claude/projects/.../memory/MEMORY.md` — pg-boss createQueue bug, PUBLISHED enum removal, worker recursion pattern (all confirmed prior incidents)
 
-### Tertiary (LOW confidence)
-- Lottery-specific webhook documentation — none found; patterns extrapolated from payment webhook documentation
+### Primary (HIGH confidence — npm verified)
+
+- `decimal.js` 10.6.0 — npm view confirmed; Prisma internal usage confirmed via prisma/prisma issue #9170
+- `multer` 2.1.1 — npm view confirmed; ESM interop confirmed
+- `date-fns` 4.1.0 + `date-fns-tz` 3.2.0 — confirmed installed; ISO week functions verified present
+- `exceljs` 4.4.0 — confirmed in `backend/package.json`
+
+### Secondary (MEDIUM confidence — contextual)
+
+- US state lottery retailer commission programs (Oregon OAR 177-040-0025, Iowa, Maine) — weekly settlement cycle and SALES_PCT formula range (5-8%)
+- Venezuela economic context (Caracas Chronicles 2025-04-09, Euronews 2026-01-01) — parallel rate gap, de facto dollarization, IAS 21/IAS 29 functional currency guidance rationale
+- Prisma money storage: Prisma discussion #10160, Crunchy Data "Working with Money in Postgres" — Decimal column recommendation, avoid `@db.Money`
 
 ---
-*Research completed: 2026-04-01*
+
+*Research completed: 2026-05-15*
 *Ready for roadmap: yes*

@@ -1,306 +1,382 @@
-# Pitfalls Research
+# Domain Pitfalls — v1.3 Financial Layer
 
-**Domain:** Multi-provider webhook system added to existing lottery/betting platform
-**Researched:** 2026-04-01
-**Confidence:** HIGH (codebase verified + multiple authoritative sources)
+**Milestone:** v1.3 Capa Financiera y Contabilidad
+**Researched:** 2026-05-15
+**Confidence:** HIGH (codebase verified, production memory verified, live pipeline examined)
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Duplicate Ticket Creation from Webhook + SRQ PULL Race
+These mistakes cause incorrect money figures, require a backfill rerun, or corrupt audit trails.
+
+---
+
+### Pitfall F-1: Aggregate Written Before Prize Processing Completes
 
 **What goes wrong:**
-A provider sends a webhook for a ticket at 5:53 PM. The webhook adapter creates the ticket in the database. Three minutes later, at 5:55 PM, `sync-api-tickets.job.js` runs its every-5-minute PULL cycle. It calls `importSRQTickets(drawId, clearExisting: true)`, which executes `prisma.ticket.deleteMany({ where: { drawId, source: 'EXTERNAL_API' } })` and then re-inserts all tickets from the SRQ API. The webhook-created ticket is deleted and re-created if SRQ includes it, or permanently deleted if SRQ has not yet registered it.
+`calculate-draw-financials` runs as a step in the execute-draw pipeline. If it is placed immediately after `step-calculate-stats` (the current final step), it will produce a valid aggregate. But if it is ever triggered independently — from the backfill script, from an admin "recalculate" action, or from a cron sweep that finds draws with `statsCalculated=true` but no `DrawFinancial` row — there is a window where `prizesProcessed=false` on the draw but the aggregate query still runs. The resulting row will have `totalPrize=0` and report 100% margin on a draw that had real prizes.
 
-Reverse race: the PULL sync imports a ticket from SRQ. The provider later sends a webhook for the same ticket (common during onboarding or when providers activate PUSH for an already-active draw). The webhook adapter checks `externalTicketId` uniqueness — but only if the adapter correctly maps the provider's ticket ID to the same field that SRQ uses. If the provider uses a different field name for the same ticket ID, two records are created.
+**Warning sign:** `DrawFinancial.totalPrize = 0` for a draw with `Draw.prizesProcessed = false`. This is detectable with a single SQL check after any backfill run.
 
-**Why it happens:**
-The SRQ PULL system uses a destructive sync pattern (delete-all then re-insert) designed for full state refresh. PUSH webhooks assume additive, event-driven creation. These two assumptions are incompatible without a coordination layer.
+**Prevention:**
+- The worker must guard: `if (!draw.prizesProcessed) throw new Error('prizes not processed yet')`. This causes pg-boss to retry or fail loudly — never silently produce a zero-prize aggregate.
+- The backfill script must `WHERE prizesProcessed = true AND statsCalculated = true` — never aggregate a draw that has not finished the full pipeline.
+- Add a DB constraint or application check: `DrawFinancial` rows may only be created/updated when the parent `Draw.prizesProcessed = true`.
 
-**How to avoid:**
-- Assign each `ApiSystem` record a `mode` field (`PULL` | `PUSH`). In `importSRQTickets`, skip the `deleteMany` step if any active webhook source exists for the same draw.
-- Alternatively: namespace ticket sources. PULL tickets get `source: 'EXTERNAL_API'`. PUSH tickets get `source: 'WEBHOOK'`. Make `deleteMany` filter only `source: 'EXTERNAL_API'`.
-- All ticket-creation paths (PULL and PUSH) must use the same `externalTicketId` uniqueness check via `prisma.ticket.findFirst` before inserting.
-- Add a database unique constraint: `@@unique([drawId, externalTicketId, source])` so the DB itself rejects duplicates regardless of timing.
-
-**Warning signs:**
-- Ticket count for a draw jumps unexpectedly between syncs
-- Prize processor runs and finds zero eligible tickets for a draw that had bets
-- Log entries showing `deleted X tickets` immediately after webhook log entries for the same draw
-
-**Phase to address:**
-Phase 1 (Webhook infrastructure) — before any adapter is wired up. The source-scoped `deleteMany` must be in place before the first PUSH provider goes live. Implementing idempotency at the DB level (unique constraint) is a prerequisite for the ticket-creation step.
+**Phase:** Phase 1 (DrawFinancial schema + worker). Guard must be in the initial worker implementation before any backfill is run.
 
 ---
 
-### Pitfall 2: No Idempotency — Webhook Retries Create Duplicate Bets
+### Pitfall F-2: Race Between Live Worker and Backfill Script
 
 **What goes wrong:**
-Providers guarantee at-least-once delivery. If the server returns a non-2xx response (network blip, slow DB write, deploy restart), the provider retries the webhook. The adapter runs again and creates a second `Ticket` record for the same bet. In a real-money betting system this means the same bet is counted twice in prize calculations.
+The backfill script runs in a loop over ~2600 historical draws. For any draw whose close happened within the last few seconds (a freshly-completed draw), both the backfill loop AND the live `calculate-draw-financials` worker can be writing to the same `DrawFinancial` row simultaneously. PostgreSQL's upsert semantics (`ON CONFLICT DO UPDATE`) handle this safely if and only if the upsert is in a single atomic statement. If the worker does a `findUnique` + conditional `create`/`update` (two round-trips), a race produces a duplicate-key error or last-write-wins with stale data.
 
-This is distinct from Pitfall 1 — this is purely within the PUSH path, without the PULL system involved.
+**Warning sign:** Duplicate-key violations on `DrawFinancial.drawId` in logs during backfill. Or backfill completes but some draws have `DrawFinancial.totalSales` that disagrees with the live sum by a fixed amount that matches the last few minutes of bets.
 
-**Why it happens:**
-The current `saveTicketWithDetails` in `api-integration.service.js` checks `prisma.ticket.findFirst` before inserting — this check is not atomic. Two concurrent webhook deliveries for the same ticket can both pass the check before either has committed the insert.
+**Prevention:**
+- Use Prisma's `upsert` (maps to `INSERT ... ON CONFLICT DO UPDATE`) for all DrawFinancial writes — both the live worker and the backfill script. Never a read-then-write pattern.
+- The backfill script must skip draws where `drawDate >= (NOW() - interval '1 hour')` to avoid racing with draws still in pipeline.
+- Add a comment in the backfill script: "do not run while a draw is actively being executed (between xx:00 and xx:05 draw window)."
 
-**How to avoid:**
-- Use a database-level unique constraint on `(drawId, externalTicketId)` (scoped per source or globally). This makes the insert fail deterministically on duplicates.
-- Wrap the check-then-insert in a Prisma `$transaction` with `isolation: 'Serializable'` or use `createMany` with `skipDuplicates: true`.
-- Store a `webhookEventId` (the provider's delivery ID, if provided) in `WebhookLog` and check it before processing. Return 200 immediately for known event IDs.
-- Always return HTTP 200 to the provider even when skipping a duplicate. Returning 409 or 500 causes retries.
-
-**Warning signs:**
-- `totalAmount` for a draw is exactly 2x the expected value
-- Multiple `Ticket` rows with the same `externalTicketId` in the database
-- Provider webhook delivery logs showing repeated retries for the same event ID
-
-**Phase to address:**
-Phase 1 (Webhook infrastructure). The `WebhookLog` model needs an `eventId` field (provider-supplied delivery ID). Idempotency check must happen at the controller level, before the adapter runs.
+**Phase:** Phase 1 (DrawFinancial schema + worker) and Phase 2 (backfill script). Both must use the same upsert helper function.
 
 ---
 
-### Pitfall 3: Slow Adapter Blocks HTTP Response — Provider Retries Storm
+### Pitfall F-3: Multi-Draw Ticket Attribution Bug Persists in Financial Aggregate
 
 **What goes wrong:**
-The `PROJECT.md` decision is: "tickets created synchronously on webhook receipt." If the adapter performs multiple DB lookups (find draw by external ID, find gameItem by number, find or create entities, create Ticket + TicketDetails), the total processing time can reach 200–800ms under normal load. When the production database is under load during draw-close time (prizes processing, stats calculating, SRQ sync all running simultaneously), individual queries can spike to 2–5 seconds. Providers that enforce a 5-second response timeout will retry. Each retry triggers the same slow path, compounding load exactly when the system is most stressed.
+The existing `accounting-report.service.js` aggregates `Ticket.totalAmount` across all tickets in a draw. For tickets created by PUSH providers (webhook) with multi-play (one Ticket covering multiple draws via `TicketDetail` rows), `Ticket.drawId` points to the first draw but the ticket's amount spans multiple draws. Aggregating by `Ticket.drawId` overcounts sales for that draw and undercounts for the others.
 
-**Why it happens:**
-The synchronous processing decision was made assuming low webhook volume and fast DB responses. The draw-close window (5:55–6:00 PM for a 6:00 PM draw) is precisely when the system is maximally busy, and it is also when providers most likely send final bet webhooks.
+This is a known bug in `getDailyReport` and `getAccountingReport`. The `DrawFinancial` worker will replicate this bug if it queries `Ticket.drawId` instead of `TicketDetail.drawId`.
 
-**How to avoid:**
-- Accept the webhook, write to `WebhookLog`, return 200 immediately (< 50ms). Process the log record asynchronously via a short-lived in-process async handler or a pg-boss queue job.
-- If synchronous processing is kept: add a 3-second timeout to the entire adapter execution. If exceeded, log to `WebhookLog` with `status: 'DEFERRED'` and process asynchronously.
-- Move the draw-lookup (by external draw ID) to a pre-validated cache at request time, not inside the adapter.
-- Set `express.json({ limit: '100kb' })` specifically for webhook routes, not the global 100KB default, to avoid parsing large payloads synchronously.
+**Warning sign:** `DrawFinancial.totalSales` for a draw differs from the manual sum of `SELECT SUM(td.amount) FROM TicketDetail td WHERE td.drawId = :drawId`. If these disagree, the aggregate was computed via `Ticket.drawId`.
 
-**Warning signs:**
-- Provider delivery logs show timeout errors (HTTP 504 or no response) during draw-close windows
-- Winston logs show webhook route response times > 1000ms
-- Cascading retries: 3+ log entries for the same `eventId` within a 30-second window
+**Prevention:**
+- The `calculate-draw-financials` worker must aggregate via:
+  ```sql
+  SELECT SUM(td.amount) AS totalSales, COUNT(DISTINCT td.ticketId) AS ticketCount
+  FROM TicketDetail td
+  JOIN Ticket t ON t.id = td.ticketId
+  WHERE td.drawId = :drawId AND t.status != 'CANCELLED'
+  ```
+  Never `SUM(ticket.totalAmount) WHERE ticket.drawId = :drawId`.
+- Write a test: create one Ticket with TicketDetails spanning two drawIds. Verify each DrawFinancial row gets only its portion of the amount, not the full ticket amount.
+- The backfill script must use the same TicketDetail-based query.
 
-**Phase to address:**
-Phase 1 (Webhook infrastructure). The architecture decision (sync vs. async) must be locked in Phase 1. If the synchronous approach is kept, the timeout guard must be built in the same phase.
+**Phase:** Phase 1 (DrawFinancial schema + worker). This is the "transparent fix" mentioned in PROJECT.md — it must be the primary aggregation method from day one.
 
 ---
 
-### Pitfall 4: Bearer Token Leaked in Logs or Error Responses
+### Pitfall F-4: Decimal Rounding Accumulation in Commission Calculations
 
 **What goes wrong:**
-The existing request logger in `index.js` logs `req.method`, `req.path`, `ip`, and `userAgent`. However, the full URL is logged via `req.path`. If a provider mistakenly sends the token in the query string instead of the `X-Webhook-Token` header (a common provider misconfiguration), the token appears in combined.log. Winston rotates logs but they remain readable for days. Additionally, if an error occurs during token validation and the error handler echoes back `err.message` (which the global error handler does in development), the token value can appear in the HTTP response body seen by the provider.
+A provider sells 5,000 tickets per week at Bs 1.00 each. Commission rate is 3.7%. Per-ticket commission = Bs 0.037. If this is stored as `NUMERIC(12,2)` it rounds to Bs 0.04. Over 5,000 tickets that is Bs 200. Correct amount at 3.7% is Bs 185. You overpay the provider Bs 15 per week — Bs 780/year. In hyperinflation context this gap widens because you are computing against BsF amounts that are themselves larger.
 
-Beyond logs: the `ApiSystem.webhookToken` field stores tokens in plaintext in PostgreSQL. Any database dump or Prisma Studio session exposes all tokens.
+Conversely, FLOOR rounding (always round down): Bs 0.037 → Bs 0.03. You underpay by Bs 35/week — Bs 1,820/year. Provider will eventually notice and dispute.
 
-**Why it happens:**
-Token logging happens passively — no one intends it, but the existing middleware logs enough context that query-string tokens appear automatically. Plaintext storage is the path of least resistance.
+**Warning sign:** The sum of individual `ProviderCommissionLedger.amount` rows does not equal the direct formula applied to weekly totals. Any non-zero difference that grows proportionally with ticket count indicates per-ticket rounding accumulation.
 
-**How to avoid:**
-- Accept tokens ONLY in the `X-Webhook-Token` header. Reject any request that has a token in the query string with 400 (without echoing the query string back).
-- Add a log sanitizer that strips any header named `x-webhook-token`, `authorization`, or `apikey` from request log metadata.
-- Store `webhookToken` as a bcrypt hash or SHA-256 hash in the database. On receipt, hash the incoming token and compare. Never store or log the raw token after generation.
-- The admin UI must show tokens only once (at generation time), then display only a masked version (e.g., `tote_...f3a2`).
-- In the global error handler, never echo `err.message` to the response in production — the existing code already does this correctly, but must be verified for the new webhook routes.
+**Prevention:**
+- Store commission amounts as `NUMERIC(18, 8)` — preserve 8 decimal places in the ledger. Round only at display time (2 decimal places for BsF, 6 for USD).
+- Apply commission formula once to the weekly aggregate (not per-ticket). Store the single computed commission per week in `ProviderWeeklySettlement`. The per-draw `ProviderCommissionLedger` rows are for audit trail and should also use full precision.
+- For `TIERED` formula: the tier threshold comparison must use the same precision as the stored aggregate. Never compare `totalSales > 10000` when `totalSales` is a JavaScript float — always use `Decimal.js` or Prisma's `Decimal` type.
+- Document which rounding rule applies (HALF_UP is standard for financial calculations; FLOOR favors the payer; CEIL favors the recipient). Choose once, encode it as a constant, not inline `Math.round()`.
 
-**Warning signs:**
-- Log grep for `x-webhook-token` or `token=` in combined.log returns results
-- Provider contacts support saying their token was in a 400 error response body
-- Database dump shows `webhookToken` fields with readable token strings
-
-**Phase to address:**
-Phase 1 (Webhook infrastructure) for the header-only enforcement, log sanitizer, and error handler review. Phase 2 (Admin UI) for token generation UI showing tokens only once.
+**Phase:** Phase 3 (commission calculations). The schema must use `NUMERIC(18,8)` from the start — changing precision later requires a migration and a retroactive recalculation.
 
 ---
 
-### Pitfall 5: Missing Draw Mapping Silently Discards Bets
+### Pitfall F-5: Commission Config Changes Mid-Week Without Recalculation
 
 **What goes wrong:**
-A provider sends a webhook with their internal draw ID (e.g., `sorteo_id: 4821`). The adapter attempts to resolve this to a local `Draw` UUID. If no `ApiDrawMapping` row exists (mapping not yet synced, wrong date sent by provider, or the planning sync job has not run yet today), the adapter either throws an error or returns silently. Bets are lost with no visibility.
+Admin changes a provider's commission rate on Wednesday. The weekly settlement worker runs on Sunday and applies the new rate to the entire week's draws, including Monday and Tuesday when the old rate applied. Retroactive application misrepresents what was agreed.
 
-In discovery mode (no adapter exists), this is expected. But once an adapter is wired, a missing mapping is a silent data loss event. The `WebhookLog` will show a raw payload, but unless someone monitors it, real-money bets are never registered.
+**Warning sign:** Provider receives a settlement for Week 21 that does not match the rate they had agreed to on Monday of that week. No audit record exists showing the rate change happened mid-week.
 
-**Why it happens:**
-The mapping resolution step depends on `ApiDrawMapping` being populated by the planning sync job (runs at 6 AM via `sync-api-planning.job.js`). If a new provider sends webhooks before their draws are mapped, or if they use a draw ID format that the mapper does not recognize, the lookup returns null.
+**Prevention:**
+- `ProviderCommissionConfig` must be append-only with `effectiveFrom` date. Never update the current row — insert a new row with the new rate and an `effectiveFrom` timestamp.
+- The commission calculation query must look up the config that was effective at the time of the draw's `drawnAt` timestamp, not the current config.
+- The weekly settlement worker must aggregate draws using their per-draw commission from `ProviderCommissionLedger`, not by applying the current config to the week's total. This means `ProviderCommissionLedger` rows must be written at draw-close time with the effective rate at that moment.
+- If commission config does not exist yet for a given provider+draw, write a `NULL` commission to the ledger (not 0 — these are not the same). `NULL` means "not configured yet." 0 means "configured, but commission is zero."
 
-**How to avoid:**
-- When draw mapping fails, log to `WebhookLog` with `status: 'UNRESOLVABLE_DRAW'` and include the raw provider draw ID.
-- Implement a monitoring alert (Telegram admin notification) when `WebhookLog` has more than N entries with `status: 'UNRESOLVABLE_DRAW'` in the last hour.
-- When mapping fails, do not silently discard. Return HTTP 200 (to prevent retries) but queue the raw payload for manual review.
-- The admin webhook log viewer must filter by `status: 'UNRESOLVABLE_DRAW'` and display the raw `externalDrawId` from the payload.
-- Consider a fallback: if the draw ID is not in `ApiDrawMapping`, attempt to match by game + date + time before discarding.
-
-**Warning signs:**
-- `WebhookLog` entries with `status: 'UNRESOLVABLE_DRAW'`
-- Provider reports "we sent bets but they do not appear in results"
-- `ApiDrawMapping` table is empty for a provider that has been sending webhooks
-
-**Phase to address:**
-Phase 1 (Webhook infrastructure). The unresolvable-draw log status must be in the initial implementation. Phase 3 (Admin UI) for the monitoring view.
+**Phase:** Phase 3 (commission calculations). The config schema must be versioned (effectiveFrom) from the start.
 
 ---
 
-### Pitfall 6: Venezuela Timezone Mismatch in Draw Lookup
+### Pitfall F-6: Exchange Rate Missing — Accounting Entry Blocked vs Silent Default
 
 **What goes wrong:**
-Providers may send draw timestamps in UTC or in their local timezone (which may differ from Venezuela UTC-4). The adapter resolves the draw by comparing the provider's timestamp against `Draw.drawDate` (a PostgreSQL `@db.Date` field stored in UTC) and `Draw.drawTime` (a plain string in `HH:MM:SS` format representing Venezuela time). If the adapter naively parses the provider's timestamp as UTC and compares it to `drawTime`, draws at 8 PM Venezuela time (which is midnight UTC) will fail to match because the date component differs.
+Admin forgets to enter the exchange rate for today. An accounting entry is created for a USD payment. The system must choose: (a) block the entry until a rate exists, (b) silently use yesterday's rate, (c) store `exchangeRateId = NULL` and compute USD equivalent as NULL.
 
-The existing SRQ service has already encountered this: `getVenezuelaDateAsUTC()` exists precisely because `drawDate` stores the Venezuela calendar date as a UTC midnight timestamp, and naive date comparisons break around midnight.
+Option (b) is the most dangerous: it silently encodes a wrong rate with no audit trail. In a month of 30% BsF inflation, using yesterday's rate for a USD-denominated payment could misrepresent the BsF equivalent by hundreds of thousands of bolivares.
 
-**Why it happens:**
-Venezuela does not observe daylight saving time (fixed UTC-4), which creates a consistent offset, but providers from other countries may send timestamps in their own timezone or in UTC. The SRQ integration sidesteps this by using a `sorteoID` mapping rather than timestamp matching. New PUSH providers will use timestamps, not pre-mapped IDs.
+Option (a) creates friction: admin must enter the rate before posting expenses. This is acceptable — the system explicitly requires discipline.
 
-**How to avoid:**
-- All adapters must normalize provider timestamps to Venezuela time using `lib/dateUtils.js` before any draw lookup.
-- Draw lookup in adapters must use `getVenezuelaDateAsUTC(providerDate)` for the `drawDate` field and compare against `drawTime` in HH:MM format.
-- Document the timezone contract in the adapter interface: "all timestamps passed to `resolveDrawId()` must be pre-converted to Venezuela local time."
-- Test adapters with timestamps at 8:00 PM Venezuela (00:00 UTC next day) to verify the date boundary case.
+Option (c) is safe but incomplete: the BsF-denominated entry is still valid (all primary amounts are in BsF), and the USD equivalent can be computed retroactively when the rate is entered. This is the least disruptive.
 
-**Warning signs:**
-- Draws at or after 8:00 PM Venezuela time systematically fail to resolve
-- The draw that resolves is one day off from the expected draw
+**Warning sign:** `AccountingEntry` rows with `originalCurrency = 'USD'` but `exchangeRateId = NULL` appearing in reports with 0 USD equivalent, misleading the P&L.
 
-**Phase to address:**
-Phase 1 (Webhook infrastructure), in the adapter base class or utility function. Document the contract before any adapter is written.
+**Prevention:**
+- For USD-denominated entries: require `exchangeRateId` at create time. If no rate exists for today, the UI shows "No hay tasa de cambio para hoy — ingrese la tasa primero" and disables the submit button.
+- For BsF-denominated entries: `exchangeRateId` is optional (BsF is the functional currency; the USD equivalent column in reports shows NULL or "—" for entries with no rate).
+- Never default to the previous day's rate silently. If a default is used, log a WARNING and display a visual indicator in the UI ("tasa del día anterior usada — fecha X").
+- Exchange rate entries must have `createdBy` (admin user ID) and `createdAt` timestamps. They must not be editable — only superseded by a new row. Add `supersededById` FK for the audit chain.
+
+**Phase:** Phase 4 (accounting module schema). The rate-required constraint must be in the schema definition, not enforced only in the UI.
 
 ---
 
-## Technical Debt Patterns
+### Pitfall F-7: Re-Converting Historical USD Payments at Today's Rate
 
-Shortcuts that seem reasonable but create long-term problems.
+**What goes wrong:**
+A payment of $100 USD was made 6 months ago when the rate was Bs 40/USD. The payment was correctly recorded as `originalAmount=100, originalCurrency=USD, amountBsF=4000, exchangeRateId=<rate from 6 months ago>`. A report is generated that shows all USD payments "in USD equivalent today." The report fetches `originalAmount / currentRate` → at today's rate of Bs 70/USD, the $100 payment appears as $57. The business believes it spent $57 when it actually spent $100.
 
-| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
-|----------|-------------------|----------------|-----------------|
-| Synchronous ticket creation (no queue) | Simpler code, immediate feedback | Timeout retries storm during draw-close windows; hard to retrofit queue later | Only if strict p95 response time < 500ms is verified under draw-close load |
-| Store `webhookToken` as plaintext | No hashing implementation needed | Database dump or Prisma Studio leaks all provider tokens | Never in production |
-| Single `WebhookLog` table for all providers | Simple initial schema | Log becomes unqueryable at volume; no per-provider retention policy | Acceptable for MVP, add provider-scoped indexes before second provider onboards |
-| Return HTTP 500 on processing errors | Honest error reporting | Provider retries indefinitely; creates retry storm | Never — always 200 or 202 after logging the error |
-| Skip idempotency check for "low volume" | Faster implementation | First production incident guarantees a duplicate draw result | Never — idempotency is not an optimization, it is a correctness requirement |
-| Shared rate limiter for webhooks and browser API | No new configuration | Burst of provider webhooks consumes the 1000/15min budget shared with admin UI | Webhook endpoint must have its own rate limiter with higher burst tolerance |
+This mistake is easy to make when building summary reports that want to show a single "USD equivalent" column.
 
----
+**Warning sign:** The sum of USD-equivalent entries in a P&L report changes week-over-week for historical periods (the denominator changes as the rate changes).
 
-## Integration Gotchas
+**Prevention:**
+- The `amountBsF` field is the functional currency record. It is immutable once written. Reports must sum `amountBsF` as the source of truth.
+- To show "USD equivalent," use `amountBsF / exchangeRate.rate` where `exchangeRate` is the rate linked to the entry, not today's rate.
+- Never compute `originalAmount / currentRate` for historical entries. Document this explicitly in the report service: "USD equivalent = amountBsF / historicalRate (immutable at entry time)."
+- The UI should display both `amountBsF` and `usdEquivalentAtTime` as two separate read-only fields once the entry is saved. Neither changes retroactively.
 
-Common mistakes when connecting to external services.
-
-| Integration | Common Mistake | Correct Approach |
-|-------------|----------------|------------------|
-| SRQ (PULL) coexistence | Assuming PULL sync only runs at 6 AM — it also runs every 5 min (`sync-api-tickets`) | Verify that `deleteMany` in PULL sync is source-scoped before enabling any PUSH provider |
-| New PUSH provider onboarding | Testing the adapter with a single ticket, not during draw-close window concurrency | Always integration-test during simulated draw-close (prizes + stats + PULL sync running simultaneously) |
-| Provider draw ID format | Assuming all providers use numeric IDs like SRQ's `sorteoID` | Adapter interface must accept string IDs; `ApiDrawMapping.externalDrawId` is already `String`, use it |
-| Provider cancellation events | Ignoring `anulado`/cancellation events | Adapter must handle cancellation by voiding the ticket, not ignoring the event |
-| Provider payload evolution | Building adapter against first few payloads | Store raw payload in `WebhookLog.rawPayload` always; adapter bugs can be replayed against stored payloads |
-| `ApiSystem` slug uniqueness | Using `name` as the routing key instead of a slug | Slugs are URL-safe, lowercase, unique; `name` may have spaces and is display-only |
+**Phase:** Phase 4 (accounting module) and Phase 5 (reports). The report service must be explicitly tested with an entry from 6 months ago to verify it does not re-convert.
 
 ---
 
-## Performance Traps
+### Pitfall F-8: Tasa Paralela vs BCV Mixing in Reports
 
-Patterns that work at small scale but fail as usage grows.
+**What goes wrong:**
+Admin enters the tasa paralela (e.g., Bs 70/USD) when recording payments. The weekly P&L report is shown to a stakeholder who asks "what is our total expense in USD?" The stakeholder computes the answer using the BCV official rate (e.g., Bs 36/USD) and gets a different number. Neither party is wrong — they are using different rate systems. But the report has no indication of which rate was used, making it misleading.
 
-| Trap | Symptoms | Prevention | When It Breaks |
-|------|----------|------------|----------------|
-| N+1 queries in adapter (one `findFirst` per ticket detail) | Adapter takes 2–5 seconds per webhook during draw-close | Batch `gameItem` lookups by number array before processing details | At 50+ ticket details per webhook |
-| Unbounded `WebhookLog` growth | DB disk usage climbs; log viewer page load times out | Add a retention policy: archive or delete logs older than 30 days; index on `(apiSystemId, createdAt)` | After 90 days at 100 webhooks/day |
-| Single database transaction for entire webhook | DB connection held open during slow operations; connection pool exhausted | Split into: (1) write log, (2) commit, (3) process async | At 10+ concurrent webhooks per second |
-| Rate limiter shared with browser API | Admin dashboard becomes inaccessible during webhook burst | Create `/api/webhooks/*` as a separate Express router with its own `rateLimit` instance | At any burst > 50 requests/minute |
-| Adapter resolution cache miss on every request | DB hit on every webhook to load `ApiSystem` + `ApiConfiguration` | Cache `ApiSystem` slug-to-config mapping in memory (invalidated on admin config change) | At 10+ webhooks/second |
+**Warning sign:** Any time the word "USD" appears in a report without a footnote specifying which rate was used.
 
----
+**Prevention:**
+- `ExchangeRate` must have a `rateType` field: `PARALELA | BCV | OFFICIAL`. Admin selects at entry time.
+- Reports must display the rate type used. The P&L header must say "montos USD calculados a tasa PARALELA" (or whichever type applies).
+- If a date range spans entries that used different rate types, the report must flag this: "advertencia: este período contiene entradas con tipos de tasa mixtos (PARALELA y BCV)."
+- For this milestone, only PARALELA is expected (as per operational context). But the schema must have the field from day one — adding it later requires migrating all existing entries.
 
-## Security Mistakes
-
-Domain-specific security issues beyond general web security.
-
-| Mistake | Risk | Prevention |
-|---------|------|------------|
-| Token in query string accepted | Token logged by request logger and in server access logs | Enforce header-only (`X-Webhook-Token`); return 400 for query string tokens without echoing value |
-| Timing-vulnerable token comparison | Attacker can determine valid token prefixes via response timing | Use `crypto.timingSafeEqual(Buffer.from(incoming), Buffer.from(stored))` — never use `===` for token comparison |
-| Webhook endpoint hit from any IP | No way to detect compromised token; attacker has unlimited attempts | Add optional IP allowlist per provider in `ApiSystem`; log IP on every webhook receipt |
-| No timestamp validation | Replay attack: captured valid webhook can be resent hours later to insert old bets | Require `X-Webhook-Timestamp` header; reject requests where `|now - timestamp| > 300 seconds` |
-| `rawPayload` stored indefinitely in `WebhookLog` | Bet amounts, user IDs, taquilla IDs accumulate in a single queryable table | Apply field-level masking before writing to `WebhookLog.rawPayload`: mask `monto`, `taquillaID`, `userId` fields; store metadata only after 30 days |
-| Token visible in admin list endpoint | Token exposed in JSON response of `GET /api/admin/providers` | Return only masked token (`tote_...f3a2`) in API responses; never return full token after creation |
+**Phase:** Phase 4 (accounting module schema). The `rateType` field must be in the initial migration.
 
 ---
 
-## UX Pitfalls
+## Moderate Pitfalls
 
-Common user experience mistakes in this domain.
+---
 
-| Pitfall | User Impact | Better Approach |
-|---------|-------------|-----------------|
-| Token shown multiple times in admin UI | Users screenshot it in less secure contexts; token persists in browser history | Show token exactly once after generation with "Copy" button; subsequent views show masked version only |
-| Webhook log viewer shows raw JSON without structure | Admin cannot understand what a payload means without knowing provider format | Parse known fields (drawId, ticketId, amount) and display in structured columns; show raw JSON in expandable accordion |
-| Provider status shows "active" even when last 10 webhooks failed | Admin thinks system is working; provider thinks bets are being received | Show last-webhook-received timestamp and last error prominently on provider card |
-| No way to replay a failed webhook | Admin must ask provider to resend; providers often cannot | Add "Replay" button on `WebhookLog` entries with `status: 'ERROR'`; re-run the stored `rawPayload` through the adapter |
-| Unclear distinction between PULL and PUSH providers | Admin creates duplicate configs | Provider list must display mode (`PULL` / `PUSH`) prominently; PUSH providers show webhook URL; PULL providers show sync schedule |
+### Pitfall F-9: Ticket Cancellation After Commission Accrued
+
+**What goes wrong:**
+A provider's ticket is cancelled (via a webhook cancellation event, an admin correction, or the existing `deleteMany` pattern in PULL sync). The `ProviderCommissionLedger` row for the draw-that-included-that-ticket was already written. The ledger row is now stale — it includes commission on sales that were reversed.
+
+**Warning sign:** `ProviderCommissionLedger.amount` for a draw exceeds the result of applying the commission formula to the current (post-cancellation) `DrawFinancial.totalSales` for that draw.
+
+**Prevention:**
+- The commission ledger row must be immutable once written. Cancellations are handled via a compensating ledger row: a new `ProviderCommissionLedger` row with a negative `amount` referencing the original draw and a `reason: 'CANCELLATION_ADJUSTMENT'`.
+- Do not delete or update the original positive ledger row — this destroys the audit trail.
+- `ProviderWeeklySettlement` is computed as `SUM(ledger.amount)` for the period — both positive and compensating rows net out correctly.
+- If a full draw is cancelled (status `CANCELLED`), write a compensating row for the entire draw's commission.
+
+**Phase:** Phase 3 (commission calculations). The compensating-row pattern must be designed before the first settlement is generated.
+
+---
+
+### Pitfall F-10: Backfill Script Uses PUBLISHED Status That Causes Enum Error
+
+**What goes wrong:**
+According to project memory (`project_draw_status_enum.md`, verified 2026-05-11): production VPS 94 **no longer has `PUBLISHED` in the DrawStatus enum**. The enum is `{SCHEDULED, CLOSED, DRAWN, CANCELLED}`. Any query that uses `status = 'PUBLISHED'` or `status IN ('DRAWN', 'PUBLISHED')` will throw a PostgreSQL enum cast error — not return 0 rows, but throw an error that crashes the query.
+
+The backfill script is likely to include `status IN ('DRAWN', 'PUBLISHED')` based on the outdated CLAUDE.md comment ("production still uses PUBLISHED"). Using this in the backfill causes the entire backfill to fail on production.
+
+**Warning sign:** Backfill script exits with `ERROR: invalid input value for enum "DrawStatus": "PUBLISHED"` immediately on the first query against production.
+
+**Prevention:**
+- The backfill script must filter by `status = 'DRAWN'` only. No `PUBLISHED` reference.
+- Before running any script against production, verify the enum: `SELECT unnest(enum_range(NULL::"DrawStatus"))`.
+- Add a startup check to the backfill script:
+  ```javascript
+  const enumValues = await prisma.$queryRaw`SELECT unnest(enum_range(NULL::"DrawStatus")) AS v`;
+  const hasPublished = enumValues.some(r => r.v === 'PUBLISHED');
+  if (hasPublished) throw new Error('Unexpected PUBLISHED enum — check which env this is running against');
+  ```
+- Update CLAUDE.md root file to reflect that production no longer uses PUBLISHED (note: the memory `project_draw_status_enum.md` already says CLAUDE.md is outdated).
+
+**Phase:** Phase 2 (backfill script). This check must be the first line of the script, before any draw queries.
+
+---
+
+### Pitfall F-11: New pg-boss Queues Missing createQueue — Silent Job Loss
+
+**What goes wrong:**
+This is the documented pg-boss v10 bug from `project_pgboss_createqueue_bug.md`. `boss.work(queueName, handler)` does not create the queue row in `pgboss.queue`. `boss.send(queueName, data)` silently returns `null` if the row does not exist. The financial worker `calculate-draw-financials` will be a new queue. If `register.js` registers it with `boss.work()` but without a preceding `await boss.createQueue(QUEUES.CALCULATE_DRAW_FINANCIALS)`, every single financial aggregate write from the cron trigger will be silently lost.
+
+This has already burned the project once (Maxplay `sync-scrape-tickets`) and is documented as a latent bug in several existing queues.
+
+**Warning sign:** Cron Linux triggers the queue, `trigger-pgboss-cron.mjs` logs `enqueued job=null` instead of a UUID. `pgboss.job` has no rows for the queue name. `DrawFinancial` table stays empty.
+
+**Prevention:**
+- The pattern is mandatory: `await boss.createQueue(QUEUES.X)` immediately before `await boss.work(QUEUES.X, ...)`. Mirror the `retry-failed-publications` or `EXECUTE_DRAW_SWEEP` blocks in `register.js` — not the `simulate-bets` block (which is missing `createQueue`).
+- After deploying the new workers to production, run: `SELECT name FROM pgboss.queue;` and verify all new queue names are present. This is the smoke test before trusting any scheduled job.
+- Add the new queue names to the `ALLOWED_QUEUES` set in `trigger-pgboss-cron.mjs`. A queue not in this set cannot be triggered by cron, which means the financial calculations will never run.
+
+**Phase:** Phase 1 (DrawFinancial schema + worker). Must be verified before production deploy.
+
+---
+
+### Pitfall F-12: New Cron Trigger Not Added to /etc/cron.d/tote-triggers
+
+**What goes wrong:**
+The `calculate-draw-financials` worker is triggered post-totalization (chained from `step-calculate-stats`) — not by cron Linux directly. But the `calculate-provider-commission` worker and the weekly settlement snapshot likely need cron Linux triggers. If the deploy checklist does not include "update `/etc/cron.d/tote-triggers` on VPS 94," the trigger never fires. Workers can be registered in `register.js` perfectly, but without a cron entry sending jobs to the queue, nothing runs.
+
+The cron file path is absolute and VPS-specific. It cannot be deployed via `git pull` — it requires an explicit `ssh 94 "sudo cp ..."` step or manual edit.
+
+**Warning sign:** Commission calculations never appear in the ledger after go-live. `pgboss.job` shows no completed jobs for the commission queue. The worker registration log appears but no jobs are being consumed.
+
+**Prevention:**
+- Each new queue that requires periodic triggering must have a corresponding entry in `trigger-pgboss-cron.mjs`'s `ALLOWED_QUEUES` set AND a cron entry in `/etc/cron.d/tote-triggers`.
+- The deploy runbook for this milestone must include: "3. Update `/etc/cron.d/tote-triggers` with new weekly settlement trigger. Verify with `ssh 94 'cat /etc/cron.d/tote-triggers'`."
+- Weekly settlement cron timing: Sunday 00:05 Venezuela time (= Sunday 04:05 UTC, since Venezuela is UTC-4). The existing triggers use UTC-aware times.
+
+**Phase:** Phase 3 (commission calculations) deploy step. Include the cron file update as a required checklist item, not an afterthought.
+
+---
+
+### Pitfall F-13: Worker Recursion via Legacy .execute() Pattern
+
+**What goes wrong:**
+This is the documented pattern from `feedback_worker_recursion_pattern.md`. If the `calculate-draw-financials` logic is initially written as a function on a Croner-style job class (e.g., because the developer copies the structure of `draw-stats.service.js`), and then a pg-boss worker calls `.execute()` on that class, and `.execute()` contains a `if (process.env.PGBOSS_X) { boss.send(...); return; }` guard, the worker will re-enqueue itself into its own queue → loop. This caused 74 jobs/5min explosion previously.
+
+**Warning sign:** `pgboss.job` accumulates a growing number of `calculate-draw-financials` jobs within seconds of the first trigger. Backend CPU spikes. Emergency stop: `pm2 stop tote-backend`.
+
+**Prevention:**
+- New workers for this milestone must NOT follow the hybrid `.execute()` pattern. Instead: implement the logic directly as a service function (`drawFinancialsService.calculateForDraw(drawId)`). The pg-boss worker imports and calls the service. There is no Croner job class.
+- This is the "better refactor" mentioned in the feedback memory: "move the work inline to a service and have worker AND Croner-tick call the service directly."
+- If for any reason a Croner-legacy wrapper is used, the `viaWorker: true` parameter is mandatory when calling `.execute()` from a worker.
+
+**Phase:** Phase 1 (DrawFinancial schema + worker). The service-first pattern must be established before any worker is wired.
+
+---
+
+### Pitfall F-14: File Receipt Upload Security
+
+**What goes wrong:**
+The accounting module stores receipts/comprobantes as uploaded files. Common mistakes:
+
+1. **No MIME type validation:** An attacker (or a misconfigured client) uploads a `.php` or `.html` file as "receipt.pdf." If stored under the Express static path, it becomes executable or renderable.
+2. **Path traversal:** `filename` from the multipart body contains `../../etc/passwd`. If not sanitized, files land outside the intended upload directory.
+3. **Receipts stored in `/var/proyectos/tote-web/backend/uploads/`:** Not included in backups. VPS migration (as happened 144→94) destroys all receipts.
+4. **Unbounded file size:** No `maxSize` limit on the multer configuration allows OOM or disk exhaustion.
+
+**Warning sign for #3:** After the next VPS migration, all `AccountingEntry.attachmentUrl` fields point to files that no longer exist.
+
+**Prevention:**
+- Accept only `application/pdf`, `image/jpeg`, `image/png` MIME types. Validate on the server (not just the client's `Content-Type` header) using `file-type` npm package or magic byte inspection.
+- Generate a UUID-based filename on the server side. Never use the client-supplied filename.
+- Store files outside the web root. Use `/var/proyectos/tote-web/backend/storage/receipts/` (already excluded from static serving) — NOT `/public/` or any path served by Express static.
+- Set multer `limits: { fileSize: 5 * 1024 * 1024 }` (5MB max).
+- Document the backup requirement: the `storage/receipts/` directory must be included in whatever backup procedure exists for the VPS. If no backup procedure exists, this is the time to create one.
+
+**Phase:** Phase 4 (accounting module). File upload config must be part of the initial implementation.
+
+---
+
+## Minor Pitfalls
+
+---
+
+### Pitfall F-15: ISO Week vs Sunday-Start Week for Settlement Boundaries
+
+**What goes wrong:**
+The commission settlement is described as "weekly." ISO 8601 weeks start on Monday. JavaScript's `getDay()` returns 0 for Sunday. If the settlement query uses `EXTRACT(WEEK FROM drawDate)` in PostgreSQL (which uses ISO weeks, Monday-start) but the admin UI displays weeks calculated via `new Date().getDay()` (which may treat Sunday as day 0 of the next week), the boundary draws are attributed to different weeks in backend vs frontend. A draw at Sunday 11:00 PM is week N in ISO but might display as week N+1 in a JS-native week formatter.
+
+**Warning sign:** One or two draws per week appear in the wrong week's settlement total. The discrepancy is always a Sunday draw.
+
+**Prevention:**
+- Define the settlement week boundary explicitly in `dateUtils.js` and use it everywhere: both the backend settlement query and the frontend display.
+- Use ISO weeks (`date-fns/getISOWeek`, or PostgreSQL `EXTRACT(ISOYEAR FROM drawnAt), EXTRACT(WEEK FROM drawnAt)`) consistently throughout.
+- Document the boundary in the `ProviderWeeklySettlement` schema: "week boundaries are ISO 8601 (Monday 00:00 VE to Sunday 23:59 VE)."
+
+**Phase:** Phase 3 (commission calculations). Pin the week definition before the first settlement query is written.
+
+---
+
+### Pitfall F-16: Scope Creep Into Double-Entry Bookkeeping
+
+**What goes wrong:**
+PROJECT.md explicitly excludes "double-entry bookkeeping / chart of accounts." But the accounting module will have `INCOME`, `EXPENSE`, and `PAYMENT` categories. A developer or stakeholder may propose adding "accounts" to categorize these — and then "journals" to track debits/credits — and then "trial balance" — and suddenly the project is building a half-implemented ERP. A half-implemented ERP is worse than no ERP: it has the operational burden of both systems with the correctness guarantees of neither.
+
+**Warning sign:** A PR introduces an `Account` model or a `JournalEntry` model. Or a UI spec asks for a "chart of accounts" screen.
+
+**Prevention:**
+- Enforce the boundary at the schema level: there is no `Account` model in this milestone. `AccountingEntry` has a `category` string field (configurable categories), which is operationally sufficient.
+- Any feature request for accounts, journals, trial balance, or AP/AR should be deferred to a future milestone with explicit scope definition.
+- The weekly P&L (income net of commissions vs expenses → BsF balance) is the reporting endpoint. Anything beyond that is out of scope.
+
+**Phase:** Phase 4 (accounting module design). The decision to not implement double-entry must be a named decision in PROJECT.md Key Decisions section before any schema is written.
+
+---
+
+### Pitfall F-17: Historical Commission Backfill Without Historical Config
+
+**What goes wrong:**
+The project does not have historical commission configuration records for the period before this milestone (since the commission system does not exist yet). If the backfill script attempts to calculate commissions for the ~2600 historical draws, there is no `ProviderCommissionConfig` to apply — the system will either write zeros, throw errors, or silently skip rows depending on how the null case is handled.
+
+**Warning sign:** A backfill script that calls the commission calculation service for historical draws produces `ProviderCommissionLedger` rows with `amount = 0` for all historical draws. These rows are technically incorrect (they represent "no commission agreed") not "commission calculated as zero."
+
+**Prevention:**
+- Historical commission backfill is explicitly out of scope (PROJECT.md already implies this: "start fresh from a specific date"). Do not write `ProviderCommissionLedger` rows for draws before the go-live date of this milestone.
+- The `DrawFinancial` backfill (Phase 2) and the commission calculation (Phase 3) are separate scripts. The commission script should only process draws where `drawnAt >= commissionsGoLiveDate`.
+- The commissionsGoLiveDate should be a constant in the migration/script, not a magic number.
+
+**Phase:** Phase 2 (backfill script). Explicitly document which tables the backfill populates and which it does not touch.
+
+---
+
+## Phase-Specific Warnings
+
+| Phase | Topic | Likely Pitfall | Mitigation |
+|-------|-------|---------------|------------|
+| Phase 1 | DrawFinancial worker | F-1: aggregate before prizes done | Guard on `prizesProcessed=true` |
+| Phase 1 | DrawFinancial worker | F-3: multi-draw ticket attribution | Aggregate via TicketDetail.drawId, not Ticket.drawId |
+| Phase 1 | pg-boss registration | F-11: missing createQueue → silent loss | createQueue before work(); verify pgboss.queue table |
+| Phase 1 | Service pattern | F-13: worker recursion via .execute() | Implement as service function, not Croner-style class |
+| Phase 2 | Backfill script | F-2: race with live worker during backfill | Upsert pattern; skip draws within last 1 hour |
+| Phase 2 | Backfill script | F-10: PUBLISHED enum error on production | Filter by `status = 'DRAWN'` only; startup enum check |
+| Phase 2 | Backfill script | F-17: historical commission data missing | Only populate DrawFinancial, not ProviderCommissionLedger |
+| Phase 3 | Commission schema | F-5: mid-week config change retroactive | ProviderCommissionConfig with effectiveFrom, append-only |
+| Phase 3 | Commission amounts | F-4: rounding accumulation | NUMERIC(18,8) in DB; formula applied to weekly aggregate |
+| Phase 3 | Commission cancellations | F-9: ticket cancelled after commission accrued | Compensating negative ledger rows, not row deletion |
+| Phase 3 | Cron deploy | F-12: cron trigger not added to VPS | Deploy runbook must include /etc/cron.d update step |
+| Phase 3 | Week boundaries | F-15: ISO week vs Sunday-start | Pin ISO week boundary in dateUtils.js |
+| Phase 4 | Accounting schema | F-6: missing exchange rate default | Require exchangeRateId for USD entries; block UI if no today's rate |
+| Phase 4 | Accounting records | F-7: re-conversion using today's rate | Immutable amountBsF; USD equivalent = amountBsF / historicalRate |
+| Phase 4 | Accounting schema | F-8: tasa paralela vs BCV unlabeled | rateType field in ExchangeRate from day one |
+| Phase 4 | Scope | F-16: double-entry creep | Named decision in PROJECT.md before any schema is written |
+| Phase 4 | File upload | F-14: receipt storage security | MIME validation, UUID filename, 5MB limit, no-web-root path |
+| Phase 5 | Reports | F-7: historical re-conversion | Test report with entries from 6+ months ago |
 
 ---
 
 ## "Looks Done But Isn't" Checklist
 
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Webhook endpoint registered:** Verify `PULL` sync's `deleteMany` is source-scoped before the endpoint receives live traffic — the route existing is not sufficient.
-- [ ] **Token auth passing:** Confirm comparison uses `crypto.timingSafeEqual`, not `===`.
-- [ ] **Discovery mode logging:** Verify `rawPayload` is written to `WebhookLog` even when adapter does not exist — not just when adapter throws.
-- [ ] **Draw mapping resolution:** Test with a draw at 8:00 PM Venezuela time (midnight UTC boundary) to verify date component is correct.
-- [ ] **Duplicate prevention:** Confirm the unique constraint on `(drawId, externalTicketId)` exists in schema AND is enforced at the adapter level with a graceful skip (not a 500 error).
-- [ ] **Rate limiter isolation:** Confirm webhook routes use a separate `rateLimit` instance, not the `generalLimiter` from `index.js`.
-- [ ] **Error response safety:** Confirm the global error handler in `index.js` returns `'Error interno del servidor'` (not `err.message`) for production on webhook routes — this is already true for the general handler but must be verified for any webhook-specific error handling.
-- [ ] **Token masking in logs:** Run `grep -i 'webhook-token\|x-apikey\|token=' combined.log` after a test webhook delivery and confirm no token value appears.
-
----
-
-## Recovery Strategies
-
-When pitfalls occur despite prevention, how to recover.
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---------|---------------|----------------|
-| Duplicate tickets created | HIGH | (1) Identify affected draw IDs from duplicate `externalTicketId` pairs; (2) manually delete duplicate rows; (3) re-run prize processor for affected draws; (4) audit payouts for the draw |
-| Token leaked in logs | HIGH | (1) Immediately rotate token via admin UI (provider must update their config); (2) delete affected log files; (3) audit `WebhookLog` for any successful requests from unexpected IPs |
-| Bets discarded due to missing draw mapping | MEDIUM | (1) Identify affected `WebhookLog` entries with `status: 'UNRESOLVABLE_DRAW'`; (2) manually create `ApiDrawMapping` rows; (3) replay stored `rawPayload` through adapter; (4) verify ticket totals match provider records |
-| Slow adapter causing timeout retries | LOW | (1) Identify duplicate `eventId` entries in `WebhookLog`; (2) deduplicate in DB; (3) add async processing path as hotfix without full refactor |
-| Timezone mismatch causing wrong draw resolution | MEDIUM | (1) Find misrouted tickets via wrong `drawId`; (2) delete and re-create in correct draw; (3) re-run prize processor if affected draw is already DRAWN |
+- [ ] `DrawFinancial` worker checks `draw.prizesProcessed = true` before writing — not just `draw.statsCalculated`
+- [ ] Aggregation is via `TicketDetail.drawId`, not `Ticket.drawId` — verified with a multi-draw ticket test
+- [ ] `register.js` has `await boss.createQueue(QUEUES.CALCULATE_DRAW_FINANCIALS)` before `await boss.work(...)`
+- [ ] New queue names are in the `ALLOWED_QUEUES` set in `trigger-pgboss-cron.mjs`
+- [ ] Backfill script has startup enum check and filters `status = 'DRAWN'` only
+- [ ] `ProviderCommissionConfig` has `effectiveFrom` column; existing rows are never updated, only superseded
+- [ ] Commission amounts stored as `NUMERIC(18,8)` not `NUMERIC(12,2)`
+- [ ] `ExchangeRate` has `rateType` field; entries are immutable (no UPDATE, only INSERT)
+- [ ] USD entries require `exchangeRateId` — enforced in schema, not only in UI
+- [ ] Reports use `amountBsF / historicalRate` (not `originalAmount / currentRate`) for USD equivalent
+- [ ] Receipt uploads: MIME check + UUID filename + 5MB limit + storage outside web root
+- [ ] Deploy runbook includes: (1) `pgboss.queue` verification, (2) `/etc/cron.d/tote-triggers` update, (3) backfill smoke test
 
 ---
 
-## Pitfall-to-Phase Mapping
-
-How roadmap phases should address these pitfalls.
-
-| Pitfall | Prevention Phase | Verification |
-|---------|------------------|--------------|
-| PULL + PUSH race condition (Pitfall 1) | Phase 1: Source-scoped `deleteMany` in SRQ sync | Write a test: create ticket via PUSH adapter, run PULL sync, verify ticket still exists |
-| Duplicate tickets from retries (Pitfall 2) | Phase 1: Unique constraint + idempotency check | Send same `rawPayload` twice, verify only one `Ticket` row created |
-| Slow adapter timeout storm (Pitfall 3) | Phase 1: Architecture decision locked; timeout guard implemented | Load test with 20 concurrent webhooks during simulated draw-close (prizes job running) |
-| Token leaked in logs (Pitfall 4) | Phase 1: Token-header enforcement; Phase 2: Admin token masking | Deliver test webhook, grep logs for token value |
-| Missing draw mapping silent discard (Pitfall 5) | Phase 1: `UNRESOLVABLE_DRAW` status; Phase 3: Admin monitoring view | Send webhook with unknown draw ID, verify `WebhookLog` entry exists with correct status |
-| Timezone mismatch (Pitfall 6) | Phase 1: Adapter utility function using `lib/dateUtils.js` | Unit test adapter with timestamp at 8:00 PM Venezuela (UTC next-day boundary) |
-| Static token security (Security section) | Phase 1: `timingSafeEqual`; Phase 2: token-once UI | Automated security test: attempt timing attack on token comparison |
-| `WebhookLog` log growth (Performance section) | Phase 3 (Admin UI) | Verify retention job exists; check log viewer performance with 10,000 rows |
-
----
-
-## Sources
-
-- Postmark: [Why idempotency is important](https://postmarkapp.com/blog/why-idempotency-is-important)
-- Hookdeck: [Implement webhook idempotency](https://hookdeck.com/webhooks/guides/implement-webhook-idempotency)
-- Hookdeck: [Webhooks at scale best practices](https://hookdeck.com/blog/webhooks-at-scale)
-- Hookdeck: [How to solve webhook data integrity issues](https://hookdeck.com/webhooks/guides/how-solve-webhook-data-integrity-issues)
-- DEV Community: [Webhooks at scale — idempotent, replay-safe, observable system](https://dev.to/art_light/webhooks-at-scale-designing-an-idempotent-replay-safe-and-observable-webhook-system-7lk)
-- Svix: [Webhook timeout best practices](https://www.svix.com/resources/webhook-university/reliability/webhook-timeout-best-practices/)
-- Svix: [Webhook security best practices](https://www.svix.com/resources/webhook-best-practices/security/)
-- APIsec: [Securing webhook endpoints](https://www.apisec.ai/blog/securing-webhook-endpoints-best-practices)
-- webhooks.fyi: [Replay prevention](https://webhooks.fyi/security/replay-prevention)
-- DEV Community (Security Boulevard): [Bearer tokens explained](https://securityboulevard.com/2026/01/bearer-tokens-explained-complete-guide-to-bearer-token-authentication-security/)
-- Pedro Alonso: [Stripe webhooks — solving race conditions](https://www.pedroalonso.net/blog/stripe-webhooks-solving-race-conditions/)
-- Creative Software: [Webhook handling in the real world](https://www.creativesoftware.com/blog-posts/webhook-handling-in-the-real-world-what-can-go-wrong-and-how-we-handled-it)
-- BetterStack: [Logging sensitive data best practices](https://betterstack.com/community/guides/logging/sensitive-data/)
-- nodebestpractices: [Limit payload size](https://github.com/goldbergyoni/nodebestpractices/blob/master/sections/security/requestpayloadsizelimit.md)
-- Tote-web codebase: `backend/src/services/api-integration.service.js`, `backend/src/jobs/sync-api-tickets.job.js`, `backend/src/index.js`
-
----
-
-*Pitfalls research for: multi-provider webhook system on lottery/betting platform*
-*Researched: 2026-04-01*
+*Pitfalls research for: financial layer (aggregates, commissions, multi-currency accounting) added to live lottery system*
+*Researched: 2026-05-15*
