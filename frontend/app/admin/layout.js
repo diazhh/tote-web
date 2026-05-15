@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/authStore';
-import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle, DollarSign, Plug, Activity, FileText, BarChart3, List, Scale, History } from 'lucide-react';
+import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle, DollarSign, Plug, Activity, FileText, BarChart3, List, Scale, History, BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -68,6 +68,7 @@ export default function AdminLayout({ children }) {
     { name: 'Reporte Contable', href: '/admin/reportes-contable', icon: FileText, adminOnly: true },
     { name: 'Tickets', href: '/admin/tickets-report', icon: List, adminOnly: true },
     { name: 'Conciliación', href: '/admin/conciliacion', icon: Scale, adminOnly: true },
+    { name: 'Contabilidad', href: '/admin/contabilidad', icon: BookOpen, adminOnly: true },
     { 
       name: 'Canales', 
       icon: MessageSquare,
