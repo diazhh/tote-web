@@ -35,4 +35,7 @@ coverage/
 .nyc_output/
 
 # Prisma
-prisma/migrations/
+# Note: Phase 11 (v1.3) onward — migrations ARE committed so prod can apply
+# them via `prisma migrate deploy`. Historical migrations applied directly via
+# `db:push` are recorded in the live `_prisma_migrations` table but not in the
+# repo; only forward-going migrations from Phase 11 onward live here.

@@ -71,9 +71,9 @@ model GameItem {
   updatedAt    DateTime  @updatedAt
 
   // Relaciones
-  game               Game           @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  drawsAsPreselected Draw[]         @relation("PreselectedItem")
-  drawsAsWinner      Draw[]         @relation("WinnerItem")
+  game               Game            @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  drawsAsPreselected Draw[]          @relation("PreselectedItem")
+  drawsAsWinner      Draw[]          @relation("WinnerItem")
   ticketDetails      TicketDetail[]
   drawQuotas         DrawItemQuota[]
 
@@ -143,16 +143,18 @@ model Draw {
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  game            Game              @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  template        DrawTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  preselectedItem GameItem?         @relation("PreselectedItem", fields: [preselectedItemId], references: [id], onDelete: SetNull)
-  winnerItem      GameItem?         @relation("WinnerItem", fields: [winnerItemId], references: [id], onDelete: SetNull)
-  publications    DrawPublication[]
-  apiMappings     ApiDrawMapping[]
-  tickets         Ticket[]
-  stats           DrawStats? // Estadísticas del sorteo
-  providerStats   ProviderStats[] // Estadísticas por proveedor
-  itemQuotas      DrawItemQuota[]
+  game               Game                    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  template           DrawTemplate?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  preselectedItem    GameItem?               @relation("PreselectedItem", fields: [preselectedItemId], references: [id], onDelete: SetNull)
+  winnerItem         GameItem?               @relation("WinnerItem", fields: [winnerItemId], references: [id], onDelete: SetNull)
+  publications       DrawPublication[]
+  apiMappings        ApiDrawMapping[]
+  tickets            Ticket[]
+  stats              DrawStats? // Estadísticas del sorteo
+  providerStats      ProviderStats[] // Estadísticas por proveedor
+  itemQuotas         DrawItemQuota[]
+  financial          DrawFinancial? // Agregado financiero materializado (Phase 11)
+  financialProviders DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
 
   @@index([gameId])
   @@index([drawDate])
@@ -443,6 +445,7 @@ model ApiSystem {
   webhookLogs    WebhookLog[]
   tickets        Ticket[]
   users          User[]
+  drawFinancials DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
 
   @@index([name])
   @@index([slug])
@@ -1132,6 +1135,64 @@ model DrawStats {
 
   @@index([drawId])
   @@index([calculatedAt])
+}
+
+// ============================================
+// AGREGADO FINANCIERO DE SORTEO (Phase 11 — v1.3 milestone)
+// ============================================
+// DrawFinancial: una fila por sorteo completado con totales materializados
+// (totalSales, totalPrize, utility, ticketCount) — fuente de verdad para
+// los reportes de P&L, comisiones (Phase 12) y libro contable (Phase 13).
+// Frozen-after-totalizedAt (D-16): una vez que el worker phase PRIZES setea
+// totalizedAt, el registro queda inmutable.
+
+model DrawFinancial {
+  id     String @id @default(uuid())
+  drawId String @unique
+
+  // Agregados financieros — Decimal(12, 2) matches DrawStats convention.
+  // Phase 12 commission ledger usará Decimal(18, 8) por separado.
+  totalSales  Decimal @default(0) @db.Decimal(12, 2) // Σ TicketDetail.amount where Ticket.status != CANCELLED
+  totalPrize  Decimal @default(0) @db.Decimal(12, 2) // Σ TicketDetail.prize (post phase PRIZES)
+  utility     Decimal @default(0) @db.Decimal(12, 2) // totalSales - totalPrize
+  ticketCount Int     @default(0) // COUNT DISTINCT ticketId
+
+  // Timestamps de las dos fases del worker
+  closedAt    DateTime? // Phase SALES → Draw.closedAt
+  totalizedAt DateTime? // Phase PRIZES → cuando se cierra el libro (D-16 freeze marker)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draw Draw @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
+  @@index([drawId])
+  @@index([totalizedAt]) // D-05 — soporta queries time-series de P&L semanal (Phase 14)
+}
+
+// DrawFinancialProvider: una fila por (drawId, apiSystemId) — incluye un row
+// sintético con apiSystemId = NULL para el bucket TAQUILLA_ONLINE (D-06).
+// Worker DEBE usar findFirst + update/create explícito para el caso NULL
+// (Postgres trata NULLs como distintos en índices únicos — D-08).
+
+model DrawFinancialProvider {
+  id          String  @id @default(uuid())
+  drawId      String
+  apiSystemId String? // NULL = bucket TAQUILLA_ONLINE (D-06, label "Taquilla / Online" D-07)
+
+  totalSales  Decimal @default(0) @db.Decimal(12, 2)
+  totalPrize  Decimal @default(0) @db.Decimal(12, 2)
+  ticketCount Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  draw      Draw       @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  apiSystem ApiSystem? @relation(fields: [apiSystemId], references: [id])
+
+  @@unique([drawId, apiSystemId]) // D-08 — worker maneja NULL explícitamente
+  @@index([drawId])
+  @@index([apiSystemId])
 }
 
 // ============================================
