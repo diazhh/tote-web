@@ -39,3 +39,6 @@ coverage/
 # them via `prisma migrate deploy`. Historical migrations applied directly via
 # `db:push` are recorded in the live `_prisma_migrations` table but not in the
 # repo; only forward-going migrations from Phase 11 onward live here.
+
+# Phase 11 backfill reports (artifacts only — keep dir)
+storage/backfill-reports/*.csv
