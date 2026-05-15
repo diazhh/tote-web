@@ -4,14 +4,30 @@
  * Purpose:
  *   Phase 11's local backfill processed only 133 of 5,937 DRAWN draws because
  *   `prizesProcessed=true` was set on only the last 3 days (11-04-SUMMARY
- *   Finding B). The other ~5,804 historical draws have Prize rows but never
- *   had the boolean flipped. Without this fix, Phase 11's backfill candidate
- *   query (`status='DRAWN' AND prizesProcessed=true`) excludes them and 14-02
- *   shadow tests would be meaningless across the historical window.
+ *   Finding B). The other ~5,804 historical draws had prize processing run
+ *   but never had the boolean flipped. Without this fix, Phase 11's backfill
+ *   candidate query (`status='DRAWN' AND prizesProcessed=true`) excludes them
+ *   and 14-02 shadow tests would be meaningless across the historical window.
  *
  *   This script flips `Draw.prizesProcessed = true` ONLY for DRAWN draws that
- *   already have at least one Prize row (so we know prize processing actually
- *   ran). 14-CONTEXT D-05 step 1.
+ *   have at least one TicketDetail with `prize > 0` linked to them — the
+ *   strongest data-proven signal that the prize-processor worker actually
+ *   ran (it writes per-detail prize values; presence of any non-zero proves
+ *   execution).
+ *
+ *   Schema-reality note: 14-CONTEXT.md / 14-RESEARCH.md / 14-01-PLAN all
+ *   reference a `Prize` table for the EXISTS predicate, but no such table
+ *   exists in this codebase — prizes are denormalized onto `TicketDetail.prize`,
+ *   `Ticket.totalPrize`, and `Draw.tripletaPrize` (see
+ *   prize-processor.service.js lines 116-132). Operator approved the
+ *   corrected predicate (Option A) so the EXISTS clause walks TicketDetail
+ *   and falls back through `Ticket.drawId` for legacy NULL TicketDetail.drawId
+ *   rows. 14-CONTEXT D-05 step 1.
+ *
+ *   Bounded false-negative: all-loser draws (zero winning details) are
+ *   skipped. For those, DrawFinancial.totalPrize is 0 even after a flip —
+ *   same value the legacy aggregation path computes — so the 14-02 shadow
+ *   comparison still passes for them.
  *
  * Defensive notes (verified in 14-RESEARCH secondary sources):
  *   - step-process-prizes.worker.js (line 16-38) PRE-CHECKS `prizesProcessed`
@@ -59,16 +75,22 @@ if (!DRY_RUN && !CONFIRM) {
 async function main() {
   log(`fix-prizes-processed starting — mode=${DRY_RUN ? 'DRY-RUN' : 'WRITE'}`);
 
-  // 1. Before-count
+  // 1. Before-count — Option A predicate (TicketDetail.prize > 0 with NULL-drawId fallback)
   const beforeRows = await prisma.$queryRaw`
     SELECT COUNT(*)::int AS pending_count
     FROM "Draw"
     WHERE status = 'DRAWN'
       AND "prizesProcessed" = false
-      AND EXISTS (SELECT 1 FROM "Prize" p WHERE p."drawId" = "Draw".id)
+      AND EXISTS (
+        SELECT 1
+        FROM "TicketDetail" td
+        JOIN "Ticket" t ON t.id = td."ticketId"
+        WHERE (td."drawId" = "Draw".id OR (td."drawId" IS NULL AND t."drawId" = "Draw".id))
+          AND td.prize > 0
+      )
   `;
   const beforePending = beforeRows[0]?.pending_count ?? 0;
-  log(`Before: DRAWN draws with prizesProcessed=false and Prize rows = ${beforePending}`);
+  log(`Before: DRAWN draws with prizesProcessed=false and winning detail = ${beforePending}`);
 
   // 2. Dry-run sample (read-only)
   if (DRY_RUN) {
@@ -77,7 +99,13 @@ async function main() {
       FROM "Draw"
       WHERE status = 'DRAWN'
         AND "prizesProcessed" = false
-        AND EXISTS (SELECT 1 FROM "Prize" p WHERE p."drawId" = "Draw".id)
+        AND EXISTS (
+          SELECT 1
+          FROM "TicketDetail" td
+          JOIN "Ticket" t ON t.id = td."ticketId"
+          WHERE (td."drawId" = "Draw".id OR (td."drawId" IS NULL AND t."drawId" = "Draw".id))
+            AND td.prize > 0
+        )
       ORDER BY "drawDate" DESC
       LIMIT 5
     `;
@@ -92,7 +120,13 @@ async function main() {
     SET    "prizesProcessed" = true
     WHERE  status = 'DRAWN'
       AND  "prizesProcessed" = false
-      AND  EXISTS (SELECT 1 FROM "Prize" p WHERE p."drawId" = "Draw".id)
+      AND  EXISTS (
+        SELECT 1
+        FROM "TicketDetail" td
+        JOIN "Ticket" t ON t.id = td."ticketId"
+        WHERE (td."drawId" = "Draw".id OR (td."drawId" IS NULL AND t."drawId" = "Draw".id))
+          AND td.prize > 0
+      )
   `;
   log(`UPDATE complete — affected rows reported by Postgres = ${affected}`);
 
@@ -102,10 +136,16 @@ async function main() {
     FROM "Draw"
     WHERE status = 'DRAWN'
       AND "prizesProcessed" = false
-      AND EXISTS (SELECT 1 FROM "Prize" p WHERE p."drawId" = "Draw".id)
+      AND EXISTS (
+        SELECT 1
+        FROM "TicketDetail" td
+        JOIN "Ticket" t ON t.id = td."ticketId"
+        WHERE (td."drawId" = "Draw".id OR (td."drawId" IS NULL AND t."drawId" = "Draw".id))
+          AND td.prize > 0
+      )
   `;
   const afterPending = afterRows[0]?.pending_count ?? 0;
-  log(`After: DRAWN draws with prizesProcessed=false and Prize rows = ${afterPending}`);
+  log(`After: DRAWN draws with prizesProcessed=false and winning detail = ${afterPending}`);
 
   if (afterPending !== 0) {
     process.exitCode = 1;
