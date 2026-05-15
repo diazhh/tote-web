@@ -16,6 +16,8 @@ export const QUEUES = {
   // Phase 12 placeholder (D-15) — registered now to prevent F-11 silent-drop on Phase 12's
   // first deploy. Worker logic is a no-op until Phase 12 swaps in commission calculation.
   CALCULATE_PROVIDER_COMMISSION: 'calculate-provider-commission',
+  // Phase 12 — weekly settlement snapshot (cron-triggered Mondays 06:00 VE)
+  WEEKLY_SETTLEMENT_SNAPSHOT: 'weekly-settlement-snapshot',
   SYNC_API_PLANNING: 'sync-api-planning',
   SYNC_API_TICKETS: 'sync-api-tickets',
   SYNC_SCRAPE_TICKETS: 'sync-scrape-tickets',
@@ -113,11 +115,21 @@ export const QUEUE_CONFIGS = {
     expireInMinutes: 3,
   },
   [QUEUES.CALCULATE_PROVIDER_COMMISSION]: {
-    // Phase 12 placeholder — fast handler, no real work yet.
+    // Phase 12 — real handler. Retry-with-backoff covers the Pitfall 7
+    // race condition with DrawFinancial PRIZES commit.
     retryLimit: 3,
     retryDelay: 5,
     retryBackoff: true,
     expireInMinutes: 2,
+  },
+  [QUEUES.WEEKLY_SETTLEMENT_SNAPSHOT]: {
+    // Phase 12 — heavier GROUP BY across the closed ISO week. Worst case
+    // ~4 providers × ~50 ledger rows; should be << 1 min but expireInMinutes
+    // is generous so a slow DB doesn't dead-letter the snapshot.
+    retryLimit: 2,
+    retryDelay: 30,
+    retryBackoff: true,
+    expireInMinutes: 10,
   },
   [QUEUES.SYNC_API_PLANNING]: {
     retryLimit: 3,
