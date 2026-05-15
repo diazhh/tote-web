@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Capa Financiera y Contabilidad
 status: executing
-stopped_at: Phase 14 planned (4 plans, verified)
-last_updated: "2026-05-15T18:30:00.000Z"
-last_activity: 2026-05-15 -- Phase 14 planned (4 plans, all 7 FIN-REPORT requirements distributed)
+stopped_at: Phase 13 complete (local) — Phase 14 awaiting execution
+last_updated: "2026-05-15T19:45:00.000Z"
+last_activity: 2026-05-15 -- Phase 13 Plan 4 SUMMARY committed (admin UI for /admin/contabilidad + 13-DEPLOY.md)
 progress:
   total_phases: 4
-  completed_phases: 0
+  completed_phases: 3
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 4
+  percent: 75
 ---
 
 # Project State
@@ -21,17 +21,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15)
 
 **Core value:** Reliable draw lifecycle management
-**Current focus:** Phase 12 — provider-commission-engine — COMPLETE (local)
+**Current focus:** Phase 13 — exchange-rate-accounting-ledger — COMPLETE (local)
 
 ## Current Position
 
-Phase: 12 (provider-commission-engine) — COMPLETE
+Phase: 13 (exchange-rate-accounting-ledger) — COMPLETE
 Plan: 4 of 4 — complete
-Status: Phase 12 software in place locally; production deploy pending (12-DEPLOY.md is the runbook)
-Last activity: 2026-05-15 -- Phase 12 Plan 4 SUMMARY committed (frontend UI + backfill + DEPLOY)
+Status: Phase 13 software in place locally (backend + frontend); production deploy pending (13-DEPLOY.md is the runbook). Next: Phase 14 (Report Refactor + Weekly P&L) — plans authored, awaiting execution.
+Last activity: 2026-05-15 -- Phase 13 Plan 4 SUMMARY committed (admin UI for /admin/contabilidad + 13-DEPLOY.md)
 
 ```
-Progress: [█████░░░░░░░░░░░░░░░] 25% (1/4 phases of v1.3 done — Phase 12)
+Progress: [███████████████░░░░░] 75% (3/4 phases of v1.3 done — Phases 11, 12, 13)
 ```
 
 ## Performance Metrics
@@ -58,8 +58,8 @@ Progress: [█████░░░░░░░░░░░░░░░] 25% (1/
 | 10. Production Deployment | TBD | Not started |
 | 11. DrawFinancial Foundation | 4 | Complete (local; deploy pending per 11-DEPLOY.md) |
 | 12. Provider Commission Engine | 4 | Complete (local; deploy pending per 12-DEPLOY.md) |
-| 13. Exchange Rate + Accounting Ledger | TBD | Not started |
-| 14. Report Refactor + Weekly P&L | TBD | Not started |
+| 13. Exchange Rate + Accounting Ledger | 4 | Complete (local; deploy pending per 13-DEPLOY.md) |
+| 14. Report Refactor + Weekly P&L | 4 | Planned (awaiting execution) |
 
 ## Accumulated Context
 
@@ -97,12 +97,20 @@ Progress: [█████░░░░░░░░░░░░░░░] 25% (1/
 - Seed at least one `ProviderCommissionConfig` per active provider before the first Monday 06:00 VE settlement snapshot (otherwise the snapshot worker produces empty settlements for those providers)
 - Initialize Next.js ESLint config (one-off — accept the "Strict" preset prompt and commit `.eslintrc.json`)
 
+### Phase 13 — Exchange Rate + Accounting Ledger (COMPLETE locally, 2026-05-15)
+
+- 4 plans landed: 13-01 (schema + 9 seeded categories), 13-02 (controllers + services + NoRateForDateError), 13-03 (15-route /api/contabilidad + multer + file-type + P-1 static-storage guard + 6-assertion integration test), 13-04 (admin UI for /admin/contabilidad + 13-DEPLOY.md).
+- Frontend: 4 sub-tabs (Asientos, Tasas, Categorías, Pagos) with F-6 frontend block, F-7 USD historical eq display, D-06 reversal modal, auth-gated receipt upload/download via FormData multipart and fetch+blob (P-1).
+- Integration test re-run after Plan 13-04 frontend changes: 6/6 pass in 0.42s. No regressions.
+- next build: all 7 new Phase 13 routes compile cleanly.
+- LOCAL ONLY — no `ssh 94`, no `git push`, no `pm2 restart`. 13-DEPLOY.md is the deferred production runbook.
+
 ### Blockers/Concerns
 
-None for Phase 12. Phase 13 (Exchange Rate + Accounting Ledger) is independent and can begin.
+None for Phase 13. Phase 14 (Report Refactor + Weekly P&L) plans are authored and ready to execute.
 
 ## Session Continuity
 
-Last session: 2026-05-15T23:05:00Z
-Stopped at: Phase 12 — Plan 4 complete (SUMMARY written, all 4 commits reachable, frontend UI + backfill + DEPLOY runbook landed)
-Resume file: 12-DEPLOY.md (production runbook, NOT yet executed)
+Last session: 2026-05-15T19:45:00Z
+Stopped at: Phase 13 — Plan 4 complete (SUMMARY written, 4 commits reachable, frontend UI + DEPLOY runbook landed). Next: execute Phase 14 plans.
+Resume file: 13-DEPLOY.md (production runbook, NOT yet executed) + .planning/phases/14-*/14-01-PLAN.md (next execution target)
