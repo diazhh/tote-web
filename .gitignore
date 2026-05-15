@@ -120,6 +120,9 @@ backups/
 *.sql
 *.dump
 
+# Excepción: SQL de migraciones Prisma (Phase 11+ commits them for prod deploy)
+!backend/prisma/migrations/**/*.sql
+
 # Excepciones: logos del proyecto
 !frontend/public/images/**
 !frontend/public/images/games/**
