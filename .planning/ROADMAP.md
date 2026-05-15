@@ -254,7 +254,13 @@ Plans:
   3. Admin can create an INCOME, EXPENSE, or PAYMENT entry; USD entries automatically populate `amountBsF` using the rate for `entryDate`; the stored `amountBsF` never changes when a later rate is entered
   4. Admin can upload a PDF, JPG, or PNG receipt (max 5MB); the file is stored as `storage/receipts/YYYY/MM/{uuid}.ext`; uploading an `.html` or `.php` file is rejected with a 422 error
   5. Receipt files are served only through an admin-authenticated route; a direct URL to `storage/receipts/` without auth returns 401
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — Schema: 4 Prisma models (ExchangeRate / Category / AccountingEntry / AccountingEntryAttachment) + 3 enums + AccountingEntry self-relation "EntryReversal" + optional FK to ProviderWeeklySettlement (P-3 prerequisite check), [BLOCKING] local migration + 9 category seeds + prisma generate + smoke test, multer@^2.1.1 + file-type@^19 install
+- [ ] 13-02-PLAN.md — Services (exchange-rate D-01 lookup helper, accounting-entry CRUD + reverseEntry $transaction + FIN-LEDGER-09 immutability strip, category soft-delete) + 3 controller classes with AuditLog writes including ipAddress + userAgent (P-4 correction over admin-jobs.controller.js)
+- [ ] 13-03-PLAN.md — P-1 static-storage-guard middleware mounted BEFORE express.static('/storage') in index.js, multer memoryStorage upload middleware (5MB, no fileFilter), attachment.service.js with byte-level fileTypeFromBuffer validation + UUID filename + entryDate-bucketed path, contabilidad.routes.js composing all 4 sub-resources under authenticate + authorize('ADMIN'), end-to-end Jest integration test (rate → USD entry → MIME-spoof rejection → upload → 401 on direct /storage/* → reversal → AuditLog count = 4)
+- [ ] 13-04-PLAN.md — Admin UI /admin/contabilidad with 4 sub-tabs (Asientos / Tasas / Categorías / Pagos), F-6 frontend block (disabled submit + Spanish error when USD entry has no rate), reversal modal, entry detail with embedded auditHistory + receipt upload via FormData + auth-gated downloads (NEVER /storage/*), 13-DEPLOY.md (LOCAL-ONLY scope, deferred production rollout steps), [CHECKPOINT] operator UI smoke covering 7 CONTEXT.md success criteria
 **Pitfall mitigations**: F-6 (block USD entry when no rate for date), F-7 (historical USD eq = amountBsF / historicalRate, never re-converted), F-8 (rateType field on ExchangeRate from day one), F-14 (MIME validation, UUID filename, 5MB limit, storage outside web root), F-16 (no Account model; categories are configurable strings only)
 **UI hint**: yes
 
