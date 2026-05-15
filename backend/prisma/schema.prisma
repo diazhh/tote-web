@@ -143,18 +143,19 @@ model Draw {
   updatedAt DateTime @updatedAt
 
   // Relaciones
-  game               Game                    @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  template           DrawTemplate?           @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  preselectedItem    GameItem?               @relation("PreselectedItem", fields: [preselectedItemId], references: [id], onDelete: SetNull)
-  winnerItem         GameItem?               @relation("WinnerItem", fields: [winnerItemId], references: [id], onDelete: SetNull)
-  publications       DrawPublication[]
-  apiMappings        ApiDrawMapping[]
-  tickets            Ticket[]
-  stats              DrawStats? // Estadísticas del sorteo
-  providerStats      ProviderStats[] // Estadísticas por proveedor
-  itemQuotas         DrawItemQuota[]
-  financial          DrawFinancial? // Agregado financiero materializado (Phase 11)
-  financialProviders DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
+  game                 Game                       @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  template             DrawTemplate?              @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  preselectedItem      GameItem?                  @relation("PreselectedItem", fields: [preselectedItemId], references: [id], onDelete: SetNull)
+  winnerItem           GameItem?                  @relation("WinnerItem", fields: [winnerItemId], references: [id], onDelete: SetNull)
+  publications         DrawPublication[]
+  apiMappings          ApiDrawMapping[]
+  tickets              Ticket[]
+  stats                DrawStats? // Estadísticas del sorteo
+  providerStats        ProviderStats[] // Estadísticas por proveedor
+  itemQuotas           DrawItemQuota[]
+  financial            DrawFinancial? // Agregado financiero materializado (Phase 11)
+  financialProviders   DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
+  commissionLedgerRows ProviderCommissionLedger[] // Comisión por proveedor (Phase 12)
 
   @@index([gameId])
   @@index([drawDate])
@@ -440,12 +441,15 @@ model ApiSystem {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  configurations ApiConfiguration[]
-  comerciales    ProviderComercial[]
-  webhookLogs    WebhookLog[]
-  tickets        Ticket[]
-  users          User[]
-  drawFinancials DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
+  configurations       ApiConfiguration[]
+  comerciales          ProviderComercial[]
+  webhookLogs          WebhookLog[]
+  tickets              Ticket[]
+  users                User[]
+  drawFinancials       DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
+  commissionConfigs    ProviderCommissionConfig[] // Configs versionados de comisión (Phase 12)
+  commissionLedgerRows ProviderCommissionLedger[] // Ledger comisión por sorteo (Phase 12)
+  weeklySettlements    ProviderWeeklySettlement[] // Liquidaciones semanales (Phase 12)
 
   @@index([name])
   @@index([slug])
@@ -456,6 +460,26 @@ enum ApiSystemMode {
   PULL // Provider polled by our system (SRQ pattern)
   PUSH // Provider sends webhooks to our endpoint
   SCRAPE // Authenticated dashboard scraped via headless browser (Maxplay pattern)
+}
+
+// ============================================
+// PROVIDER COMMISSION ENGINE (Phase 12)
+// ============================================
+
+// FIN-COMM-01 — cuatro tipos de fórmula de comisión.
+enum CommissionFormulaType {
+  SALES_PCT // % sobre totalSales del proveedor en el sorteo
+  UTILITY_PCT // % sobre (totalSales - totalPrize)
+  SALES_AND_UTILITY_PCT // % salesRate*sales + utilityRate*utility
+  TIERED // Brackets escalonados sobre ventas acumuladas semanales (D-04)
+}
+
+// FIN-COMM-09 — estados del ciclo de vida de una liquidación semanal.
+// CONFIRMED es terminal (D-03). ADJUSTED solo via D-02 (override manual o re-totalización).
+enum SettlementStatus {
+  DRAFT // Snapshot inicial del worker semanal (Lunes 06:00 VE)
+  CONFIRMED // Admin la marcó como pagada/firme
+  ADJUSTED // Override manual con razón, o drift detectado por re-totalización
 }
 
 enum WebhookLogStatus {
@@ -1193,6 +1217,99 @@ model DrawFinancialProvider {
   @@unique([drawId, apiSystemId]) // D-08 — worker maneja NULL explícitamente
   @@index([drawId])
   @@index([apiSystemId])
+}
+
+// ============================================
+// PROVIDER COMMISSION ENGINE — Phase 12 models
+// ============================================
+// Append-only versioned config (F-5 / FIN-COMM-04). Cada cambio crea una nueva fila
+// con effectiveFrom. Nunca se UPDATEa una fila existente — la regla se enforce en el
+// service layer (Plan 12-02/03). Precisión Decimal(18, 8) por F-4 / CONTEXT assumption 1
+// (DIFFERS de Phase 11 que usa (12, 2)).
+
+model ProviderCommissionConfig {
+  id            String                @id @default(uuid())
+  apiSystemId   String
+  formulaType   CommissionFormulaType
+  salesRate     Decimal?              @db.Decimal(15, 4) // requerido para SALES_PCT / SALES_AND_UTILITY_PCT
+  utilityRate   Decimal?              @db.Decimal(15, 4) // requerido para UTILITY_PCT / SALES_AND_UTILITY_PCT
+  effectiveFrom DateTime // FIN-COMM-04 — lookup key para findEffectiveConfig
+  notes         String?
+  createdById   String? // nullable: configs creados por sistema (backfill) no tienen creator
+  createdAt     DateTime              @default(now())
+
+  apiSystem  ApiSystem                  @relation(fields: [apiSystemId], references: [id])
+  tiers      ProviderCommissionTier[]
+  ledgerRows ProviderCommissionLedger[]
+
+  @@index([apiSystemId, effectiveFrom(sort: Desc)]) // Pattern 1 — effective-config lookup
+  @@index([apiSystemId])
+}
+
+// Brackets escalonados para CommissionFormulaType=TIERED. minSales inclusivo,
+// maxSales exclusivo (NULL = bracket abierto superior, A3 en CONTEXT).
+// Reset semanal D-04: la evaluación usa ventas acumuladas en la ISO week del drawnAt.
+model ProviderCommissionTier {
+  id       String   @id @default(uuid())
+  configId String
+  minSales Decimal  @db.Decimal(18, 8)
+  maxSales Decimal? @db.Decimal(18, 8) // NULL = open-ended top bracket
+  rate     Decimal  @db.Decimal(15, 4)
+
+  config ProviderCommissionConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+
+  @@unique([configId, minSales]) // previene brackets duplicados
+  @@index([configId])
+}
+
+// Ledger comisión: una fila por (provider × draw). apiSystemId NOT NULL (D-01:
+// el bucket TAQUILLA_ONLINE no tiene comisión asignada; si un provider no tiene
+// config efectivo en drawnAt, simplemente NO se escribe fila + warning log).
+// Sin settlementId FK (A8): la liquidación semanal hace JOIN por drawnAt range.
+// configSnapshot Json reproducibilidad: el config exacto evaluado queda copiado.
+
+model ProviderCommissionLedger {
+  id             String   @id @default(uuid())
+  drawId         String
+  apiSystemId    String // NOT NULL — diferencia clave vs DrawFinancialProvider
+  amount         Decimal  @db.Decimal(18, 8)
+  salesBase      Decimal  @db.Decimal(18, 8)
+  utilityBase    Decimal  @db.Decimal(18, 8)
+  configId       String
+  configSnapshot Json // {formulaType, salesRate, utilityRate, tiers[]} — reproducibilidad
+  createdAt      DateTime @default(now())
+
+  draw      Draw                     @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  apiSystem ApiSystem                @relation(fields: [apiSystemId], references: [id])
+  config    ProviderCommissionConfig @relation(fields: [configId], references: [id])
+
+  @@unique([drawId, apiSystemId]) // una comisión por (provider, draw)
+  @@index([drawId])
+  @@index([apiSystemId, createdAt]) // soporta FIN-COMM-08 (ledger viewer por provider)
+}
+
+// Liquidación semanal ISO week (D-06). status state machine: DRAFT → CONFIRMED|ADJUSTED.
+// originalAmount + adjustmentReason capturan override manual (D-02 path 1).
+
+model ProviderWeeklySettlement {
+  id               String           @id @default(uuid())
+  apiSystemId      String
+  isoYear          Int // D-06 — nunca guardar string "2026-W19"
+  isoWeek          Int // 1..53
+  amount           Decimal          @db.Decimal(18, 8)
+  originalAmount   Decimal?         @db.Decimal(18, 8) // snapshot pre-ajuste (D-02)
+  adjustmentReason String? // razón del override manual (D-02)
+  ledgerRowCount   Int              @default(0)
+  status           SettlementStatus @default(DRAFT)
+  snapshotAt       DateTime         @default(now())
+  confirmedAt      DateTime?
+  confirmedById    String?
+
+  apiSystem ApiSystem @relation(fields: [apiSystemId], references: [id])
+
+  @@unique([apiSystemId, isoYear, isoWeek]) // D-06 / FIN-COMM-07
+  @@index([isoYear, isoWeek])
+  @@index([apiSystemId, status])
 }
 
 // ============================================

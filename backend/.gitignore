@@ -35,10 +35,6 @@ coverage/
 .nyc_output/
 
 # Prisma
-# Note: Phase 11 (v1.3) onward — migrations ARE committed so prod can apply
-# them via `prisma migrate deploy`. Historical migrations applied directly via
-# `db:push` are recorded in the live `_prisma_migrations` table but not in the
-# repo; only forward-going migrations from Phase 11 onward live here.
-
-# Phase 11 backfill reports (artifacts only — keep dir)
-storage/backfill-reports/*.csv
+# Phase 11 onward: migrations ARE source-controlled so prod can run
+# `prisma migrate deploy`. The root .gitignore *.sql rule has a
+# whitelist exception for `backend/prisma/migrations/**/*.sql`.

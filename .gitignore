@@ -120,12 +120,13 @@ backups/
 *.sql
 *.dump
 
-# Excepción: SQL de migraciones Prisma (Phase 11+ commits them for prod deploy)
-!backend/prisma/migrations/**/*.sql
-
 # Excepciones: logos del proyecto
 !frontend/public/images/**
 !frontend/public/images/games/**
+
+# Phase 11 onward: keep Prisma migration SQL in source control so prod can
+# run `prisma migrate deploy`. Re-allow under the migrations directory.
+!backend/prisma/migrations/**/*.sql
 
 # Claude Code local settings
 .claude/settings.local.json

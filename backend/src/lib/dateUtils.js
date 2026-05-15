@@ -3,7 +3,17 @@
  * Todas las fechas/horas se manejan en hora de Venezuela
  */
 
-import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
+import {
+  format,
+  parseISO,
+  startOfDay,
+  endOfDay,
+  getISOWeek,
+  getISOWeekYear,
+  startOfISOWeek,
+  endOfISOWeek,
+} from 'date-fns';
+import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { es } from 'date-fns/locale';
 
 const VENEZUELA_TIMEZONE = 'America/Caracas';
@@ -259,6 +269,57 @@ export function startOfDayDate(date) {
 export function endOfDayDate(date) {
   const dateObj = toDate(date);
   return endOfDay(dateObj);
+}
+
+// ============================================
+// ISO WEEK HELPERS (Phase 12 — Provider Commission Engine)
+// ============================================
+// F-15: ISO week boundary math at year transitions must use date-fns getISOWeekYear
+// (NOT getFullYear). Example: 2027-01-01 belongs to ISO week 2026-W53, not 2027-W1.
+// All helpers operate in Venezuela time (America/Caracas, UTC-4 year-round, no DST since 2007).
+
+/**
+ * Get the ISO year + ISO week number for a given instant, evaluated in Venezuela time.
+ * @param {Date} date - any Date instant
+ * @returns {{ isoYear: number, isoWeek: number }} ISO week-numbering year + week (1..53)
+ */
+export function getISOWeekVE(date) {
+  const zoned = toZonedTime(date, VENEZUELA_TIMEZONE);
+  return {
+    isoYear: getISOWeekYear(zoned),
+    isoWeek: getISOWeek(zoned),
+  };
+}
+
+/**
+ * UTC Date corresponding to Monday 00:00:00.000 (Venezuela wall-clock) of the
+ * ISO week containing `date`. Used as the inclusive lower bound for cumulative
+ * weekly queries (TIERED commission brackets, weekly settlement snapshot).
+ *
+ * Implementation: toZonedTime → startOfISOWeek operates on the wall-clock fields
+ * of the system-local Date → fromZonedTime converts that VE wall-clock instant
+ * back to UTC. Using fromZonedTime (not a manual +4h shift) keeps the result
+ * correct regardless of the host system's local TZ.
+ *
+ * @param {Date} date - any Date instant
+ * @returns {Date} UTC Date (e.g. Monday 04:00:00.000Z)
+ */
+export function startOfISOWeekVE(date) {
+  const zoned = toZonedTime(date, VENEZUELA_TIMEZONE);
+  const startInZone = startOfISOWeek(zoned); // Monday 00:00 of week — interpreted as VE wall-clock
+  return fromZonedTime(startInZone, VENEZUELA_TIMEZONE);
+}
+
+/**
+ * UTC Date corresponding to Sunday 23:59:59.999 (Venezuela wall-clock) of the
+ * ISO week containing `date`. Used as the inclusive upper bound for weekly queries.
+ * @param {Date} date - any Date instant
+ * @returns {Date} UTC Date
+ */
+export function endOfISOWeekVE(date) {
+  const zoned = toZonedTime(date, VENEZUELA_TIMEZONE);
+  const endInZone = endOfISOWeek(zoned);
+  return fromZonedTime(endInZone, VENEZUELA_TIMEZONE);
 }
 
 // Mantener compatibilidad con nombres antiguos (deprecated)
