@@ -106,3 +106,36 @@ ALTER TABLE "TransferAttachment" ADD CONSTRAINT "TransferAttachment_transferId_f
 -- AddForeignKey
 ALTER TABLE "TransferAttachment" ADD CONSTRAINT "TransferAttachment_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+-- v2: seed default account "Sin clasificar" + backfill orphan entries
+INSERT INTO "Account" (
+  id, name, currency, "openingBalance", "openingDate",
+  "isActive", "sortOrder", "createdById", "createdAt", "updatedAt"
+)
+SELECT
+  '00000000-0000-0000-0000-000000000001',
+  'Sin clasificar',
+  'BsF'::"AccountingCurrency",
+  0,
+  '2025-01-01'::date,
+  TRUE,
+  999,
+  u.id,
+  NOW(),
+  NOW()
+FROM "User" u
+WHERE u.role = 'ADMIN'
+ORDER BY u."createdAt"
+LIMIT 1;
+
+-- If no admin user existed yet, abort to avoid orphan account
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM "Account" WHERE id = '00000000-0000-0000-0000-000000000001') THEN
+    RAISE EXCEPTION 'Cannot create default Account: no ADMIN user exists. Create an admin first.';
+  END IF;
+END $$;
+
+-- Backfill orphan entries to the default account
+UPDATE "AccountingEntry"
+SET "accountId" = '00000000-0000-0000-0000-000000000001'
+WHERE "accountId" IS NULL;
