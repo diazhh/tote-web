@@ -67,4 +67,16 @@ describe('cash-flow.service', () => {
     expect(report.byCurrency.BsF).toBeDefined();
     expect(Number(report.byCurrency.BsF.entradas)).toBeGreaterThanOrEqual(300);
   });
+
+  test('buildExcel y buildPdf retornan buffers no vacíos', async () => {
+    const report = await cashFlow.getReport({
+      from: new Date('2026-02-01'),
+      to: new Date('2026-02-28'),
+      accountId: acctBsF.id,
+    });
+    const excel = await cashFlow.buildExcel(report);
+    const pdf = await cashFlow.buildPdf(report);
+    expect(excel.length).toBeGreaterThan(1000);
+    expect(pdf.length).toBeGreaterThan(500);
+  });
 });

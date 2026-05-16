@@ -218,3 +218,84 @@ function addToCategory(map, category, amount) {
   if (!map[key]) map[key] = { name: category.name, total: new Decimal(0) };
   map[key].total = map[key].total.plus(amount);
 }
+
+import ExcelJS from 'exceljs';
+import PDFDocument from 'pdfkit';
+
+export async function buildExcel(report) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Flujo de caja');
+
+  ws.addRow(['Período', `${report.from} → ${report.to}`]);
+  ws.addRow(['Cuenta', report.accountId ?? 'Consolidado']);
+  ws.addRow([]);
+
+  for (const [currency, b] of Object.entries(report.byCurrency)) {
+    ws.addRow([`Moneda: ${currency}`]).font = { bold: true };
+    ws.addRow(['Saldo inicial', b.openingBalance]);
+    ws.addRow(['Entradas', b.entradas]);
+    ws.addRow(['Salidas', b.salidas]);
+    if (Number(b.transfersIn) || Number(b.transfersOut)) {
+      ws.addRow(['Transferencias entrantes', b.transfersIn]);
+      ws.addRow(['Transferencias salientes', b.transfersOut]);
+    }
+    ws.addRow(['Neto', b.neto]);
+    ws.addRow(['Saldo final', b.closingBalance]);
+    ws.addRow([]);
+
+    if (b.categoriesIn.length > 0) {
+      ws.addRow(['Categorías — Entradas']).font = { bold: true };
+      for (const c of b.categoriesIn) ws.addRow([c.name, c.total]);
+      ws.addRow([]);
+    }
+    if (b.categoriesOut.length > 0) {
+      ws.addRow(['Categorías — Salidas']).font = { bold: true };
+      for (const c of b.categoriesOut) ws.addRow([c.name, c.total]);
+      ws.addRow([]);
+    }
+  }
+
+  return await wb.xlsx.writeBuffer();
+}
+
+export async function buildPdf(report) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const chunks = [];
+    doc.on('data', (c) => chunks.push(c));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+
+    doc.fontSize(16).text('Reporte de flujo de caja', { align: 'center' });
+    doc.fontSize(10).text(`Período: ${report.from} → ${report.to}`, { align: 'center' });
+    doc.moveDown();
+
+    for (const [currency, b] of Object.entries(report.byCurrency)) {
+      doc.fontSize(12).text(`Moneda: ${currency}`, { underline: true });
+      doc.fontSize(10);
+      doc.text(`Saldo inicial: ${b.openingBalance}`);
+      doc.text(`Entradas: ${b.entradas}`);
+      doc.text(`Salidas: ${b.salidas}`);
+      if (Number(b.transfersIn) || Number(b.transfersOut)) {
+        doc.text(`Transferencias entrantes: ${b.transfersIn}`);
+        doc.text(`Transferencias salientes: ${b.transfersOut}`);
+      }
+      doc.text(`Neto: ${b.neto}`);
+      doc.text(`Saldo final: ${b.closingBalance}`);
+      doc.moveDown();
+
+      if (b.categoriesIn.length > 0) {
+        doc.text('Categorías — Entradas:');
+        for (const c of b.categoriesIn) doc.text(`  ${c.name}: ${c.total}`);
+        doc.moveDown();
+      }
+      if (b.categoriesOut.length > 0) {
+        doc.text('Categorías — Salidas:');
+        for (const c of b.categoriesOut) doc.text(`  ${c.name}: ${c.total}`);
+        doc.moveDown();
+      }
+    }
+
+    doc.end();
+  });
+}
