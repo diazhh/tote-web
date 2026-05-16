@@ -156,6 +156,7 @@ model Draw {
   financial            DrawFinancial? // Agregado financiero materializado (Phase 11)
   financialProviders   DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
   commissionLedgerRows ProviderCommissionLedger[] // Comisión por proveedor (Phase 12)
+  liveSnapshot         DrawLiveSnapshot? // Cache de ventas en vivo (Phase v1.4)
 
   @@index([gameId])
   @@index([drawDate])
@@ -1025,6 +1026,8 @@ model Ticket {
   @@index([createdAt])
   @@index([apiSystemId])
   @@index([apiSystemId, createdAt])
+  @@index([drawId, status])
+  @@index([apiSystemId, drawId])
 }
 
 enum TicketDetailStatus {
@@ -1603,4 +1606,35 @@ model AccountingEntryAttachment {
   uploadedBy User            @relation(fields: [uploadedById], references: [id])
 
   @@index([entryId])
+}
+
+// ============================================================================
+// Phase v1.4 — performance / cache layer (RFC: docs/superpowers/specs/2026-05-16-perf-aggregates-redis-cache-design.md)
+// ============================================================================
+
+model DrawLiveSnapshot {
+  drawId       String   @id
+  totalSales   Decimal  @db.Decimal(15, 2)
+  ticketCount  Int
+  byProvider   Json     // [{ apiSystemId, name, sales, count }, ...]
+  refreshedAt  DateTime @default(now())
+
+  draw         Draw     @relation(fields: [drawId], references: [id], onDelete: Cascade)
+
+  @@index([refreshedAt])
+}
+
+model DailyAggregateSnapshot {
+  id           String        @id @default(cuid())
+  date         DateTime      @db.Date
+  gameId       String?
+  source       TicketSource?
+  apiSystemId  String?
+  totalSales   Decimal       @db.Decimal(15, 2)
+  ticketCount  Int
+  prizeTotal   Decimal       @db.Decimal(15, 2)
+  refreshedAt  DateTime      @default(now())
+
+  @@unique([date, gameId, source, apiSystemId])
+  @@index([date])
 }
