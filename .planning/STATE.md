@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: Capa Financiera y Contabilidad
-status: executing
-stopped_at: Phase 13 complete (local) — Phase 14 awaiting execution
-last_updated: "2026-05-15T19:45:00.000Z"
-last_activity: 2026-05-15 -- Phase 13 Plan 4 SUMMARY committed (admin UI for /admin/contabilidad + 13-DEPLOY.md)
+status: complete
+stopped_at: Milestone v1.3 COMPLETE on local mirror — Phase 14 finished; production rollout deferred per 14-DEPLOY.md
+last_updated: "2026-05-15T20:30:00.000Z"
+last_activity: 2026-05-15 -- Phase 14 Plan 4 SUMMARY committed (frontend P&L page + DrawDetailModal Financiero + 14-DEPLOY.md); milestone v1.3 closed on local mirror
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 4
   completed_plans: 4
-  percent: 75
+  percent: 100
 ---
 
 # Project State
@@ -21,17 +21,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-15)
 
 **Core value:** Reliable draw lifecycle management
-**Current focus:** Phase 13 — exchange-rate-accounting-ledger — COMPLETE (local)
+**Current focus:** Milestone v1.3 — Capa Financiera y Contabilidad — COMPLETE (local)
 
 ## Current Position
 
-Phase: 13 (exchange-rate-accounting-ledger) — COMPLETE
+Milestone: v1.3 — Capa Financiera y Contabilidad — **COMPLETE on local mirror**
+Phase: 14 (report-refactor-weekly-pnl) — COMPLETE
 Plan: 4 of 4 — complete
-Status: Phase 13 software in place locally (backend + frontend); production deploy pending (13-DEPLOY.md is the runbook). Next: Phase 14 (Report Refactor + Weekly P&L) — plans authored, awaiting execution.
-Last activity: 2026-05-15 -- Phase 13 Plan 4 SUMMARY committed (admin UI for /admin/contabilidad + 13-DEPLOY.md)
+Status: All four Phase 14 plans landed locally (14-01 backfill + 14-02 service refactor + 14-03 weekly P&L backend + 14-04 frontend P&L page + DrawDetailModal extension + 14-DEPLOY.md). Build green (`next build` PASS). Backend test suite green (56/56 across Phase 12/13/14 cumulative). Production rollout is the next operator-owned step — runbook is `.planning/phases/14-report-refactor-weekly-pnl/14-DEPLOY.md` (LOCAL-ONLY this session; no `ssh 94`, no `pm2 restart`, no `git push` executed).
+Last activity: 2026-05-15 -- Phase 14 Plan 4 SUMMARY committed; milestone v1.3 closed on local mirror
 
 ```
-Progress: [███████████████░░░░░] 75% (3/4 phases of v1.3 done — Phases 11, 12, 13)
+Progress: [████████████████████] 100% (4/4 phases of v1.3 done — Phases 11, 12, 13, 14)
 ```
 
 ## Performance Metrics
