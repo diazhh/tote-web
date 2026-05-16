@@ -19,6 +19,22 @@ const SOURCE_LABELS = {
   EXTERNAL_SCRAPE: 'Scraping',
 };
 
+function sourceRowKey(row) {
+  return row.apiSystemId
+    ? `${row.source}-${row.apiSystemId}`
+    : row.source;
+}
+
+function sourceRowLabel(row) {
+  const base = SOURCE_LABELS[row.source] ?? row.source;
+  // Para webhooks y scraping mostramos el nombre del proveedor cuando lo tenemos
+  if (row.apiSystemId) {
+    const name = row.apiSystemName || row.apiSystemId.slice(0, 8);
+    return `${base} · ${name}`;
+  }
+  return base;
+}
+
 const PAGE_SIZE = 25;
 
 export default function ReportesPage() {
@@ -334,9 +350,10 @@ export default function ReportesPage() {
             <label className="block text-xs font-medium text-gray-600 mb-1">
               Fuente / Proveedor
             </label>
-            {/* Source dropdown */}
+            {/* Source dropdown — value sintetizado a partir de filters.source/apiSystemId
+                para que la selección actual quede marcada visualmente. */}
             <select
-              value={filters.apiSystemId ? '__provider__' : filters.source}
+              value={filters.apiSystemId ? `sys:${filters.apiSystemId}` : filters.source}
               onChange={e => {
                 const val = e.target.value;
                 if (val.startsWith('sys:')) {
@@ -492,9 +509,9 @@ export default function ReportesPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {report.bySource.map(row => (
-                      <tr key={row.source} className="hover:bg-gray-50/50">
+                      <tr key={sourceRowKey(row)} className="hover:bg-gray-50/50">
                         <td className="px-4 py-2.5 font-medium text-gray-800">
-                          {SOURCE_LABELS[row.source] ?? row.source}
+                          {sourceRowLabel(row)}
                         </td>
                         <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
                         <td className="px-4 py-2.5 text-right text-gray-500">{row.ticketCount}</td>
@@ -505,9 +522,9 @@ export default function ReportesPage() {
                 {/* Mobile cards */}
                 <ul className="md:hidden divide-y divide-gray-100">
                   {report.bySource.map(row => (
-                    <li key={row.source} className="px-4 py-3 flex items-center justify-between gap-3">
+                    <li key={sourceRowKey(row)} className="px-4 py-3 flex items-center justify-between gap-3">
                       <span className="font-medium text-gray-800 text-sm truncate">
-                        {SOURCE_LABELS[row.source] ?? row.source}
+                        {sourceRowLabel(row)}
                       </span>
                       <div className="text-right shrink-0">
                         <div className="text-sm font-semibold text-gray-800">{fmt(row.totalSales)}</div>

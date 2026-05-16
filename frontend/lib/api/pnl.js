@@ -98,6 +98,24 @@ const pnlAPI = {
     const filename = `pnl-semanal-${isoYear}-W${isoWeek}.pdf`;
     triggerBlobDownload(response.data, filename);
   },
+
+  /**
+   * Download the per-provider PDF report (Multiloterias-branded, includes
+   * bank details for payment). Requires apiSystemId.
+   */
+  downloadProviderPnlPdf: async (params) => {
+    if (!params?.apiSystemId) {
+      throw new Error('apiSystemId requerido para PDF de proveedor');
+    }
+    const sp = buildParams(params);
+    const response = await api.get(`/reportes/pnl/semanal/proveedor/pdf?${sp.toString()}`, {
+      responseType: 'blob',
+    });
+    const isoYear = params?.isoYear ?? 'XXXX';
+    const isoWeek = String(params?.isoWeek ?? 'W').padStart(2, '0');
+    const filename = `liquidacion-proveedor-${isoYear}-W${isoWeek}.pdf`;
+    triggerBlobDownload(response.data, filename);
+  },
 };
 
 export default pnlAPI;

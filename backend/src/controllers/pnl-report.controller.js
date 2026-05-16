@@ -112,6 +112,37 @@ class PnlReportController {
       }
     }
   }
+
+  /**
+   * GET /api/reportes/pnl/semanal/proveedor/pdf
+   * Provider-facing branded PDF — apiSystemId required.
+   */
+  async downloadProviderPnlPdf(req, res) {
+    try {
+      const params = validateWeekParams(req.query);
+      if (!params.apiSystemId) {
+        return res.status(400).json({ success: false, error: 'apiSystemId requerido' });
+      }
+      const buffer = await pnlReportService.buildProviderPdf(params);
+      const tag = `${params.isoYear}-W${String(params.isoWeek).padStart(2, '0')}`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition',
+        `attachment; filename="liquidacion-proveedor-${tag}.pdf"`);
+      res.send(buffer);
+    } catch (error) {
+      if (error.statusCode === 400) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      if (error.statusCode === 404) {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      logger.error('[pnl-report.controller] downloadProviderPnlPdf failed',
+        { error: error?.message, stack: error?.stack });
+      if (!res.headersSent) {
+        res.status(500).json({ success: false, error: 'Error generando PDF de proveedor' });
+      }
+    }
+  }
 }
 
 export default new PnlReportController();

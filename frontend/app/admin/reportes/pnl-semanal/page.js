@@ -39,7 +39,8 @@ import {
   TrendingUp, ChevronLeft, ChevronRight, FileSpreadsheet, FileText,
   RefreshCw, Calendar, Building2, ArrowDownToLine,
 } from 'lucide-react';
-import { getISOWeek, getISOWeekYear, subWeeks, addWeeks, setISOWeek, setISOWeekYear, startOfWeek } from 'date-fns';
+import { getISOWeek, getISOWeekYear, subWeeks, addWeeks, setISOWeek, setISOWeekYear, startOfWeek, addDays, format } from 'date-fns';
+import { es } from 'date-fns/locale';
 import api from '@/lib/api/axios';
 import pnlAPI from '@/lib/api/pnl';
 
@@ -87,6 +88,25 @@ function shiftWeek(isoYear, isoWeek, delta) {
   base = setISOWeek(base, isoWeek);
   const next = delta < 0 ? subWeeks(base, -delta) : addWeeks(base, delta);
   return { isoYear: getISOWeekYear(next), isoWeek: getISOWeek(next) };
+}
+
+/** Monday + Sunday for a given ISO week. */
+function isoWeekRange(isoYear, isoWeek) {
+  let monday = startOfWeek(new Date(isoYear, 0, 4), { weekStartsOn: 1 });
+  monday = setISOWeekYear(monday, isoYear);
+  monday = setISOWeek(monday, isoWeek);
+  const sunday = addDays(monday, 6);
+  return { monday, sunday };
+}
+
+function fmtRangeShort(isoYear, isoWeek) {
+  const { monday, sunday } = isoWeekRange(isoYear, isoWeek);
+  // Si el rango cruza meses muestra los dos meses; si no, un solo mes al final.
+  const sameMonth = monday.getMonth() === sunday.getMonth() && monday.getFullYear() === sunday.getFullYear();
+  if (sameMonth) {
+    return `${format(monday, 'd', { locale: es })} – ${format(sunday, "d 'de' MMMM yyyy", { locale: es })}`;
+  }
+  return `${format(monday, "d 'de' MMM", { locale: es })} – ${format(sunday, "d 'de' MMM yyyy", { locale: es })}`;
 }
 
 // --- Page --------------------------------------------------------------------
@@ -194,7 +214,27 @@ export default function PnlSemanalPage() {
     }
   };
 
+  const handleDownloadProviderPdf = async (overrideApiSystemId) => {
+    // Defensa: si llega un SyntheticEvent en lugar de un id, ignorarlo.
+    const validOverride = typeof overrideApiSystemId === 'string' ? overrideApiSystemId : '';
+    const targetId = validOverride || apiSystemId;
+    if (!targetId) {
+      toast.error('Selecciona un proveedor para generar el PDF');
+      return;
+    }
+    setDownloading((d) => ({ ...d, providerPdf: targetId }));
+    try {
+      await pnlAPI.downloadProviderPnlPdf({ isoYear, isoWeek, apiSystemId: targetId });
+    } catch (err) {
+      const detail = err?.response?.data?.error || err?.message || 'desconocido';
+      toast.error(`Error generando PDF del proveedor: ${detail}`);
+    } finally {
+      setDownloading((d) => ({ ...d, providerPdf: false }));
+    }
+  };
+
   const weekLabel = weekToken(isoYear, isoWeek);
+  const weekRangeLabel = fmtRangeShort(isoYear, isoWeek);
 
   // --- Derived: empty-state guard (P-C downstream) ---
   const isEmpty = useMemo(() => {
@@ -222,7 +262,9 @@ export default function PnlSemanalPage() {
   const providerTooltip = 'Los gastos no se atribuyen por proveedor';
 
   // Drill-down URLs (D-03)
-  const drillCommissions = `/admin/comisiones/settlements?week=${weekLabel}`;
+  const drillCommissions = apiSystemId
+    ? `/admin/comisiones?week=${weekLabel}&apiSystemId=${apiSystemId}`
+    : `/admin/comisiones?week=${weekLabel}`;
   const drillExpenses    = `/admin/contabilidad/asientos?week=${weekLabel}&type=EXPENSE`;
   const drillIncomeOther = `/admin/contabilidad/asientos?week=${weekLabel}&type=INCOME`;
 
@@ -239,6 +281,7 @@ export default function PnlSemanalPage() {
           </h1>
           <p className="text-sm text-gray-500 mt-0.5">
             Estado de resultados semanal — ISO {weekLabel}
+            <span className="text-gray-400"> · {weekRangeLabel}</span>
           </p>
         </div>
         <div className="flex gap-2">
@@ -347,9 +390,12 @@ export default function PnlSemanalPage() {
             <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-gray-700">
                 Estado de resultados — ISO {weekLabel}
+                <span className="ml-2 text-xs font-normal text-gray-400">
+                  ({weekRangeLabel})
+                </span>
                 {providerFiltered && (
                   <span className="ml-2 text-xs font-normal text-gray-500">
-                    (filtrado por proveedor)
+                    · filtrado por proveedor
                   </span>
                 )}
               </h2>
@@ -470,14 +516,26 @@ export default function PnlSemanalPage() {
                 <ArrowDownToLine className={`w-4 h-4 ${downloading.pdf ? 'animate-bounce' : ''}`} />
                 {downloading.pdf ? 'Generando...' : 'PDF'}
               </button>
+              {providerFiltered && (
+                <button
+                  onClick={() => handleDownloadProviderPdf(apiSystemId)}
+                  disabled={!!downloading.providerPdf}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-700 text-white rounded-lg text-sm hover:bg-blue-800 disabled:opacity-50"
+                  title="PDF profesional para enviar al proveedor"
+                >
+                  <FileText className={`w-4 h-4 ${downloading.providerPdf ? 'animate-bounce' : ''}`} />
+                  {downloading.providerPdf ? 'Generando...' : 'PDF Proveedor'}
+                </button>
+              )}
             </div>
           </div>
 
           {/* Per-provider breakdown (only when no provider filter) */}
           {!providerFiltered && pnl.byProvider?.length > 0 && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-100">
+              <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-gray-700">Detalle por proveedor</h3>
+                <span className="text-xs text-gray-400">Descarga el PDF de liquidación por proveedor →</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -488,12 +546,14 @@ export default function PnlSemanalPage() {
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Premios</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Comisiones</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Neto</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 w-24">PDF</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {pnl.byProvider.map((row) => {
-                      const label = row.apiSystem?.name ?? row.providerName ?? 'Taquilla / Online';
+                      const label = row.apiSystemName ?? row.apiSystem?.name ?? row.providerName ?? 'Taquilla / Online';
                       const key = row.apiSystemId ?? 'taquilla-online';
+                      const rowDownloading = downloading.providerPdf === row.apiSystemId;
                       return (
                         <tr key={key}>
                           <td className="px-4 py-2 text-gray-800">{label}</td>
@@ -502,6 +562,21 @@ export default function PnlSemanalPage() {
                           <td className="px-4 py-2 text-right text-red-600">{fmtMoney(row.weekCommissions ?? row.commissions)}</td>
                           <td className={`px-4 py-2 text-right font-medium ${Number(row.weekNet ?? row.net) >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                             {fmtMoney(row.weekNet ?? row.net)}
+                          </td>
+                          <td className="px-4 py-2 text-right">
+                            {row.apiSystemId ? (
+                              <button
+                                onClick={() => handleDownloadProviderPdf(row.apiSystemId)}
+                                disabled={!!downloading.providerPdf}
+                                title={`Descargar PDF de liquidación para ${label}`}
+                                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-700 text-white rounded-md text-xs hover:bg-blue-800 disabled:opacity-50"
+                              >
+                                <FileText className={`w-3.5 h-3.5 ${rowDownloading ? 'animate-bounce' : ''}`} />
+                                {rowDownloading ? '...' : 'PDF'}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-300">—</span>
+                            )}
                           </td>
                         </tr>
                       );

@@ -18,8 +18,9 @@ router.use(authenticate);
 router.use(authorize('ADMIN', 'OPERATOR'));
 
 // Excel / PDF first (more specific paths) to dodge any future :path routes
-router.get('/pnl/semanal/excel', pnlReportController.downloadPnlExcel);
-router.get('/pnl/semanal/pdf',   pnlReportController.downloadPnlPdf);
-router.get('/pnl/semanal',       pnlReportController.getWeeklyPnl);
+router.get('/pnl/semanal/excel',           pnlReportController.downloadPnlExcel);
+router.get('/pnl/semanal/proveedor/pdf',   pnlReportController.downloadProviderPnlPdf);
+router.get('/pnl/semanal/pdf',             pnlReportController.downloadPnlPdf);
+router.get('/pnl/semanal',                 pnlReportController.getWeeklyPnl);
 
 export default router;

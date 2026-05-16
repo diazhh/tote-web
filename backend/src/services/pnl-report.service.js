@@ -41,7 +41,22 @@ import logger from '../lib/logger.js';
 import Decimal from 'decimal.js';
 import { Prisma } from '@prisma/client';
 import ExcelJS from 'exceljs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { existsSync } from 'fs';
 import { getMondayOfISOWeek } from '../lib/dateUtils.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const LOGO_PATH = path.resolve(__dirname, '../assets/multiloterias-logo.png');
+
+// Datos bancarios de Multiloterias — destino de pagos
+const COMPANY_BANK = {
+  razonSocial: 'Multiloterias C.A.',
+  rif: 'J-503837420',
+  banco: 'B.N.C',
+  cuenta: '0191-0151-70-2100217182',
+};
 
 // F-4 — lock ROUND_HALF_UP at module load. All monetary math goes through decimal.js.
 Decimal.set({ rounding: Decimal.ROUND_HALF_UP });
@@ -217,6 +232,87 @@ class PnlReportService {
         AND  d."drawnAt" IS NOT NULL
         AND  df."totalizedAt" IS NOT NULL
     `;
+  }
+
+  /**
+   * Per-game breakdown for a single provider in a given window. Used by the
+   * provider-facing PDF to render one row per game (Ventas, Premios,
+   * Utilidad, Comisión prorrateada, Neto) plus a TOTAL row.
+   *
+   * La comisión semanal del proveedor se prorratea proporcional a las ventas
+   * del juego sobre las ventas totales del proveedor en la semana.
+   *
+   * @private
+   * @returns {Promise<Array<{gameId, gameName, totalSales, totalPrize, grossUtility, commission, net}>>}
+   */
+  async _fetchByGameForProvider({ windowStartUtc, windowEndUtc, apiSystemId, totalCommission, totalSales }) {
+    // 1) Ventas y premios reales por juego (desde DrawFinancialProvider)
+    const rows = await prisma.$queryRaw`
+      SELECT g.id                                                AS "gameId",
+             g.name                                              AS "gameName",
+             COALESCE(SUM(dfp."totalSales"), 0)::numeric(12,2)   AS "totalSales",
+             COALESCE(SUM(dfp."totalPrize"), 0)::numeric(12,2)   AS "totalPrize",
+             COALESCE(SUM(dfp."ticketCount"), 0)::int            AS "ticketCount"
+      FROM   "DrawFinancialProvider" dfp
+      JOIN   "Draw" d ON d.id = dfp."drawId"
+      JOIN   "Game" g ON g.id = d."gameId"
+      WHERE  d."drawnAt" >= ${windowStartUtc}
+        AND  d."drawnAt" <  ${windowEndUtc}
+        AND  d."drawnAt" IS NOT NULL
+        AND  dfp."apiSystemId" = ${apiSystemId}
+      GROUP  BY g.id, g.name
+      ORDER  BY "totalSales" DESC
+    `;
+
+    // 2) Comisión real por juego (desde ProviderCommissionLedger).
+    //    Si el ledger tiene rows para este (provider, week), usamos esos números
+    //    (refleja configs específicos por juego con la regla "más específico gana").
+    //    Si no hay ledger, fallback: prorratear el totalCommission proporcional a ventas.
+    const ledgerByGame = await prisma.$queryRaw`
+      SELECT d."gameId"                                            AS "gameId",
+             COALESCE(SUM(pcl."amount"), 0)::numeric(18, 8)        AS "commission"
+      FROM   "ProviderCommissionLedger" pcl
+      JOIN   "Draw" d ON d.id = pcl."drawId"
+      WHERE  d."drawnAt" >= ${windowStartUtc}
+        AND  d."drawnAt" <  ${windowEndUtc}
+        AND  d."drawnAt" IS NOT NULL
+        AND  pcl."apiSystemId" = ${apiSystemId}
+      GROUP  BY d."gameId"
+    `;
+    const ledgerCommissionByGame = new Map(
+      ledgerByGame.map((r) => [r.gameId, new Decimal((r.commission ?? 0).toString())]),
+    );
+    const hasLedger = ledgerByGame.length > 0;
+
+    const totalSalesDec = new Decimal((totalSales ?? 0).toString());
+    const totalCommissionDec = new Decimal((totalCommission ?? 0).toString());
+
+    return rows.map((r) => {
+      const sales = new Decimal((r.totalSales ?? 0).toString());
+      const prize = new Decimal((r.totalPrize ?? 0).toString());
+      const grossUtility = sales.minus(prize);
+      let commission;
+      if (hasLedger) {
+        // Comisión real desde el ledger (refleja config por juego cuando aplique)
+        commission = ledgerCommissionByGame.get(r.gameId) ?? new Decimal(0);
+      } else {
+        // Fallback: prorrateo proporcional a ventas (compat con weeks pre-ledger)
+        commission = totalSalesDec.isZero()
+          ? new Decimal(0)
+          : totalCommissionDec.times(sales).dividedBy(totalSalesDec);
+      }
+      const net = grossUtility.minus(commission);
+      return {
+        gameId: r.gameId,
+        gameName: r.gameName,
+        totalSales: sales.toFixed(2),
+        totalPrize: prize.toFixed(2),
+        grossUtility: grossUtility.toFixed(2),
+        commission: commission.toFixed(2),
+        net: net.toFixed(2),
+        ticketCount: parseInt(r.ticketCount, 10),
+      };
+    });
   }
 
   /**
@@ -560,6 +656,344 @@ class PnlReportService {
       doc.text('Tasa: no disponible (USD eq = —)', 50);
     }
     doc.fillColor('black');
+
+    doc.end();
+    await endPromise;
+    return Buffer.concat(chunks);
+  }
+
+  /**
+   * Build a provider-facing branded PDF (Multiloterias header, week range,
+   * sales/prizes/utility breakdown, provider commission, settlement amount
+   * with direction, and company bank details).
+   *
+   * Requires apiSystemId. Reuses getWeeklyPnl with provider scope so the
+   * numbers are identical to the on-screen PnL view.
+   *
+   * @param {object} opts
+   * @param {number} opts.isoYear
+   * @param {number} opts.isoWeek
+   * @param {string} opts.apiSystemId  — REQUIRED
+   * @returns {Promise<Buffer>}
+   */
+  async buildProviderPdf({ isoYear, isoWeek, apiSystemId }) {
+    if (!apiSystemId) {
+      const err = new Error('apiSystemId requerido para PDF de proveedor');
+      err.statusCode = 400;
+      throw err;
+    }
+
+    const [report, apiSystem] = await Promise.all([
+      this.getWeeklyPnl({ isoYear, isoWeek, apiSystemId }),
+      prisma.apiSystem.findUnique({
+        where: { id: apiSystemId },
+        select: { id: true, name: true, slug: true, mode: true },
+      }),
+    ]);
+
+    if (!apiSystem) {
+      const err = new Error('Proveedor no encontrado');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    // Window: Monday → Sunday (inclusive) en hora Venezuela.
+    const monday = getMondayOfISOWeek(isoYear, isoWeek);
+    const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+    const windowEndUtc = new Date(monday.getTime() + WEEK_MS);
+
+    // Desglose por juego (Ventas, Premios, Utilidad, Comisión prorrateada, Neto)
+    const byGame = await this._fetchByGameForProvider({
+      windowStartUtc: monday,
+      windowEndUtc,
+      apiSystemId,
+      totalCommission: report.weekCommissions,
+      totalSales: report.weekIncome,
+    });
+    const fmtDayEs = (d) =>
+      new Intl.DateTimeFormat('es-VE', {
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'America/Caracas',
+      }).format(d);
+    const fmtTag = `${isoYear}-W${String(isoWeek).padStart(2, '0')}`;
+    const rangeLabel = `${fmtDayEs(monday)} al ${fmtDayEs(sunday)}`;
+
+    const fmtBsF = (n) => {
+      if (n === null || n === undefined) return '—';
+      return new Intl.NumberFormat('es-VE', {
+        style: 'currency',
+        currency: 'VES',
+        minimumFractionDigits: 2,
+      }).format(Number(n));
+    };
+    // Versión compacta sin "Bs.S " (para celdas estrechas en la tabla por juego)
+    const fmtNum = (n) => {
+      if (n === null || n === undefined) return '—';
+      return new Intl.NumberFormat('es-VE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(Number(n));
+    };
+
+    // Cálculo del neto: utilidad bruta - comisión del proveedor.
+    // Para el TOTAL preferimos la suma del ledger por juego (que ya refleja
+    // configs específicos por juego cuando aplica). El report.weekCommissions
+    // viene de ProviderWeeklySettlement (snapshot semanal que se corre los lunes)
+    // — puede estar atrás del ledger en tiempo real.
+    const grossUtility = new Decimal(report.weekGrossUtility);
+    const ledgerSum = byGame.reduce(
+      (acc, g) => acc.plus(new Decimal(g.commission)),
+      new Decimal(0),
+    );
+    const settlementSum = new Decimal(report.weekCommissions);
+    // Si hay ledger rows usamos esa suma; si no, caemos al settlement.
+    const commission = ledgerSum.greaterThan(0) ? ledgerSum : settlementSum;
+    const netDec = grossUtility.minus(commission);
+    const directionToUs = netDec.greaterThanOrEqualTo(0);
+    const absNet = netDec.abs();
+
+    const PDFDocument = (await import('pdfkit')).default;
+    const doc = new PDFDocument({
+      size: 'LETTER',
+      margins: { top: 50, bottom: 60, left: 50, right: 50 },
+      info: {
+        Title: `Liquidación ${apiSystem.name} — ${fmtTag}`,
+        Author: 'Multiloterias C.A.',
+        Subject: 'Liquidación semanal de proveedor',
+      },
+    });
+
+    const chunks = [];
+    doc.on('data', (chunk) => chunks.push(chunk));
+    const endPromise = new Promise((resolve, reject) => {
+      doc.on('end', resolve);
+      doc.on('error', reject);
+    });
+
+    const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+    const leftX = doc.page.margins.left;
+    const rightX = doc.page.width - doc.page.margins.right;
+
+    // ── Header — barra navy con logo + título ──────────────────────
+    // El logo tiene texto blanco sobre fondo transparente, así que pintamos
+    // una barra oscura para que se lea correctamente.
+    const HEADER_TOP = 0;
+    const HEADER_H = 110;
+    doc.rect(0, HEADER_TOP, doc.page.width, HEADER_H).fill('#0F172A');
+    // Acento amarillo (alusión al color del logo)
+    doc.rect(0, HEADER_TOP + HEADER_H, doc.page.width, 4).fill('#F59E0B');
+
+    const LOGO_W = 90;
+    const LOGO_H = 90;
+    if (existsSync(LOGO_PATH)) {
+      try {
+        doc.image(LOGO_PATH, leftX, HEADER_TOP + 10, { fit: [LOGO_W, LOGO_H], align: 'center', valign: 'top' });
+      } catch (e) {
+        logger.warn('[pnl-report] no se pudo embeber el logo', { error: e?.message });
+      }
+    }
+    const titleX = leftX + LOGO_W + 14;
+    const titleW = pageWidth - LOGO_W - 14;
+    doc.fontSize(20).font('Helvetica-Bold').fillColor('#FFFFFF')
+      .text('Liquidación Semanal', titleX, HEADER_TOP + 30, { width: titleW });
+    doc.fontSize(13).font('Helvetica').fillColor('#CBD5E1')
+      .text('Reporte de Proveedor — Multiloterias C.A.', titleX, HEADER_TOP + 56, { width: titleW });
+    doc.fontSize(9).fillColor('#94A3B8')
+      .text(`Generado: ${new Date().toLocaleString('es-VE', { timeZone: 'America/Caracas' })}`,
+        titleX, HEADER_TOP + 78, { width: titleW });
+
+    doc.y = HEADER_H + 24;
+    doc.fillColor('black');
+
+    // ── Provider + week box ────────────────────────────────────────
+    const infoTop = doc.y;
+    doc.rect(leftX, infoTop, pageWidth, 64).fillAndStroke('#F3F4F6', '#E5E7EB');
+    doc.fillColor('#374151');
+
+    doc.fontSize(9).font('Helvetica-Bold').text('PROVEEDOR', leftX + 14, infoTop + 10);
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#111827')
+      .text(apiSystem.name, leftX + 14, infoTop + 22, { width: pageWidth / 2 - 20 });
+    doc.fontSize(8).font('Helvetica').fillColor('#6B7280')
+      .text(`Modo: ${apiSystem.mode}  ·  Slug: ${apiSystem.slug ?? '—'}`, leftX + 14, infoTop + 44);
+
+    const wkX = leftX + pageWidth / 2 + 10;
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#374151')
+      .text('SEMANA ISO', wkX, infoTop + 10);
+    doc.fontSize(14).font('Helvetica-Bold').fillColor('#111827')
+      .text(fmtTag, wkX, infoTop + 22);
+    doc.fontSize(9).font('Helvetica').fillColor('#374151')
+      .text(`Del ${rangeLabel}`, wkX, infoTop + 44, { width: pageWidth / 2 - 20 });
+
+    doc.y = infoTop + 80;
+    doc.moveDown(0.5);
+
+    // ── Breakdown table — por juego + total ─────────────────────────
+    doc.fillColor('#111827').fontSize(13).font('Helvetica-Bold')
+      .text('Desglose por juego', leftX);
+    doc.fillColor('#6B7280').fontSize(8).font('Helvetica-Oblique')
+      .text('Montos en Bs.S (Bolívar Soberano)', leftX, doc.y + 2);
+    doc.fillColor('#111827');
+    doc.moveDown(0.5);
+
+    // Columnas: Juego | Ventas | Premios | Utilidad | Comisión | Neto
+    // Juego ocupa 22%, los 5 valores monetarios reparten el resto
+    const juegoW = Math.floor(pageWidth * 0.22);
+    const valueW = Math.floor((pageWidth - juegoW) / 5);
+    const colW = [juegoW, valueW, valueW, valueW, valueW, pageWidth - juegoW - valueW * 4];
+
+    const colX = [leftX];
+    for (let i = 1; i < colW.length; i++) colX.push(colX[i - 1] + colW[i - 1]);
+
+    // Header row
+    const headerY = doc.y;
+    doc.rect(leftX, headerY, pageWidth, 22).fill('#1F2937');
+    doc.fillColor('#F9FAFB').font('Helvetica-Bold').fontSize(9);
+    const headers = ['Juego', 'Ventas', 'Premios', 'Utilidad', 'Comisión', 'Neto'];
+    headers.forEach((h, i) => {
+      doc.text(h, colX[i] + 4, headerY + 7, {
+        width: colW[i] - 8,
+        align: i === 0 ? 'left' : 'right',
+      });
+    });
+    doc.y = headerY + 22;
+
+    // Data rows
+    const drawGameRow = (cells, opts = {}) => {
+      const y = doc.y;
+      if (opts.fill) {
+        doc.rect(leftX, y, pageWidth, 20).fill(opts.fill);
+      }
+      doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(9);
+      cells.forEach((c, i) => {
+        const color = opts.colors?.[i] || opts.color || '#1F2937';
+        doc.fillColor(color);
+        doc.text(c, colX[i] + 4, y + 6, {
+          width: colW[i] - 8,
+          align: i === 0 ? 'left' : 'right',
+          lineBreak: false,
+          ellipsis: true,
+        });
+      });
+      doc.y = y + 20;
+      doc.moveTo(leftX, doc.y).lineTo(rightX, doc.y).strokeColor('#E5E7EB').stroke();
+    };
+
+    if (byGame.length === 0) {
+      const y = doc.y;
+      doc.rect(leftX, y, pageWidth, 28).fill('#FAFAFA');
+      doc.fillColor('#6B7280').font('Helvetica-Oblique').fontSize(10)
+        .text('Sin actividad para este proveedor en la semana.',
+          leftX + 6, y + 9, { width: pageWidth - 12, align: 'center' });
+      doc.y = y + 28;
+    } else {
+      byGame.forEach((g, idx) => {
+        const netPositive = new Decimal(g.net).greaterThanOrEqualTo(0);
+        drawGameRow(
+          [
+            g.gameName,
+            fmtNum(g.totalSales),
+            fmtNum(g.totalPrize),
+            fmtNum(g.grossUtility),
+            fmtNum(g.commission),
+            fmtNum(g.net),
+          ],
+          {
+            fill: idx % 2 === 0 ? '#FFFFFF' : '#F9FAFB',
+            colors: [
+              '#1F2937',
+              '#1F2937',
+              '#B91C1C',
+              '#1F2937',
+              '#B91C1C',
+              netPositive ? '#047857' : '#B91C1C',
+            ],
+          },
+        );
+      });
+    }
+
+    // Total row
+    drawGameRow(
+      [
+        'TOTAL',
+        fmtNum(report.weekIncome),
+        fmtNum(report.weekPrizes),
+        fmtNum(grossUtility.toFixed(2)),
+        fmtNum(commission.toFixed(2)),
+        fmtNum(netDec.toFixed(2)),
+      ],
+      {
+        bold: true,
+        fill: '#EFF6FF',
+        colors: [
+          '#0F172A',
+          '#0F172A',
+          '#991B1B',
+          '#0F172A',
+          '#991B1B',
+          netDec.greaterThanOrEqualTo(0) ? '#047857' : '#B91C1C',
+        ],
+      },
+    );
+
+    doc.moveDown(0.8);
+    doc.fillColor('#6B7280').font('Helvetica-Oblique').fontSize(8)
+      .text('La comisión por juego refleja la configuración vigente (config específica del juego o config global del proveedor).', leftX);
+    doc.fillColor('#1F2937');
+    doc.moveDown(0.8);
+
+    // ── Settlement banner ─────────────────────────────────────────
+    const bannerTop = doc.y;
+    const bannerColor = directionToUs ? '#047857' : '#B45309';
+    const bannerFill = directionToUs ? '#ECFDF5' : '#FFFBEB';
+    const bannerLabel = directionToUs
+      ? `Monto a cobrar al proveedor`
+      : `Monto a pagar al proveedor`;
+    doc.rect(leftX, bannerTop, pageWidth, 70).fillAndStroke(bannerFill, bannerColor);
+    doc.fillColor(bannerColor).fontSize(10).font('Helvetica-Bold')
+      .text(bannerLabel.toUpperCase(), leftX + 16, bannerTop + 12);
+    doc.fillColor('#111827').fontSize(26).font('Helvetica-Bold')
+      .text(fmtBsF(absNet.toFixed(2)), leftX + 16, bannerTop + 28);
+    doc.fillColor('#6B7280').fontSize(9).font('Helvetica')
+      .text(directionToUs
+        ? `El proveedor debe transferir este monto a Multiloterias C.A.`
+        : `Multiloterias C.A. debe transferir este monto al proveedor.`,
+        leftX + 16, bannerTop + 56);
+
+    doc.y = bannerTop + 80;
+    doc.moveDown(0.5);
+
+    // ── Bank details ──────────────────────────────────────────────
+    doc.fillColor('#111827').fontSize(12).font('Helvetica-Bold')
+      .text('Datos bancarios para el pago', leftX);
+    doc.moveDown(0.3);
+
+    const bankTop = doc.y;
+    doc.rect(leftX, bankTop, pageWidth, 88).fillAndStroke('#FFFFFF', '#D1D5DB');
+
+    const bankLine = (label, value, idx) => {
+      const y = bankTop + 10 + idx * 18;
+      doc.fillColor('#6B7280').fontSize(9).font('Helvetica-Bold')
+        .text(label, leftX + 14, y, { width: 130 });
+      doc.fillColor('#111827').fontSize(11).font('Helvetica')
+        .text(value, leftX + 150, y - 1, { width: pageWidth - 160 });
+    };
+    bankLine('Razón social:', COMPANY_BANK.razonSocial, 0);
+    bankLine('RIF:',          COMPANY_BANK.rif,          1);
+    bankLine('Banco:',        COMPANY_BANK.banco,        2);
+    bankLine('Cuenta:',       COMPANY_BANK.cuenta,       3);
+
+    doc.y = bankTop + 100;
+
+    // ── Footer ────────────────────────────────────────────────────
+    const footerY = doc.page.height - 50;
+    doc.fillColor('#9CA3AF').fontSize(8).font('Helvetica')
+      .text(
+        `Multiloterias C.A. · ${COMPANY_BANK.rif}  ·  Documento generado automáticamente — válido sin firma`,
+        leftX, footerY, { width: pageWidth, align: 'center' }
+      );
 
     doc.end();
     await endPromise;
