@@ -369,6 +369,11 @@ model User {
   accountingEntries    AccountingEntry[]
   attachmentsUploaded  AccountingEntryAttachment[]
 
+  // v2 contabilidad (spec 2026-05-16) — accounts + transfers back-relations
+  accountsCreated     Account[]            @relation("AccountCreatedBy")
+  transfersCreated    Transfer[]           @relation("TransferCreatedBy")
+  transferAttachments TransferAttachment[] @relation("TransferAttachmentUploader")
+
   // Portal de proveedores: vincula el User con el ApiSystem al que pertenece (solo PROVIDER role)
   apiSystemId String?
   apiSystem   ApiSystem? @relation(fields: [apiSystemId], references: [id])
@@ -1519,6 +1524,7 @@ model ExchangeRate {
 
   createdBy         User              @relation(fields: [createdById], references: [id])
   accountingEntries AccountingEntry[]
+  transfers         Transfer[]
 
   @@index([date, createdAt(sort: Desc)]) // D-01 picker — last loaded of the day
   @@index([rateType, date])
@@ -1568,6 +1574,11 @@ model AccountingEntry {
   // PAYMENT → Settlement (D-03) — opcional, N pagos por settlement
   settlementId String?
 
+  // v2: cuenta/billetera afectada. NULLABLE para retrocompatibilidad — el servicio
+  // exige que esté presente en creates nuevos. IMMUTABLE post-create.
+  accountId String?
+  account   Account? @relation(fields: [accountId], references: [id])
+
   // Número secuencial humano-legible para descripciones de reversal y exports
   sequentialNo Int @unique @default(autoincrement())
 
@@ -1587,6 +1598,7 @@ model AccountingEntry {
   @@index([categoryId, entryDate])
   @@index([settlementId])
   @@index([type, entryDate])
+  @@index([accountId, entryDate])
 }
 
 // Adjunto (PDF/JPG/PNG, max 5MB) — N por asiento (D-04). mimeType validado por
@@ -1609,31 +1621,104 @@ model AccountingEntryAttachment {
 }
 
 // ============================================================================
+// v2 contabilidad — cuentas, transferencias (spec 2026-05-16)
+// ============================================================================
+
+model Account {
+  id             String             @id @default(uuid())
+  name           String
+  currency       AccountingCurrency
+  openingBalance Decimal            @db.Decimal(18, 8)
+  openingDate    DateTime           @db.Date
+  isActive       Boolean            @default(true)
+  sortOrder      Int                @default(0)
+  createdById    String
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  createdBy    User              @relation("AccountCreatedBy", fields: [createdById], references: [id])
+  entries      AccountingEntry[]
+  transfersOut Transfer[]        @relation("TransferFrom")
+  transfersIn  Transfer[]        @relation("TransferTo")
+
+  @@index([isActive, sortOrder])
+}
+
+model Transfer {
+  id             String   @id @default(uuid())
+  transferDate   DateTime @db.Date
+  fromAccountId  String
+  toAccountId    String
+  amountFrom     Decimal  @db.Decimal(18, 8)
+  amountTo       Decimal  @db.Decimal(18, 8)
+  exchangeRateId String?
+  description    String
+  createdById    String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  reversesId     String? @unique
+  reversedById   String? @unique
+  reversalReason String?
+
+  sequentialNo Int @unique @default(autoincrement())
+
+  fromAccount  Account              @relation("TransferFrom", fields: [fromAccountId], references: [id])
+  toAccount    Account              @relation("TransferTo", fields: [toAccountId], references: [id])
+  exchangeRate ExchangeRate?        @relation(fields: [exchangeRateId], references: [id])
+  createdBy    User                 @relation("TransferCreatedBy", fields: [createdById], references: [id])
+  attachments  TransferAttachment[]
+
+  reverses   Transfer? @relation("TransferReversal", fields: [reversesId], references: [id])
+  reversedBy Transfer? @relation("TransferReversal")
+
+  @@index([transferDate])
+  @@index([fromAccountId, transferDate])
+  @@index([toAccountId, transferDate])
+}
+
+model TransferAttachment {
+  id           String   @id @default(uuid())
+  transferId   String
+  filename     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String
+  uploadedAt   DateTime @default(now())
+
+  transfer   Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  uploadedBy User     @relation("TransferAttachmentUploader", fields: [uploadedById], references: [id])
+
+  @@index([transferId])
+}
+
+// ============================================================================
 // Phase v1.4 — performance / cache layer (RFC: docs/superpowers/specs/2026-05-16-perf-aggregates-redis-cache-design.md)
 // ============================================================================
 
 model DrawLiveSnapshot {
-  drawId       String   @id
-  totalSales   Decimal  @db.Decimal(12, 2)
-  ticketCount  Int
-  byProvider   Json     // [{ apiSystemId, name, sales, count }, ...]
-  refreshedAt  DateTime @default(now())
+  drawId      String   @id
+  totalSales  Decimal  @db.Decimal(12, 2)
+  ticketCount Int
+  byProvider  Json // [{ apiSystemId, name, sales, count }, ...]
+  refreshedAt DateTime @default(now())
 
-  draw         Draw     @relation(fields: [drawId], references: [id], onDelete: Cascade)
+  draw Draw @relation(fields: [drawId], references: [id], onDelete: Cascade)
 
   @@index([refreshedAt])
 }
 
 model DailyAggregateSnapshot {
-  id           String        @id @default(cuid())
-  date         DateTime      @db.Date
-  gameId       String?
-  source       TicketSource?
-  apiSystemId  String?
-  totalSales   Decimal       @db.Decimal(12, 2)
-  ticketCount  Int
-  prizeTotal   Decimal       @db.Decimal(12, 2)
-  refreshedAt  DateTime      @default(now())
+  id          String        @id @default(cuid())
+  date        DateTime      @db.Date
+  gameId      String?
+  source      TicketSource?
+  apiSystemId String?
+  totalSales  Decimal       @db.Decimal(12, 2)
+  ticketCount Int
+  prizeTotal  Decimal       @db.Decimal(12, 2)
+  refreshedAt DateTime      @default(now())
 
   // NULLS NOT DISTINCT — Prisma 5 doesn't generate that clause from @@unique;
   // it is enforced manually in the migration. Do NOT remove without re-checking
