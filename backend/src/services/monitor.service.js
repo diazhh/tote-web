@@ -3,10 +3,12 @@
  * Proporciona estadísticas por bancas, números y reportes diarios
  */
 
+import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import { startOfDayDate, endOfDayDate, getVenezuelaDateAsUTC } from '../lib/dateUtils.js';
+import { cacheOrCompute } from '../lib/redis.js';
 
 /**
  * Shared apiSystem PULL-vs-PUSH/SCRAPE resolution helper (Plan 14-02 Task 1, O4).
@@ -473,7 +475,42 @@ class MonitorService {
    * @param {string} [params.source]      - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH (BACK-02)
    * @param {string} [params.apiSystemId] - filter draws by ApiSystem UUID (BACK-02)
    */
-  async getDailyReport({ date = null, dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, useMaterialized = false } = {}) {
+  /**
+   * Cached entry point. v1.4 wraps the historical query in Redis.
+   * - Key: sha1(normalized filters) under prefix `tote:v1:report:daily:`.
+   * - TTL: 60s if dateTo touches today (data still mutates),
+   *        3600s for purely historical ranges (immutable post-DRAWN).
+   * Cache misses fall through to `_getDailyReportUncached` (unchanged body).
+   */
+  async getDailyReport(filters = {}) {
+    const normalized = {
+      date: filters.date ? new Date(filters.date).toISOString().slice(0, 10) : null,
+      dateFrom: filters.dateFrom ? new Date(filters.dateFrom).toISOString().slice(0, 10) : null,
+      dateTo: filters.dateTo ? new Date(filters.dateTo).toISOString().slice(0, 10) : null,
+      gameId: filters.gameId || null,
+      source: filters.source || null,
+      apiSystemId: filters.apiSystemId || null,
+      useMaterialized: filters.useMaterialized !== false,
+    };
+
+    const hash = crypto.createHash('sha1').update(JSON.stringify(normalized)).digest('hex');
+    const key = `tote:v1:report:daily:${hash}`;
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const touchesToday =
+      normalized.date === todayStr ||
+      (normalized.dateTo && normalized.dateTo >= todayStr);
+    const ttl = touchesToday ? 60 : 3600;
+
+    return cacheOrCompute(
+      key,
+      ttl,
+      () => this._getDailyReportUncached({ ...filters, useMaterialized: normalized.useMaterialized }),
+      { trackingSet: 'tote:v1:report:daily:*' },
+    );
+  }
+
+  async _getDailyReportUncached({ date = null, dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, useMaterialized = true } = {}) {
     if (useMaterialized) {
       return this._getDailyReportMaterialized({ date, dateFrom, dateTo, gameId, source, apiSystemId });
     }
