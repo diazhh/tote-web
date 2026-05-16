@@ -29,6 +29,7 @@ import {
   deleteAttachment,
 } from '@/lib/api/contabilidad';
 import { getSettlements } from '@/lib/api/commissions';
+import { TypeBadge, StatusBadge } from '@/components/contabilidad/MoneyBadge';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
 const ALLOWED_MIMES = [
@@ -314,24 +315,23 @@ export default function EntryDetailPage() {
       </div>
 
       {/* Status badges */}
-      <div className="flex flex-wrap gap-2 text-xs">
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-blue-100 text-blue-800">
-          {entry.type}
-        </span>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <TypeBadge type={entry.type} />
+        <StatusBadge entry={entry} />
         {entry.reversedById && (
           <Link
             href={`/admin/contabilidad/asientos/${entry.reversedById}`}
-            className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-red-100 text-red-800 hover:bg-red-200"
+            className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-700 hover:bg-red-100"
           >
-            Reversado → ver reversal
+            → ver reversal
           </Link>
         )}
         {entry.reversesId && (
           <Link
             href={`/admin/contabilidad/asientos/${entry.reversesId}`}
-            className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-yellow-100 text-yellow-800 hover:bg-yellow-200"
+            className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-yellow-50 text-yellow-700 hover:bg-yellow-100"
           >
-            Reversal de #{entry.reversesId.slice(0, 6)} → ver original
+            → ver original #{entry.reversesId.slice(0, 6)}
           </Link>
         )}
         <span className="inline-flex items-center px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">
@@ -378,6 +378,19 @@ export default function EntryDetailPage() {
           )}
         </div>
       </section>
+
+      {/* Cuenta */}
+      {entry.account && (
+        <section className="bg-white shadow rounded-lg p-4">
+          <h2 className="text-base font-semibold text-gray-900">Cuenta</h2>
+          <Link
+            href={`/admin/contabilidad/cuentas/${entry.account.id}`}
+            className="text-sm text-blue-700 hover:underline"
+          >
+            {entry.account.name} ({entry.account.currency})
+          </Link>
+        </section>
+      )}
 
       {/* Editable fields (FIN-LEDGER-09 — only description / categoryId / settlementId) */}
       <section className="bg-white shadow rounded-lg p-4 space-y-3">

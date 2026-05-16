@@ -10,7 +10,8 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import { fetchEntries, fetchCategories } from '@/lib/api/contabilidad';
+import { fetchEntries, fetchCategories, fetchAccounts } from '@/lib/api/contabilidad';
+import { TypeBadge, StatusBadge, formatBsF as formatBsFBadge } from '@/components/contabilidad/MoneyBadge';
 
 const TABS = [
   { key: 'asientos',   label: 'Asientos',   href: '/admin/contabilidad/asientos' },
@@ -39,15 +40,23 @@ export default function AsientosListPage() {
   const [entries, setEntries] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [accounts, setAccounts] = useState([]);
   const [filters, setFilters] = useState({
     type: '',
     from: '',
     to: '',
     categoryId: '',
+    accountId: '',
     settlementId: '',
     providerId: '',
     includeReversed: false,
   });
+
+  useEffect(() => {
+    fetchAccounts({ includeInactive: true })
+      .then((r) => setAccounts(Array.isArray(r?.data) ? r.data : []))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -57,6 +66,7 @@ export default function AsientosListPage() {
       if (filters.from) params.from = filters.from;
       if (filters.to) params.to = filters.to;
       if (filters.categoryId) params.categoryId = filters.categoryId;
+      if (filters.accountId) params.accountId = filters.accountId;
       if (filters.settlementId) params.settlementId = filters.settlementId;
       if (filters.providerId) params.providerId = filters.providerId;
       if (filters.includeReversed) params.includeReversed = 'true';
@@ -116,101 +126,155 @@ export default function AsientosListPage() {
       </nav>
 
       {/* Filters */}
-      <div className="bg-white shadow rounded-lg p-4 grid grid-cols-1 md:grid-cols-6 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Tipo</label>
-          <select
-            value={filters.type}
-            onChange={(e) =>
-              setFilters({ ...filters, type: e.target.value, categoryId: '' })
-            }
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-          >
-            <option value="">Todos</option>
-            <option value="INCOME">INCOME</option>
-            <option value="EXPENSE">EXPENSE</option>
-            <option value="PAYMENT">PAYMENT</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
-          <input
-            type="date"
-            value={filters.from}
-            onChange={(e) => setFilters({ ...filters, from: e.target.value })}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
-          <input
-            type="date"
-            value={filters.to}
-            onChange={(e) => setFilters({ ...filters, to: e.target.value })}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-700 mb-1">Categoría</label>
-          <select
-            value={filters.categoryId}
-            onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
-          >
-            <option value="">Todas</option>
-            {categoryOptions.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name} ({c.appliesTo})
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="md:col-span-2 flex items-end">
-          <label className="text-sm text-gray-700 flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={filters.includeReversed}
+      <details open className="bg-white shadow rounded-lg group">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 list-none flex items-center justify-between">
+          <span>Filtros</span>
+          <span className="text-xs text-gray-500 group-open:rotate-180 transition">▼</span>
+        </summary>
+        <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Tipo</label>
+            <select
+              value={filters.type}
               onChange={(e) =>
-                setFilters({ ...filters, includeReversed: e.target.checked })
+                setFilters({ ...filters, type: e.target.value, categoryId: '' })
               }
-              className="rounded"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
+            >
+              <option value="">Todos</option>
+              <option value="INCOME">Ingreso</option>
+              <option value="EXPENSE">Gasto</option>
+              <option value="PAYMENT">Pago a proveedor</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Desde</label>
+            <input
+              type="date"
+              value={filters.from}
+              onChange={(e) => setFilters({ ...filters, from: e.target.value })}
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
             />
-            Incluir reversados
-          </label>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Hasta</label>
+            <input
+              type="date"
+              value={filters.to}
+              onChange={(e) => setFilters({ ...filters, to: e.target.value })}
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Categoría</label>
+            <select
+              value={filters.categoryId}
+              onChange={(e) => setFilters({ ...filters, categoryId: e.target.value })}
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
+            >
+              <option value="">Todas</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name} ({c.appliesTo})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Cuenta</label>
+            <select
+              value={filters.accountId || ''}
+              onChange={(e) => setFilters({ ...filters, accountId: e.target.value })}
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
+            >
+              <option value="">Todas</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.currency})
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex items-end">
+            <label className="text-sm text-gray-700 flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={filters.includeReversed}
+                onChange={(e) =>
+                  setFilters({ ...filters, includeReversed: e.target.checked })
+                }
+                className="rounded"
+              />
+              Incluir reversados
+            </label>
+          </div>
         </div>
-      </div>
+      </details>
 
-      <div className="bg-white shadow rounded-lg overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Categoría</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
-              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">BsF</th>
-              <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">USD eq</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Liq.</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {loading && (
+      {/* Loading / empty states (shared) */}
+      {loading && <p className="text-sm text-gray-500">Cargando…</p>}
+      {!loading && entries.length === 0 && (
+        <p className="text-sm text-gray-400">Sin asientos</p>
+      )}
+
+      {/* Cards en móvil */}
+      {!loading && entries.length > 0 && (
+        <div className="md:hidden space-y-2">
+          {entries.map((e) => (
+            <div
+              key={e.id}
+              onClick={() => router.push(`/admin/contabilidad/asientos/${e.id}`)}
+              className="bg-white shadow rounded-lg p-4 cursor-pointer"
+            >
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <TypeBadge type={e.type} />
+                  <p className="text-sm text-gray-600 truncate">
+                    {String(e.entryDate).slice(0, 10)}
+                  </p>
+                </div>
+                <StatusBadge entry={e} />
+              </div>
+              <p className="text-2xl font-mono font-bold text-gray-900">
+                {formatBsFBadge(e.amountBsF)}{' '}
+                <span className="text-xs text-gray-500">BsF</span>
+              </p>
+              <p className="text-sm text-gray-700 mt-1 line-clamp-2">
+                {e.description || '—'}
+              </p>
+              <div className="mt-2 flex items-center gap-2 text-xs text-gray-500">
+                <span>{e.category?.name}</span>
+                {e.account && (
+                  <>
+                    <span>·</span>
+                    <span>{e.account.name}</span>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Tabla en desktop */}
+      {!loading && entries.length > 0 && (
+        <div className="hidden md:block bg-white shadow rounded-lg overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-500">
-                  Cargando…
-                </td>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Fecha</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Tipo</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Categoría</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Cuenta</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Descripción</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">BsF</th>
+                <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">USD eq</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Liq.</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Estado</th>
               </tr>
-            )}
-            {!loading && entries.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-3 py-6 text-center text-sm text-gray-400">
-                  Sin asientos
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              entries.map((e) => {
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {entries.map((e) => {
                 const usd = usdEquivalent(e);
                 return (
                   <tr
@@ -224,12 +288,13 @@ export default function AsientosListPage() {
                       {String(e.entryDate).slice(0, 10)}
                     </td>
                     <td className="px-3 py-2 text-sm">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                        {e.type}
-                      </span>
+                      <TypeBadge type={e.type} />
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-700">
                       {e.category?.name || e.categoryId?.slice(0, 8) + '…'}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-700">
+                      {e.account?.name || '—'}
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-700 max-w-xs truncate">
                       {e.description || '—'}
@@ -244,26 +309,15 @@ export default function AsientosListPage() {
                       {e.settlementId ? e.settlementId.slice(0, 8) + '…' : '—'}
                     </td>
                     <td className="px-3 py-2 text-sm">
-                      {e.reversedById ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                          Reversado
-                        </span>
-                      ) : e.reversesId ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                          Reversal de #{e.reversesId.slice(0, 6)}
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Activo
-                        </span>
-                      )}
+                      <StatusBadge entry={e} />
                     </td>
                   </tr>
                 );
               })}
-          </tbody>
-        </table>
-      </div>
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

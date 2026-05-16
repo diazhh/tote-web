@@ -18,8 +18,11 @@ import {
   fetchRates,
   fetchCategories,
   createEntry,
+  fetchAccounts,
+  uploadAttachment,
 } from '@/lib/api/contabilidad';
 import { getSettlements } from '@/lib/api/commissions';
+import AttachmentPicker from '@/components/contabilidad/AttachmentPicker';
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -40,13 +43,33 @@ export default function NuevoAsientoPage() {
     description: '',
     currency: 'BsF',
     amount: '',
+    accountId: '',
     settlementId: qsSettlementId || null,
   });
   const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [attachment, setAttachment] = useState(null);
   const [rateForDate, setRateForDate] = useState(null);
   const [rateLoading, setRateLoading] = useState(false);
   const [settlements, setSettlements] = useState([]);
   const [submitting, setSubmitting] = useState(false);
+
+  // Load accounts (active only)
+  useEffect(() => {
+    fetchAccounts({ includeInactive: false })
+      .then((r) => setAccounts(Array.isArray(r?.data) ? r.data : []))
+      .catch(() => {});
+  }, []);
+
+  // When account selected, sync the currency automatically
+  useEffect(() => {
+    if (!formData.accountId) return;
+    const a = accounts.find((x) => x.id === formData.accountId);
+    if (a && a.currency !== formData.currency) {
+      setFormData((fd) => ({ ...fd, currency: a.currency }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData.accountId, accounts]);
 
   // Load categories filtered by current type (D-02)
   useEffect(() => {
@@ -125,6 +148,7 @@ export default function NuevoAsientoPage() {
     const amountNum = Number(formData.amount);
     if (!(amountNum > 0)) return toast.error('Monto debe ser un número positivo');
     if (!formData.categoryId) return toast.error('Categoría requerida');
+    if (!formData.accountId) return toast.error('Cuenta requerida');
 
     setSubmitting(true);
     try {
@@ -135,12 +159,20 @@ export default function NuevoAsientoPage() {
         description: formData.description || undefined,
         currency: formData.currency,
         amount: amountNum,
+        accountId: formData.accountId,
       };
       if (formData.type === 'PAYMENT' && formData.settlementId) {
         payload.settlementId = formData.settlementId;
       }
       const res = await createEntry(payload);
       const newId = res?.data?.id;
+      if (attachment && newId) {
+        try {
+          await uploadAttachment(newId, attachment);
+        } catch (attErr) {
+          toast.error('Asiento creado, pero falló subir el recibo. Súbelo desde el detalle.');
+        }
+      }
       toast.success('Asiento creado');
       if (newId) {
         router.push(`/admin/contabilidad/asientos/${newId}`);
@@ -183,9 +215,25 @@ export default function NuevoAsientoPage() {
               onChange={(e) => setFormData({ ...formData, type: e.target.value })}
               className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
             >
-              <option value="EXPENSE">EXPENSE</option>
-              <option value="INCOME">INCOME</option>
-              <option value="PAYMENT">PAYMENT</option>
+              <option value="EXPENSE">Gasto</option>
+              <option value="INCOME">Ingreso</option>
+              <option value="PAYMENT">Pago a proveedor</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Cuenta</label>
+            <select
+              required
+              value={formData.accountId}
+              onChange={(e) => setFormData({ ...formData, accountId: e.target.value })}
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
+            >
+              <option value="">— Selecciona —</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.currency})
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -309,6 +357,17 @@ export default function NuevoAsientoPage() {
             </span>
           </div>
         )}
+
+        <div>
+          <label className="block text-xs font-medium text-gray-700 mb-1">
+            Recibo (opcional)
+          </label>
+          <AttachmentPicker
+            value={attachment}
+            onChange={setAttachment}
+            disabled={submitting}
+          />
+        </div>
 
         <div className="flex items-center justify-end gap-2">
           <Link
