@@ -1,10 +1,13 @@
 import express from 'express';
 import { authenticate, authorize } from '../middlewares/auth.middleware.js';
-import { uploadReceipt } from '../middlewares/upload.middleware.js';
+import { uploadReceipt, uploadTransferReceipt } from '../middlewares/upload.middleware.js';
 import rateController from '../controllers/exchange-rate.controller.js';
 import entryController from '../controllers/accounting-entry.controller.js';
 import categoryController from '../controllers/category.controller.js';
 import attachmentController from '../controllers/attachment.controller.js';
+import accountController from '../controllers/account.controller.js';
+import transferController from '../controllers/transfer.controller.js';
+import cashFlowController from '../controllers/cash-flow.controller.js';
 
 /**
  * Phase 13 — contabilidad routes (PATTERNS.md section 10).
@@ -72,6 +75,46 @@ router.patch(
   '/categorias/:id/reactivate',
   categoryController.reactivate.bind(categoryController),
 );
+
+// ============================================================================
+// Cuentas (v2 — spec 2026-05-16)
+// ============================================================================
+router.get('/cuentas', accountController.list.bind(accountController));
+router.get('/cuentas/:id', accountController.getOne.bind(accountController));
+router.post('/cuentas', accountController.create.bind(accountController));
+router.patch('/cuentas/:id', accountController.update.bind(accountController));
+router.patch('/cuentas/:id/deactivate', accountController.deactivate.bind(accountController));
+router.patch('/cuentas/:id/reactivate', accountController.reactivate.bind(accountController));
+
+// ============================================================================
+// Transferencias (v2 — spec 2026-05-16)
+// ============================================================================
+router.get('/transferencias', transferController.list.bind(transferController));
+router.get('/transferencias/:id', transferController.getOne.bind(transferController));
+router.post('/transferencias', transferController.create.bind(transferController));
+router.post('/transferencias/:id/reverse', transferController.reverse.bind(transferController));
+router.post(
+  '/transferencias/:id/attachments',
+  uploadTransferReceipt.single('file'),
+  transferController.uploadAttachment.bind(transferController),
+);
+router.get(
+  '/transferencias/:id/attachments/:attId',
+  transferController.downloadAttachment.bind(transferController),
+);
+router.delete(
+  '/transferencias/:id/attachments/:attId',
+  transferController.deleteAttachment.bind(transferController),
+);
+
+// ============================================================================
+// Flujo de caja (v2 — spec 2026-05-16)
+//   /excel y /pdf van ANTES del JSON para que el router no los matchee
+//   contra /:id (defensa de orden análoga a pnl).
+// ============================================================================
+router.get('/flujo-caja/excel', cashFlowController.getExcel.bind(cashFlowController));
+router.get('/flujo-caja/pdf', cashFlowController.getPdf.bind(cashFlowController));
+router.get('/flujo-caja', cashFlowController.getJson.bind(cashFlowController));
 
 // ============================================================================
 // P-3 multer error handler (router-level — friendly 413/422 messages)
