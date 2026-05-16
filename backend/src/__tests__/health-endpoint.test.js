@@ -35,7 +35,7 @@ describe('GET /health', () => {
     redisLib.isHealthy.mockResolvedValueOnce(true);
     prismaLib.prisma.$queryRaw.mockResolvedValueOnce([{ ok: 1 }]);
 
-    const res = await request(buildApp()).get('/');
+    const res = await request(buildApp()).get('/health');
 
     expect(res.status).toBe(200);
     expect(res.body.redis).toBe('up');
@@ -46,7 +46,7 @@ describe('GET /health', () => {
     redisLib.isHealthy.mockResolvedValueOnce(false);
     prismaLib.prisma.$queryRaw.mockResolvedValueOnce([{ ok: 1 }]);
 
-    const res = await request(buildApp()).get('/');
+    const res = await request(buildApp()).get('/health');
 
     expect(res.status).toBe(200);
     expect(res.body.redis).toBe('down');
@@ -58,7 +58,7 @@ describe('GET /health', () => {
     redisLib.isHealthy.mockResolvedValueOnce(true);
     prismaLib.prisma.$queryRaw.mockRejectedValueOnce(new Error('db down'));
 
-    const res = await request(buildApp()).get('/');
+    const res = await request(buildApp()).get('/health');
 
     expect(res.status).toBe(503);
     expect(res.body.postgres).toBe('down');
