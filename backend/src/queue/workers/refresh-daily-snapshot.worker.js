@@ -1,19 +1,16 @@
 import logger from '../../lib/logger.js';
 import { computeDailyAggregateSnapshot } from '../../services/live-snapshot.service.js';
 import { invalidatePattern } from '../../lib/redis.js';
+import { getVenezuelaDateAsUTC } from '../../lib/dateUtils.js';
 
-export async function refreshDailySnapshotWorker(jobs) {
+export async function refreshDailySnapshotWorker(_jobs) {
   if (process.env.SNAPSHOT_WORKERS_ENABLED === 'false') {
     logger.info('[refresh-daily-snapshot] disabled via SNAPSHOT_WORKERS_ENABLED=false');
     return { skipped: true };
   }
 
-  // pg-boss v10 always invokes handler with an array of jobs
-  Array.isArray(jobs) ? jobs[0] : jobs;
-
   const startedAt = Date.now();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = getVenezuelaDateAsUTC();
 
   const result = await computeDailyAggregateSnapshot(today);
   await invalidatePattern('tote:v1:report:daily:*');

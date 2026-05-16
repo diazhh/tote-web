@@ -94,8 +94,11 @@ export function __setLiveSnapResolver(fn) {
 }
 
 function startOfDay(d) {
+  // The workers pass a Date already at UTC midnight (via getVenezuelaDateAsUTC).
+  // We use UTC accessors so calling this on a Caracas-local Date object also
+  // produces a stable UTC-midnight result independent of the running TZ.
   const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
+  x.setUTCHours(0, 0, 0, 0);
   return x;
 }
 

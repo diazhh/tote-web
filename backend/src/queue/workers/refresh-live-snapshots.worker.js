@@ -2,12 +2,7 @@ import { prisma } from '../../lib/prisma.js';
 import logger from '../../lib/logger.js';
 import { computeDrawLiveSnapshot } from '../../services/live-snapshot.service.js';
 import { invalidate } from '../../lib/redis.js';
-
-function startOfToday() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d;
-}
+import { getVenezuelaDateAsUTC } from '../../lib/dateUtils.js';
 
 /**
  * Cron-triggered every minute via /etc/cron.d/tote-triggers.
@@ -17,19 +12,16 @@ function startOfToday() {
  * Defensive: a single bad draw must not poison the batch. Errors are logged
  * and the worker returns counts but never throws.
  */
-export async function refreshLiveSnapshotsWorker(jobs) {
+export async function refreshLiveSnapshotsWorker(_jobs) {
   if (process.env.SNAPSHOT_WORKERS_ENABLED === 'false') {
     logger.info('[refresh-live-snapshots] disabled via SNAPSHOT_WORKERS_ENABLED=false');
     return { skipped: true };
   }
 
-  // pg-boss v10 always invokes handler with an array of jobs
-  Array.isArray(jobs) ? jobs[0] : jobs;
-
   const startedAt = Date.now();
   const draws = await prisma.draw.findMany({
     where: {
-      drawDate: startOfToday(),
+      drawDate: getVenezuelaDateAsUTC(),
       status: { in: ['SCHEDULED', 'CLOSED'] },
     },
     select: { id: true },

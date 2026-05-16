@@ -48,15 +48,16 @@ describe('refreshDailySnapshotWorker', () => {
     expect(mockComputeDaily).not.toHaveBeenCalled();
   });
 
-  it('passes a date normalized to midnight (start of day)', async () => {
+  it('passes a UTC-midnight date matching getVenezuelaDateAsUTC', async () => {
     mockComputeDaily.mockResolvedValueOnce({ bucketsWritten: 0 });
 
     await workerModule.refreshDailySnapshotWorker([{ data: {} }]);
 
     const dateArg = mockComputeDaily.mock.calls[0][0];
-    expect(dateArg.getHours()).toBe(0);
-    expect(dateArg.getMinutes()).toBe(0);
-    expect(dateArg.getSeconds()).toBe(0);
-    expect(dateArg.getMilliseconds()).toBe(0);
+    expect(dateArg).toBeInstanceOf(Date);
+    expect(dateArg.getUTCHours()).toBe(0);
+    expect(dateArg.getUTCMinutes()).toBe(0);
+    expect(dateArg.getUTCSeconds()).toBe(0);
+    expect(dateArg.getUTCMilliseconds()).toBe(0);
   });
 });
