@@ -218,6 +218,7 @@ import portalRoutes from './routes/portal.routes.js';
 import conciliacionRoutes from './routes/conciliacion.routes.js';
 import commissionRoutes from './routes/commission.routes.js';
 import contabilidadRoutes from './routes/contabilidad.routes.js';
+import pnlReportRoutes from './routes/pnl-report.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -276,6 +277,7 @@ app.use('/api/whatsapp-otp', whatsappOtpRoutes);
 app.use('/api/email-verification', emailVerificationRoutes);
 app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/monitor', monitorRoutes);
+app.use('/api/reportes', pnlReportRoutes); // Phase 14 — Weekly P&L (admin-gated)
 app.use('/api/analysis', drawAnalysisRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/number-history', numberHistoryRoutes);
