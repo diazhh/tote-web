@@ -17,10 +17,14 @@ import { fetchEntries } from '@/lib/api/contabilidad';
 import { getSettlements } from '@/lib/api/commissions';
 
 const TABS = [
-  { key: 'asientos',   label: 'Asientos',   href: '/admin/contabilidad/asientos' },
-  { key: 'tasas',      label: 'Tasas',      href: '/admin/contabilidad/tasas' },
-  { key: 'categorias', label: 'Categorías', href: '/admin/contabilidad/categorias' },
-  { key: 'pagos',      label: 'Pagos',      href: '/admin/contabilidad/pagos' },
+  { key: 'home',           label: 'Resumen',        href: '/admin/contabilidad' },
+  { key: 'asientos',       label: 'Asientos',       href: '/admin/contabilidad/asientos' },
+  { key: 'transferencias', label: 'Transferencias', href: '/admin/contabilidad/transferencias' },
+  { key: 'pagos',          label: 'Pagos',          href: '/admin/contabilidad/pagos' },
+  { key: 'tasas',          label: 'Tasas',          href: '/admin/contabilidad/tasas' },
+  { key: 'categorias',     label: 'Categorías',     href: '/admin/contabilidad/categorias' },
+  { key: 'cuentas',        label: 'Cuentas',        href: '/admin/contabilidad/cuentas' },
+  { key: 'reportes',       label: 'Reportes',       href: '/admin/contabilidad/reportes' },
 ];
 
 function formatAmount(value) {
@@ -95,7 +99,7 @@ export default function PagosPage() {
         <p className="text-sm text-gray-500">Pagos a proveedores (PAYMENT)</p>
       </div>
 
-      <nav className="flex gap-2 border-b border-gray-200">
+      <nav className="flex gap-2 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
         {TABS.map((tab) => (
           <Link
             key={tab.key}
@@ -119,30 +123,38 @@ export default function PagosPage() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="flex-1 min-w-[260px]">
             <label className="block text-xs font-medium text-gray-700 mb-1">
-              Liquidación (CONFIRMED / ADJUSTED)
+              Liquidación (Confirmada / Ajustada)
             </label>
             <select
               value={pickedSettlement}
               onChange={(e) => setPickedSettlement(e.target.value)}
-              className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+              className="w-full min-h-11 px-2 py-1.5 text-sm border border-gray-300 rounded-md"
               disabled={loadingSettlements}
             >
               <option value="">
                 {loadingSettlements ? 'Cargando…' : '— Selecciona —'}
               </option>
-              {settlements.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.isoYear}-W{s.isoWeek} · {s.apiSystem?.name || s.apiSystemId} · {s.status}
-                  {' · '}
-                  Total: {formatAmount(s.amount)}
-                </option>
-              ))}
+              {settlements.map((s) => {
+                const statusLabel =
+                  s.status === 'CONFIRMED'
+                    ? 'Confirmada'
+                    : s.status === 'ADJUSTED'
+                    ? 'Ajustada'
+                    : s.status;
+                return (
+                  <option key={s.id} value={s.id}>
+                    {s.isoYear}-W{s.isoWeek} · {s.apiSystem?.name || s.apiSystemId} · {statusLabel}
+                    {' · '}
+                    Total: {formatAmount(s.amount)}
+                  </option>
+                );
+              })}
             </select>
           </div>
           <button
             onClick={handleMarcarPagado}
             disabled={!pickedSettlement}
-            className="px-4 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            className="min-h-11 px-4 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
             Marcar pagado
           </button>
@@ -156,89 +168,131 @@ export default function PagosPage() {
       </section>
 
       {/* Existing PAYMENT entries */}
-      <section className="bg-white shadow rounded-lg overflow-x-auto">
-        <h2 className="px-4 pt-4 text-base font-semibold text-gray-900">
+      <section className="space-y-2">
+        <h2 className="text-base font-semibold text-gray-900">
           Pagos registrados
         </h2>
-        <table className="min-w-full divide-y divide-gray-200 mt-2">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Fecha
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Descripción
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Liquidación
-              </th>
-              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
-                Monto BsF
-              </th>
-              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                Estado
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-100">
-            {loading && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-500">
-                  Cargando…
-                </td>
-              </tr>
-            )}
-            {!loading && paymentEntries.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-sm text-gray-400">
-                  Sin pagos registrados
-                </td>
-              </tr>
-            )}
-            {!loading &&
-              paymentEntries.map((entry) => (
-                <tr
-                  key={entry.id}
-                  className="hover:bg-gray-50 cursor-pointer"
-                  onClick={() =>
-                    router.push(`/admin/contabilidad/asientos/${entry.id}`)
-                  }
-                >
-                  <td className="px-4 py-2 text-sm text-gray-900">
-                    {String(entry.entryDate).slice(0, 10)}
-                  </td>
-                  <td className="px-4 py-2 text-sm text-gray-700">
-                    {entry.description || '—'}
-                  </td>
-                  <td className="px-4 py-2 text-sm text-gray-600">
+
+        {loading && (
+          <p className="text-sm text-gray-500 px-1">Cargando…</p>
+        )}
+        {!loading && paymentEntries.length === 0 && (
+          <p className="text-sm text-gray-400 px-1">Sin pagos registrados</p>
+        )}
+
+        {/* Cards en móvil */}
+        <div className="md:hidden space-y-2">
+          {!loading &&
+            paymentEntries.map((entry) => (
+              <div
+                key={entry.id}
+                onClick={() =>
+                  router.push(`/admin/contabilidad/asientos/${entry.id}`)
+                }
+                className="bg-white shadow rounded-lg p-4 cursor-pointer"
+              >
+                <p className="text-xs text-gray-500">
+                  {String(entry.entryDate).slice(0, 10)}
+                </p>
+                <p className="text-2xl font-mono font-bold mt-1">
+                  {formatAmount(entry.amountBsF)}
+                </p>
+                <p className="text-sm text-gray-700 mt-1 line-clamp-2">
+                  {entry.description || '—'}
+                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-gray-500">
+                    Liq:{' '}
                     {entry.settlement
                       ? `${entry.settlement.isoYear}-W${entry.settlement.isoWeek}`
-                      : entry.settlementId
-                      ? entry.settlementId.slice(0, 8) + '…'
                       : '—'}
-                  </td>
-                  <td className="px-4 py-2 text-sm text-right font-mono text-gray-900">
-                    {Number(entry.amountBsF).toFixed(8)}
-                  </td>
-                  <td className="px-4 py-2 text-sm">
-                    {entry.reversedById ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        Reversado
-                      </span>
-                    ) : entry.reversesId ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                        Reversal
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Activo
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+                  </p>
+                  {entry.reversedById ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                      Reversado
+                    </span>
+                  ) : entry.reversesId ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                      Reverso
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                      Activo
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
+        </div>
+
+        {/* Tabla en desktop */}
+        <div className="hidden md:block bg-white shadow rounded-lg overflow-x-auto">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Fecha
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Descripción
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Liquidación
+                </th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">
+                  Monto BsF
+                </th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  Estado
+                </th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {!loading &&
+                paymentEntries.map((entry) => (
+                  <tr
+                    key={entry.id}
+                    className="hover:bg-gray-50 cursor-pointer"
+                    onClick={() =>
+                      router.push(`/admin/contabilidad/asientos/${entry.id}`)
+                    }
+                  >
+                    <td className="px-4 py-2 text-sm text-gray-900">
+                      {String(entry.entryDate).slice(0, 10)}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-700">
+                      {entry.description || '—'}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-gray-600">
+                      {entry.settlement
+                        ? `${entry.settlement.isoYear}-W${entry.settlement.isoWeek}`
+                        : entry.settlementId
+                        ? entry.settlementId.slice(0, 8) + '…'
+                        : '—'}
+                    </td>
+                    <td className="px-4 py-2 text-sm text-right font-mono text-gray-900">
+                      {Number(entry.amountBsF).toFixed(8)}
+                    </td>
+                    <td className="px-4 py-2 text-sm">
+                      {entry.reversedById ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          Reversado
+                        </span>
+                      ) : entry.reversesId ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                          Reverso
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                          Activo
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
       </section>
     </div>
   );

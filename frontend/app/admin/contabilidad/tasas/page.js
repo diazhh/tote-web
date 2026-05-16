@@ -12,10 +12,14 @@ import { toast } from 'sonner';
 import { fetchRates, createRate } from '@/lib/api/contabilidad';
 
 const TABS = [
-  { key: 'asientos',   label: 'Asientos',   href: '/admin/contabilidad/asientos' },
-  { key: 'tasas',      label: 'Tasas',      href: '/admin/contabilidad/tasas' },
-  { key: 'categorias', label: 'Categorías', href: '/admin/contabilidad/categorias' },
-  { key: 'pagos',      label: 'Pagos',      href: '/admin/contabilidad/pagos' },
+  { key: 'home',           label: 'Resumen',        href: '/admin/contabilidad' },
+  { key: 'asientos',       label: 'Asientos',       href: '/admin/contabilidad/asientos' },
+  { key: 'transferencias', label: 'Transferencias', href: '/admin/contabilidad/transferencias' },
+  { key: 'pagos',          label: 'Pagos',          href: '/admin/contabilidad/pagos' },
+  { key: 'tasas',          label: 'Tasas',          href: '/admin/contabilidad/tasas' },
+  { key: 'categorias',     label: 'Categorías',     href: '/admin/contabilidad/categorias' },
+  { key: 'cuentas',        label: 'Cuentas',        href: '/admin/contabilidad/cuentas' },
+  { key: 'reportes',       label: 'Reportes',       href: '/admin/contabilidad/reportes' },
 ];
 
 function todayIsoDate() {
@@ -85,7 +89,7 @@ export default function TasasPage() {
         <p className="text-sm text-gray-500">Tasas de cambio (inmutables — FIN-RATE-02)</p>
       </div>
 
-      <nav className="flex gap-2 border-b border-gray-200">
+      <nav className="flex gap-2 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
         {TABS.map((tab) => (
           <Link
             key={tab.key}
@@ -113,7 +117,7 @@ export default function TasasPage() {
             value={formData.date}
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
             required
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+            className="w-full min-h-11 px-2 py-1.5 text-sm border border-gray-300 rounded-md"
           />
         </div>
         <div>
@@ -121,11 +125,11 @@ export default function TasasPage() {
           <select
             value={formData.rateType}
             onChange={(e) => setFormData({ ...formData, rateType: e.target.value })}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+            className="w-full min-h-11 px-2 py-1.5 text-sm border border-gray-300 rounded-md"
           >
             <option value="BCV">BCV</option>
-            <option value="PARALELO">PARALELO</option>
-            <option value="OTRO">OTRO</option>
+            <option value="PARALELO">Paralelo</option>
+            <option value="OTRO">Otro</option>
           </select>
         </div>
         <div>
@@ -138,7 +142,7 @@ export default function TasasPage() {
             onChange={(e) => setFormData({ ...formData, rateBsPerUsd: e.target.value })}
             placeholder="0.0000"
             required
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+            className="w-full min-h-11 px-2 py-1.5 text-sm border border-gray-300 rounded-md"
           />
         </div>
         <div>
@@ -148,14 +152,14 @@ export default function TasasPage() {
             value={formData.notes}
             onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
             placeholder="Opcional"
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-md"
+            className="w-full min-h-11 px-2 py-1.5 text-sm border border-gray-300 rounded-md"
           />
         </div>
         <div className="flex items-end">
           <button
             type="submit"
             disabled={submitting}
-            className="w-full px-3 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+            className="w-full min-h-11 px-3 py-1.5 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
             {submitting ? 'Guardando…' : 'Crear tasa'}
           </button>
@@ -168,17 +172,59 @@ export default function TasasPage() {
         <select
           value={rateTypeFilter}
           onChange={(e) => setRateTypeFilter(e.target.value)}
-          className="px-2 py-1 text-sm border border-gray-300 rounded-md"
+          className="min-h-11 px-2 py-1 text-sm border border-gray-300 rounded-md"
         >
           <option value="">Todos</option>
           <option value="BCV">BCV</option>
-          <option value="PARALELO">PARALELO</option>
-          <option value="OTRO">OTRO</option>
+          <option value="PARALELO">Paralelo</option>
+          <option value="OTRO">Otro</option>
         </select>
       </div>
 
-      {/* Timeline table */}
-      <div className="bg-white shadow rounded-lg overflow-x-auto">
+      {/* Timeline */}
+      {loading && <p className="text-sm text-gray-500 px-1">Cargando…</p>}
+      {!loading && rates.length === 0 && (
+        <p className="text-sm text-gray-400 px-1">Sin tasas registradas</p>
+      )}
+
+      {/* Cards en móvil */}
+      <div className="md:hidden space-y-2">
+        {!loading &&
+          rates.map((r) => (
+            <div key={r.id} className="bg-white shadow rounded-lg p-4">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-gray-500">
+                  {String(r.date).slice(0, 10)}
+                </p>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  {r.rateType === 'PARALELO'
+                    ? 'Paralelo'
+                    : r.rateType === 'OTRO'
+                    ? 'Otro'
+                    : r.rateType}
+                </span>
+              </div>
+              <p className="text-2xl font-mono font-bold mt-1">
+                {Number(r.rateBsPerUsd).toFixed(4)}
+                <span className="text-xs font-normal text-gray-500 ml-1">
+                  BsF/USD
+                </span>
+              </p>
+              {r.notes && (
+                <p className="text-sm text-gray-700 mt-1">{r.notes}</p>
+              )}
+              <p className="text-xs text-gray-500 mt-2">
+                Creado:{' '}
+                {r.createdAt
+                  ? new Date(r.createdAt).toLocaleString('es-VE')
+                  : '—'}
+              </p>
+            </div>
+          ))}
+      </div>
+
+      {/* Tabla en desktop */}
+      <div className="hidden md:block bg-white shadow rounded-lg overflow-x-auto">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
@@ -191,20 +237,6 @@ export default function TasasPage() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-100">
-            {loading && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-500">
-                  Cargando…
-                </td>
-              </tr>
-            )}
-            {!loading && rates.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-sm text-gray-400">
-                  Sin tasas registradas
-                </td>
-              </tr>
-            )}
             {!loading &&
               rates.map((r) => (
                 <tr key={r.id} className="hover:bg-gray-50">
@@ -213,7 +245,11 @@ export default function TasasPage() {
                   </td>
                   <td className="px-4 py-2 text-sm">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                      {r.rateType}
+                      {r.rateType === 'PARALELO'
+                        ? 'Paralelo'
+                        : r.rateType === 'OTRO'
+                        ? 'Otro'
+                        : r.rateType}
                     </span>
                   </td>
                   <td className="px-4 py-2 text-sm text-right font-mono text-gray-900">
