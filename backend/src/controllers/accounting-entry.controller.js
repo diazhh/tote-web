@@ -87,6 +87,11 @@ class AccountingEntryController {
           .json({ success: false, error: 'amount debe ser un número positivo' });
       }
 
+      const { accountId } = body;
+      if (!accountId || typeof accountId !== 'string') {
+        return res.status(400).json({ success: false, error: 'accountId es requerido' });
+      }
+
       let entry;
       try {
         entry = await entryService.createEntry({
@@ -97,6 +102,7 @@ class AccountingEntryController {
           currency,
           amount,
           settlementId: settlementId ?? undefined,
+          accountId,
           createdById: req.user.id,
         });
       } catch (err) {
@@ -179,6 +185,10 @@ class AccountingEntryController {
     try {
       const { id } = req.params;
       const body = req.body ?? {};
+
+      if ('accountId' in body) {
+        return res.status(400).json({ success: false, error: 'accountId es inmutable post-creación' });
+      }
 
       // FIN-LEDGER-09 controller-side pre-strip
       const safe = Object.fromEntries(
