@@ -10,17 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { fetchRates, createRate } from '@/lib/api/contabilidad';
-
-const TABS = [
-  { key: 'home',           label: 'Resumen',        href: '/admin/contabilidad' },
-  { key: 'asientos',       label: 'Asientos',       href: '/admin/contabilidad/asientos' },
-  { key: 'transferencias', label: 'Transferencias', href: '/admin/contabilidad/transferencias' },
-  { key: 'pagos',          label: 'Pagos',          href: '/admin/contabilidad/pagos' },
-  { key: 'tasas',          label: 'Tasas',          href: '/admin/contabilidad/tasas' },
-  { key: 'categorias',     label: 'Categorías',     href: '/admin/contabilidad/categorias' },
-  { key: 'cuentas',        label: 'Cuentas',        href: '/admin/contabilidad/cuentas' },
-  { key: 'reportes',       label: 'Reportes',       href: '/admin/contabilidad/reportes' },
-];
+import ContabilidadTabs from '@/components/contabilidad/ContabilidadTabs';
 
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
@@ -89,21 +79,7 @@ export default function TasasPage() {
         <p className="text-sm text-gray-500">Tasas de cambio (inmutables — FIN-RATE-02)</p>
       </div>
 
-      <nav className="flex gap-2 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
-        {TABS.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${
-              tab.key === 'tasas'
-                ? 'text-blue-700 border-blue-600'
-                : 'text-gray-600 border-transparent hover:text-blue-700'
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <ContabilidadTabs active="tasas" />
 
       {/* Inline form (RESEARCH Open Question #3 — inline-add at top of timeline) */}
       <form

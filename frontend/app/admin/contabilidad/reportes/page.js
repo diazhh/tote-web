@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { fetchAccounts, fetchCashFlow, cashFlowExcelUrl, cashFlowPdfUrl } from '@/lib/api/contabilidad';
 import { formatBsF } from '@/components/contabilidad/MoneyBadge';
+import ContabilidadTabs from '@/components/contabilidad/ContabilidadTabs';
 
 function isoDate(d) { return new Date(d).toISOString().slice(0, 10); }
 
@@ -82,6 +83,8 @@ export default function ReportesPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold text-gray-900">Reportes de flujo de caja</h1>
+
+      <ContabilidadTabs active="reportes" />
 
       <div className="bg-white shadow rounded-lg p-4 space-y-3">
         <div className="flex gap-2 overflow-x-auto">

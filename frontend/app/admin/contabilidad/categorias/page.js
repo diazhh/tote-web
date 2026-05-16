@@ -16,17 +16,7 @@ import {
   deactivateCategory,
   reactivateCategory,
 } from '@/lib/api/contabilidad';
-
-const TABS = [
-  { key: 'home',           label: 'Resumen',        href: '/admin/contabilidad' },
-  { key: 'asientos',       label: 'Asientos',       href: '/admin/contabilidad/asientos' },
-  { key: 'transferencias', label: 'Transferencias', href: '/admin/contabilidad/transferencias' },
-  { key: 'pagos',          label: 'Pagos',          href: '/admin/contabilidad/pagos' },
-  { key: 'tasas',          label: 'Tasas',          href: '/admin/contabilidad/tasas' },
-  { key: 'categorias',     label: 'Categorías',     href: '/admin/contabilidad/categorias' },
-  { key: 'cuentas',        label: 'Cuentas',        href: '/admin/contabilidad/cuentas' },
-  { key: 'reportes',       label: 'Reportes',       href: '/admin/contabilidad/reportes' },
-];
+import ContabilidadTabs from '@/components/contabilidad/ContabilidadTabs';
 
 const GROUPS = [
   { key: 'INCOME',  label: 'Ingresos' },
@@ -119,21 +109,7 @@ export default function CategoriasPage() {
         </p>
       </div>
 
-      <nav className="flex gap-2 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
-        {TABS.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${
-              tab.key === 'categorias'
-                ? 'text-blue-700 border-blue-600'
-                : 'text-gray-600 border-transparent hover:text-blue-700'
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <ContabilidadTabs active="categorias" />
 
       <div className="flex items-center gap-2">
         <label className="text-sm text-gray-700 flex items-center gap-2">

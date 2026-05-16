@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { fetchTransfers, fetchAccounts } from '@/lib/api/contabilidad';
 import { formatBsF, StatusBadge } from '@/components/contabilidad/MoneyBadge';
+import ContabilidadTabs from '@/components/contabilidad/ContabilidadTabs';
 
 export default function TransferenciasListPage() {
   const router = useRouter();
@@ -38,6 +39,8 @@ export default function TransferenciasListPage() {
           + Nueva
         </Link>
       </div>
+
+      <ContabilidadTabs active="transferencias" />
 
       <details open className="bg-white shadow rounded-lg">
         <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 list-none">Filtros</summary>

@@ -5,16 +5,7 @@ import Link from 'next/link';
 import { toast } from 'sonner';
 import { fetchAccounts } from '@/lib/api/contabilidad';
 import { formatBsF } from '@/components/contabilidad/MoneyBadge';
-
-const TABS = [
-  { key: 'asientos',       label: 'Asientos',       href: '/admin/contabilidad/asientos' },
-  { key: 'transferencias', label: 'Transferencias', href: '/admin/contabilidad/transferencias' },
-  { key: 'pagos',          label: 'Pagos',          href: '/admin/contabilidad/pagos' },
-  { key: 'tasas',          label: 'Tasas',          href: '/admin/contabilidad/tasas' },
-  { key: 'categorias',     label: 'Categorías',     href: '/admin/contabilidad/categorias' },
-  { key: 'cuentas',        label: 'Cuentas',        href: '/admin/contabilidad/cuentas' },
-  { key: 'reportes',       label: 'Reportes',       href: '/admin/contabilidad/reportes' },
-];
+import ContabilidadTabs from '@/components/contabilidad/ContabilidadTabs';
 
 export default function CuentasPage() {
   const [accounts, setAccounts] = useState([]);
@@ -42,16 +33,7 @@ export default function CuentasPage() {
         </Link>
       </div>
 
-      <nav className="flex gap-2 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
-        {TABS.map((t) => (
-          <Link key={t.key} href={t.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${
-              t.key === 'cuentas'
-                ? 'text-blue-700 border-blue-600'
-                : 'text-gray-600 border-transparent hover:text-blue-700'
-            }`}>{t.label}</Link>
-        ))}
-      </nav>
+      <ContabilidadTabs active="cuentas" />
 
       <label className="flex items-center gap-2 text-sm text-gray-700">
         <input type="checkbox" checked={includeInactive} onChange={(e) => setIncludeInactive(e.target.checked)} />

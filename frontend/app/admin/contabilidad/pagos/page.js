@@ -15,17 +15,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { fetchEntries } from '@/lib/api/contabilidad';
 import { getSettlements } from '@/lib/api/commissions';
-
-const TABS = [
-  { key: 'home',           label: 'Resumen',        href: '/admin/contabilidad' },
-  { key: 'asientos',       label: 'Asientos',       href: '/admin/contabilidad/asientos' },
-  { key: 'transferencias', label: 'Transferencias', href: '/admin/contabilidad/transferencias' },
-  { key: 'pagos',          label: 'Pagos',          href: '/admin/contabilidad/pagos' },
-  { key: 'tasas',          label: 'Tasas',          href: '/admin/contabilidad/tasas' },
-  { key: 'categorias',     label: 'Categorías',     href: '/admin/contabilidad/categorias' },
-  { key: 'cuentas',        label: 'Cuentas',        href: '/admin/contabilidad/cuentas' },
-  { key: 'reportes',       label: 'Reportes',       href: '/admin/contabilidad/reportes' },
-];
+import ContabilidadTabs from '@/components/contabilidad/ContabilidadTabs';
 
 function formatAmount(value) {
   if (value === null || value === undefined) return '—';
@@ -99,21 +89,7 @@ export default function PagosPage() {
         <p className="text-sm text-gray-500">Pagos a proveedores (PAYMENT)</p>
       </div>
 
-      <nav className="flex gap-2 border-b border-gray-200 overflow-x-auto whitespace-nowrap">
-        {TABS.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${
-              tab.key === 'pagos'
-                ? 'text-blue-700 border-blue-600'
-                : 'text-gray-600 border-transparent hover:text-blue-700'
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <ContabilidadTabs active="pagos" />
 
       {/* Settlement picker — "Marcar pagado" quick action (D-03 + D-05) */}
       <section className="bg-white shadow rounded-lg p-4 space-y-3">

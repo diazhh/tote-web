@@ -12,13 +12,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { fetchEntries, fetchCategories, fetchAccounts } from '@/lib/api/contabilidad';
 import { TypeBadge, StatusBadge, formatBsF as formatBsFBadge } from '@/components/contabilidad/MoneyBadge';
-
-const TABS = [
-  { key: 'asientos',   label: 'Asientos',   href: '/admin/contabilidad/asientos' },
-  { key: 'tasas',      label: 'Tasas',      href: '/admin/contabilidad/tasas' },
-  { key: 'categorias', label: 'Categorías', href: '/admin/contabilidad/categorias' },
-  { key: 'pagos',      label: 'Pagos',      href: '/admin/contabilidad/pagos' },
-];
+import ContabilidadTabs from '@/components/contabilidad/ContabilidadTabs';
 
 function formatBsF(value) {
   if (value === null || value === undefined) return '—';
@@ -109,21 +103,7 @@ export default function AsientosListPage() {
         </Link>
       </div>
 
-      <nav className="flex gap-2 border-b border-gray-200">
-        {TABS.map((tab) => (
-          <Link
-            key={tab.key}
-            href={tab.href}
-            className={`px-4 py-2 text-sm font-medium border-b-2 ${
-              tab.key === 'asientos'
-                ? 'text-blue-700 border-blue-600'
-                : 'text-gray-600 border-transparent hover:text-blue-700'
-            }`}
-          >
-            {tab.label}
-          </Link>
-        ))}
-      </nav>
+      <ContabilidadTabs active="asientos" />
 
       {/* Filters */}
       <details open className="bg-white shadow rounded-lg group">
