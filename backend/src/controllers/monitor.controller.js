@@ -69,7 +69,7 @@ class MonitorController {
         resolvedTo   = todayStr;
       }
 
-      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED !== 'false';
       const report = await monitorService.getDailyReport({
         dateFrom:    resolvedFrom,
         dateTo:      resolvedTo,
@@ -120,7 +120,7 @@ class MonitorController {
       const filterLabel = filterParts.join(' | ');
 
       // Fetch report data
-      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED !== 'false';
       const report = await monitorService.getDailyReport({
         dateFrom:    resolvedFrom,
         dateTo:      resolvedTo,
@@ -363,7 +363,7 @@ class MonitorController {
   async getAccountingReport(req, res) {
     try {
       const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
-      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED !== 'false';
       const data = await accountingReportService.getAccountingReport({
         dateFrom,
         dateTo,
@@ -389,7 +389,7 @@ class MonitorController {
   async downloadAccountingExcel(req, res) {
     try {
       const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
-      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED !== 'false';
       const buffer = await accountingReportService.buildAccountingExcel({
         dateFrom,
         dateTo,

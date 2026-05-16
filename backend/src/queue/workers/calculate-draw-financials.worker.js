@@ -15,6 +15,7 @@
 import { prisma } from '../../lib/prisma.js';
 import logger from '../../lib/logger.js';
 import { computeAndUpsertSales, computeAndUpsertPrizes, PrizesNotProcessedError } from '../../services/draw-financial.service.js';
+import { invalidate, invalidatePattern } from '../../lib/redis.js';
 
 export async function calculateDrawFinancialsWorker(jobs) {
   // pg-boss v10 siempre llama al handler con un array de jobs
@@ -27,11 +28,13 @@ export async function calculateDrawFinancialsWorker(jobs) {
   });
   if (!draw) throw new Error(`Draw ${drawId} no encontrado`);
 
+  let result;
   switch (phase) {
     case 'SALES': {
       logger.info(`[calculate-draw-financials] phase=SALES drawId=${drawId}`);
       await computeAndUpsertSales(drawId, draw.closedAt);
-      return { success: true, drawId, phase: 'SALES' };
+      result = { success: true, drawId, phase: 'SALES' };
+      break;
     }
 
     case 'PRIZES': {
@@ -42,10 +45,25 @@ export async function calculateDrawFinancialsWorker(jobs) {
       }
       logger.info(`[calculate-draw-financials] phase=PRIZES drawId=${drawId}`);
       await computeAndUpsertPrizes(drawId, draw.drawnAt);
-      return { success: true, drawId, phase: 'PRIZES' };
+      result = { success: true, drawId, phase: 'PRIZES' };
+      break;
     }
 
     default:
       throw new Error(`[calculate-draw-financials] unknown phase: ${phase}`);
   }
+
+  // v1.4 — cache invalidation. Best-effort; failures must NOT roll back the
+  // authoritative DrawFinancial write that just committed.
+  try {
+    await invalidate(`tote:v1:draw:${drawId}:snap`);
+    if (phase === 'PRIZES') {
+      await prisma.drawLiveSnapshot.deleteMany({ where: { drawId } });
+      await invalidatePattern('tote:v1:report:daily:*');
+    }
+  } catch (err) {
+    logger.warn(`[calculate-draw-financials] cache invalidation failed drawId=${drawId}: ${err.message}`);
+  }
+
+  return result;
 }

@@ -13,6 +13,7 @@ import { registerAllWorkers } from './queue/register.js';
 import whatsappBaileysService from './services/whatsapp-baileys.service.js';
 import adminTelegramBotService from './services/admin-telegram-bot.service.js';
 import { staticStorageGuard } from './middlewares/static-storage-guard.middleware.js';
+import { shutdown as redisShutdown } from './lib/redis.js';
 
 // Cargar variables de entorno
 dotenv.config();
@@ -219,6 +220,8 @@ import conciliacionRoutes from './routes/conciliacion.routes.js';
 import commissionRoutes from './routes/commission.routes.js';
 import contabilidadRoutes from './routes/contabilidad.routes.js';
 import pnlReportRoutes from './routes/pnl-report.routes.js';
+import healthRoutes from './routes/health.routes.js';
+import cacheAdminRoutes from './routes/cache-admin.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -247,6 +250,7 @@ app.use('/api/system', systemConfigRoutes);
 // Rutas de plataformas de canales
 app.use('/api/whatsapp', whatsappBaileysRoutes);
 app.use('/api/admin/whatsapp', whatsappAdminRoutes);
+app.use('/api/admin/cache', cacheAdminRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/facebook', facebookRoutes);
@@ -278,6 +282,7 @@ app.use('/api/email-verification', emailVerificationRoutes);
 app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/monitor', monitorRoutes);
 app.use('/api/reportes', pnlReportRoutes); // Phase 14 — Weekly P&L (admin-gated)
+app.use('/health', healthRoutes);
 app.use('/api/analysis', drawAnalysisRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/number-history', numberHistoryRoutes);
@@ -446,6 +451,7 @@ process.on('SIGTERM', async () => {
     logger.warn('Error al detener pg-boss:', e.message);
   }
   await adminTelegramBotService.shutdown();
+  await redisShutdown();
   await prisma.$disconnect();
   process.exit(0);
 });
@@ -461,6 +467,7 @@ process.on('SIGINT', async () => {
     logger.warn('Error al detener pg-boss:', e.message);
   }
   await adminTelegramBotService.shutdown();
+  await redisShutdown();
   await prisma.$disconnect();
   process.exit(0);
 });

@@ -18,6 +18,9 @@ export const QUEUES = {
   CALCULATE_PROVIDER_COMMISSION: 'calculate-provider-commission',
   // Phase 12 — weekly settlement snapshot (cron-triggered Mondays 06:00 VE)
   WEEKLY_SETTLEMENT_SNAPSHOT: 'weekly-settlement-snapshot',
+  // Phase v1.4 — perf cache layer (RFC 2026-05-16)
+  REFRESH_LIVE_SNAPSHOTS: 'refresh-live-snapshots',
+  REFRESH_DAILY_SNAPSHOT: 'refresh-daily-snapshot',
   SYNC_API_PLANNING: 'sync-api-planning',
   SYNC_API_TICKETS: 'sync-api-tickets',
   SYNC_SCRAPE_TICKETS: 'sync-scrape-tickets',
@@ -130,6 +133,18 @@ export const QUEUE_CONFIGS = {
     retryDelay: 30,
     retryBackoff: true,
     expireInMinutes: 10,
+  },
+  [QUEUES.REFRESH_LIVE_SNAPSHOTS]: {
+    retryLimit: 1,
+    retryDelay: 10,
+    retryBackoff: false,
+    expireInMinutes: 1,
+  },
+  [QUEUES.REFRESH_DAILY_SNAPSHOT]: {
+    retryLimit: 1,
+    retryDelay: 10,
+    retryBackoff: false,
+    expireInMinutes: 2,
   },
   [QUEUES.SYNC_API_PLANNING]: {
     retryLimit: 3,

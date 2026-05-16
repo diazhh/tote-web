@@ -44,6 +44,9 @@ const ALLOWED_QUEUES = new Set([
   'cleanup-logs',
   // Phase 12 — weekly settlement snapshot, fired Monday 06:00 VE via /etc/cron.d/tote-triggers
   'weekly-settlement-snapshot',
+  // Phase v1.4 — perf cache layer
+  'refresh-live-snapshots',
+  'refresh-daily-snapshot',
 ]);
 
 if (!ALLOWED_QUEUES.has(queueName)) {
