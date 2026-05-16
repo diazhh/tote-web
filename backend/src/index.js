@@ -221,6 +221,7 @@ import commissionRoutes from './routes/commission.routes.js';
 import contabilidadRoutes from './routes/contabilidad.routes.js';
 import pnlReportRoutes from './routes/pnl-report.routes.js';
 import healthRoutes from './routes/health.routes.js';
+import cacheAdminRoutes from './routes/cache-admin.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -249,6 +250,7 @@ app.use('/api/system', systemConfigRoutes);
 // Rutas de plataformas de canales
 app.use('/api/whatsapp', whatsappBaileysRoutes);
 app.use('/api/admin/whatsapp', whatsappAdminRoutes);
+app.use('/api/admin/cache', cacheAdminRoutes);
 app.use('/api/telegram', telegramRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/facebook', facebookRoutes);

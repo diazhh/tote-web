@@ -6,6 +6,24 @@ const TRACKING_SET_PREFIX = 'tote:v1:idx:';
 
 let client = null;
 
+// Lightweight in-process counters. Reset on process restart.
+const _counters = {
+  hits: new Map(),     // prefix -> count
+  misses: new Map(),   // prefix -> count
+  fallbacks: 0,
+  timeouts: 0,
+};
+
+function bumpCounter(map, prefix) {
+  map.set(prefix, (map.get(prefix) || 0) + 1);
+}
+
+function keyPrefix(key) {
+  // tote:v1:report:daily:abc123 → tote:v1:report:daily
+  const parts = key.split(':');
+  return parts.slice(0, 4).join(':');
+}
+
 function isEnabled() {
   return process.env.REDIS_ENABLED !== 'false';
 }
@@ -45,13 +63,18 @@ function withTimeout(promise, ms) {
 export async function cacheOrCompute(key, ttlSeconds, fn, opts = {}) {
   const c = getClient();
   if (!c) return fn();
+  const prefix = keyPrefix(key);
 
   try {
     const cached = await withTimeout(c.get(key), REDIS_TIMEOUT_MS);
     if (cached !== null && cached !== undefined) {
+      bumpCounter(_counters.hits, prefix);
       return JSON.parse(cached);
     }
+    bumpCounter(_counters.misses, prefix);
   } catch (err) {
+    if (err.message === 'redis_timeout') _counters.timeouts += 1;
+    _counters.fallbacks += 1;
     logger.warn(`[cache] get failed key=${key} err=${err.message} — falling back`);
     return fn();
   }
@@ -66,6 +89,38 @@ export async function cacheOrCompute(key, ttlSeconds, fn, opts = {}) {
     logger.warn(`[cache] setex failed key=${key} err=${err.message}`);
   }
   return value;
+}
+
+/** Snapshot of hit/miss ratios + connection state. */
+export async function getStats() {
+  const c = getClient();
+  const prefixes = new Set([..._counters.hits.keys(), ..._counters.misses.keys()]);
+  const hitRate = {};
+  for (const p of prefixes) {
+    const h = _counters.hits.get(p) || 0;
+    const m = _counters.misses.get(p) || 0;
+    hitRate[p] = h + m > 0 ? Number((h / (h + m)).toFixed(3)) : 0;
+  }
+  let keyCount = null;
+  if (c && c.status === 'ready') {
+    try {
+      keyCount = await withTimeout(c.dbsize(), REDIS_TIMEOUT_MS);
+    } catch {
+      keyCount = null;
+    }
+  }
+  return {
+    enabled: isEnabled(),
+    connected: c?.status === 'ready',
+    keyCount,
+    hitRate,
+    counters: {
+      hits: Object.fromEntries(_counters.hits),
+      misses: Object.fromEntries(_counters.misses),
+      fallbacks: _counters.fallbacks,
+      timeouts: _counters.timeouts,
+    },
+  };
 }
 
 /** DEL a single key. */
