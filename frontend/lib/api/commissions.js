@@ -47,14 +47,14 @@ function qs(params) {
 
 export async function listConfigs(apiSystemId) {
   const res = await fetch(
-    `${API_URL}/api/commissions/configs/${apiSystemId}`,
+    `${API_URL}/commissions/configs/${apiSystemId}`,
     { headers: authHeaders() }
   );
   return jsonOrThrow(res);
 }
 
 export async function createConfig(body) {
-  const res = await fetch(`${API_URL}/api/commissions/configs`, {
+  const res = await fetch(`${API_URL}/commissions/configs`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
@@ -66,7 +66,7 @@ export async function createConfig(body) {
 
 export async function getLedger({ apiSystemId, from, to } = {}) {
   const res = await fetch(
-    `${API_URL}/api/commissions/ledger${qs({ apiSystemId, from, to })}`,
+    `${API_URL}/commissions/ledger${qs({ apiSystemId, from, to })}`,
     { headers: authHeaders() }
   );
   return jsonOrThrow(res);
@@ -81,7 +81,7 @@ export async function getSettlements({
   status,
 } = {}) {
   const res = await fetch(
-    `${API_URL}/api/commissions/settlements${qs({
+    `${API_URL}/commissions/settlements${qs({
       isoYear,
       isoWeek,
       apiSystemId,
@@ -93,7 +93,7 @@ export async function getSettlements({
 }
 
 export async function getSettlementDetail(id) {
-  const res = await fetch(`${API_URL}/api/commissions/settlements/${id}`, {
+  const res = await fetch(`${API_URL}/commissions/settlements/${id}`, {
     headers: authHeaders(),
   });
   return jsonOrThrow(res);
@@ -101,7 +101,7 @@ export async function getSettlementDetail(id) {
 
 export async function confirmSettlement(id) {
   const res = await fetch(
-    `${API_URL}/api/commissions/settlements/${id}/confirm`,
+    `${API_URL}/commissions/settlements/${id}/confirm`,
     {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -112,7 +112,7 @@ export async function confirmSettlement(id) {
 
 export async function adjustSettlement(id, body) {
   const res = await fetch(
-    `${API_URL}/api/commissions/settlements/${id}/adjust`,
+    `${API_URL}/commissions/settlements/${id}/adjust`,
     {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -126,7 +126,7 @@ export async function adjustSettlement(id, body) {
 
 export async function downloadSettlementExcel(id) {
   const res = await fetch(
-    `${API_URL}/api/commissions/settlements/${id}/excel`,
+    `${API_URL}/commissions/settlements/${id}/excel`,
     { headers: authHeaders() }
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -135,7 +135,7 @@ export async function downloadSettlementExcel(id) {
 
 export async function downloadSettlementPdf(id) {
   const res = await fetch(
-    `${API_URL}/api/commissions/settlements/${id}/pdf`,
+    `${API_URL}/commissions/settlements/${id}/pdf`,
     { headers: authHeaders() }
   );
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

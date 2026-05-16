@@ -54,14 +54,14 @@ function qs(params) {
 
 export async function fetchRates({ rateType, from, to } = {}) {
   const res = await fetch(
-    `${API_URL}/api/contabilidad/tasas${qs({ rateType, from, to })}`,
+    `${API_URL}/contabilidad/tasas${qs({ rateType, from, to })}`,
     { headers: authHeaders() }
   );
   return jsonOrThrow(res);
 }
 
 export async function createRate(body) {
-  const res = await fetch(`${API_URL}/api/contabilidad/tasas`, {
+  const res = await fetch(`${API_URL}/contabilidad/tasas`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
@@ -73,14 +73,14 @@ export async function createRate(body) {
 
 export async function fetchEntries(filters = {}) {
   const res = await fetch(
-    `${API_URL}/api/contabilidad/asientos${qs(filters)}`,
+    `${API_URL}/contabilidad/asientos${qs(filters)}`,
     { headers: authHeaders() }
   );
   return jsonOrThrow(res);
 }
 
 export async function createEntry(payload) {
-  const res = await fetch(`${API_URL}/api/contabilidad/asientos`, {
+  const res = await fetch(`${API_URL}/contabilidad/asientos`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
@@ -89,14 +89,14 @@ export async function createEntry(payload) {
 }
 
 export async function fetchEntry(id) {
-  const res = await fetch(`${API_URL}/api/contabilidad/asientos/${id}`, {
+  const res = await fetch(`${API_URL}/contabilidad/asientos/${id}`, {
     headers: authHeaders(),
   });
   return jsonOrThrow(res);
 }
 
 export async function updateEntry(id, patch) {
-  const res = await fetch(`${API_URL}/api/contabilidad/asientos/${id}`, {
+  const res = await fetch(`${API_URL}/contabilidad/asientos/${id}`, {
     method: 'PATCH',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(patch),
@@ -106,7 +106,7 @@ export async function updateEntry(id, patch) {
 
 export async function reverseEntry(id, reversalReason) {
   const res = await fetch(
-    `${API_URL}/api/contabilidad/asientos/${id}/reverse`,
+    `${API_URL}/contabilidad/asientos/${id}/reverse`,
     {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -120,14 +120,14 @@ export async function reverseEntry(id, reversalReason) {
 
 export async function fetchCategories({ appliesTo, includeInactive } = {}) {
   const res = await fetch(
-    `${API_URL}/api/contabilidad/categorias${qs({ appliesTo, includeInactive })}`,
+    `${API_URL}/contabilidad/categorias${qs({ appliesTo, includeInactive })}`,
     { headers: authHeaders() }
   );
   return jsonOrThrow(res);
 }
 
 export async function createCategory(payload) {
-  const res = await fetch(`${API_URL}/api/contabilidad/categorias`, {
+  const res = await fetch(`${API_URL}/contabilidad/categorias`, {
     method: 'POST',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
@@ -136,7 +136,7 @@ export async function createCategory(payload) {
 }
 
 export async function renameCategory(id, name) {
-  const res = await fetch(`${API_URL}/api/contabilidad/categorias/${id}`, {
+  const res = await fetch(`${API_URL}/contabilidad/categorias/${id}`, {
     method: 'PATCH',
     headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ name }),
@@ -146,7 +146,7 @@ export async function renameCategory(id, name) {
 
 export async function deactivateCategory(id) {
   const res = await fetch(
-    `${API_URL}/api/contabilidad/categorias/${id}/deactivate`,
+    `${API_URL}/contabilidad/categorias/${id}/deactivate`,
     {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -157,7 +157,7 @@ export async function deactivateCategory(id) {
 
 export async function reactivateCategory(id) {
   const res = await fetch(
-    `${API_URL}/api/contabilidad/categorias/${id}/reactivate`,
+    `${API_URL}/contabilidad/categorias/${id}/reactivate`,
     {
       method: 'PATCH',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
@@ -173,7 +173,7 @@ export async function uploadAttachment(entryId, fileObject) {
   fd.append('file', fileObject);
   // NOTE: do NOT set Content-Type — the browser must set the multipart boundary.
   const res = await fetch(
-    `${API_URL}/api/contabilidad/asientos/${entryId}/attachments`,
+    `${API_URL}/contabilidad/asientos/${entryId}/attachments`,
     {
       method: 'POST',
       headers: authHeaders(),
@@ -193,12 +193,12 @@ export async function uploadAttachment(entryId, fileObject) {
  * 401'd by the static-storage guard.
  */
 export function downloadAttachmentUrl(entryId, attId) {
-  return `${API_URL}/api/contabilidad/asientos/${entryId}/attachments/${attId}`;
+  return `${API_URL}/contabilidad/asientos/${entryId}/attachments/${attId}`;
 }
 
 export async function deleteAttachment(entryId, attId) {
   const res = await fetch(
-    `${API_URL}/api/contabilidad/asientos/${entryId}/attachments/${attId}`,
+    `${API_URL}/contabilidad/asientos/${entryId}/attachments/${attId}`,
     {
       method: 'DELETE',
       headers: authHeaders(),
