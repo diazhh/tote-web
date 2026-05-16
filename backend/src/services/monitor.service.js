@@ -668,16 +668,28 @@ class MonitorService {
         g.totalTickets += tickets.length;
         g.drawCount++;
 
-        // bySource aggregation (BACK-03)
+        // bySource aggregation (BACK-03) — split por (source, apiSystemId)
+        // para que distintos webhooks/proveedores muestren filas separadas.
         for (const ticket of tickets) {
           const src = ticket.source;
-          if (!bySourceMap[src]) {
-            bySourceMap[src] = { source: src, totalSales: 0, ticketCount: 0 };
+          const sysId = ticket.apiSystemId || null;
+          const key = sysId ? `${src}::${sysId}` : src;
+          if (!bySourceMap[key]) {
+            bySourceMap[key] = {
+              source: src,
+              apiSystemId: sysId,
+              apiSystemName: null,
+              totalSales: 0,
+              ticketCount: 0,
+            };
           }
-          bySourceMap[src].totalSales  += parseFloat(ticket.totalAmount);
-          bySourceMap[src].ticketCount += 1;
+          bySourceMap[key].totalSales  += parseFloat(ticket.totalAmount);
+          bySourceMap[key].ticketCount += 1;
         }
       }
+
+      // Resolve provider names en bulk
+      await this._enrichBySourceWithProviderNames(bySourceMap);
 
       const totals = {
         totalSales:   report.reduce((sum, r) => sum + r.totalSales,  0),
@@ -838,12 +850,21 @@ class MonitorService {
         else if (row.apiSystem?.mode === 'PUSH')   src = 'WEBHOOK_PUSH';
         else if (row.apiSystem?.mode === 'SCRAPE') src = 'EXTERNAL_SCRAPE';
         else                                       src = 'EXTERNAL_API';
-        if (!bySourceMap[src]) {
-          bySourceMap[src] = { source: src, totalSales: 0, ticketCount: 0 };
+        const sysId = row.apiSystemId || null;
+        const key = sysId ? `${src}::${sysId}` : src;
+        if (!bySourceMap[key]) {
+          bySourceMap[key] = {
+            source: src,
+            apiSystemId: sysId,
+            apiSystemName: null,
+            totalSales: 0,
+            ticketCount: 0,
+          };
         }
-        bySourceMap[src].totalSales  += parseFloat(row.totalSales);
-        bySourceMap[src].ticketCount += row.ticketCount;
+        bySourceMap[key].totalSales  += parseFloat(row.totalSales);
+        bySourceMap[key].ticketCount += row.ticketCount;
       }
+      await this._enrichBySourceWithProviderNames(bySourceMap);
 
       // Compose per-draw response (same shape as legacy).
       const report = [];
@@ -1598,6 +1619,34 @@ class MonitorService {
         daysSince,
       };
     });
+  }
+
+  /**
+   * Llena `apiSystemName` en cada entrada de bySourceMap haciendo un único
+   * lookup por todos los apiSystemId presentes. Mutates the map in place.
+   *
+   * @private
+   * @param {Object} bySourceMap
+   */
+  async _enrichBySourceWithProviderNames(bySourceMap) {
+    const ids = Array.from(
+      new Set(
+        Object.values(bySourceMap)
+          .map((r) => r.apiSystemId)
+          .filter((id) => id),
+      ),
+    );
+    if (ids.length === 0) return;
+    const systems = await prisma.apiSystem.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    const byId = new Map(systems.map((s) => [s.id, s.name]));
+    for (const row of Object.values(bySourceMap)) {
+      if (row.apiSystemId) {
+        row.apiSystemName = byId.get(row.apiSystemId) || null;
+      }
+    }
   }
 }
 

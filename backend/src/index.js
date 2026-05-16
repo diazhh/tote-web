@@ -159,14 +159,8 @@ app.use((req, res, next) => {
 // RUTAS
 // ============================================
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
+// Health check — v1.4 replaced the inline handler with a dedicated route
+// that reports postgres + redis status. Mounted later via healthRoutes.
 
 // ============================================
 // IMPORTAR RUTAS
