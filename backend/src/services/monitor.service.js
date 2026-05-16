@@ -379,7 +379,17 @@ class MonitorService {
    * @param {string} [filters.source]      - TAQUILLA_ONLINE | EXTERNAL_API | WEBHOOK_PUSH
    * @param {string} [filters.apiSystemId] - UUID del ApiSystem
    */
-  async getItemStatsFiltered(drawId, { source = null, apiSystemId = null } = {}) {
+  async getItemStatsFiltered(drawId, filters = {}) {
+    const normalized = {
+      source: filters.source || null,
+      apiSystemId: filters.apiSystemId || null,
+    };
+    const hash = crypto.createHash('sha1').update(JSON.stringify(normalized)).digest('hex');
+    const key = `tote:v1:items:stats:${drawId}:${hash}`;
+    return cacheOrCompute(key, 30, () => this._getItemStatsFilteredUncached(drawId, filters));
+  }
+
+  async _getItemStatsFilteredUncached(drawId, { source = null, apiSystemId = null } = {}) {
     try {
       const ticketWhere = { status: { not: 'CANCELLED' } };
       if (apiSystemId) {
@@ -1431,7 +1441,22 @@ class MonitorService {
    * @param {number} [params.page]        - page number (1-based)
    * @param {number} [params.pageSize]    - items per page
    */
-  async getTicketList({ dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, page = 1, pageSize = 50 } = {}) {
+  async getTicketList(filters = {}) {
+    const normalized = {
+      dateFrom: filters.dateFrom ? new Date(filters.dateFrom).toISOString().slice(0, 10) : null,
+      dateTo: filters.dateTo ? new Date(filters.dateTo).toISOString().slice(0, 10) : null,
+      gameId: filters.gameId || null,
+      source: filters.source || null,
+      apiSystemId: filters.apiSystemId || null,
+      page: filters.page || 1,
+      pageSize: filters.pageSize || 50,
+    };
+    const hash = crypto.createHash('sha1').update(JSON.stringify(normalized)).digest('hex');
+    const key = `tote:v1:tickets:list:${hash}`;
+    return cacheOrCompute(key, 60, () => this._getTicketListUncached(filters));
+  }
+
+  async _getTicketListUncached({ dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, page = 1, pageSize = 50 } = {}) {
     try {
       const where = { status: { not: 'CANCELLED' } };
 
