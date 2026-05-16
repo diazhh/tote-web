@@ -353,50 +353,90 @@ export default function SettlementDetailPage() {
             Sin líneas asociadas a esta liquidación.
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Sorteo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ventas
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Utilidad
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Comisión
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {ledgerRows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-gray-700">
-                      {row.drawId?.slice(0, 8) || '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+          <>
+            {/* Cards en móvil */}
+            <div className="md:hidden p-3 space-y-2">
+              {ledgerRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="bg-white border border-gray-200 rounded-lg p-4"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-xs font-mono text-gray-600 truncate">
+                      Sorteo {row.drawId?.slice(0, 8) || '—'}
+                    </span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
                       {fmtDate(row.draw?.drawnAt || row.createdAt)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                      {fmtAmount(row.salesBase)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                      {fmtAmount(row.utilityBase)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono font-semibold">
-                      {fmtAmount(row.amount)}
-                    </td>
+                    </span>
+                  </div>
+                  <p className="text-2xl font-mono font-bold text-gray-900">
+                    {fmtAmount(row.amount)}
+                  </p>
+                  <p className="text-xs text-gray-500">Comisión</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-gray-500">Ventas</p>
+                      <p className="font-mono text-gray-700">
+                        {fmtAmount(row.salesBase)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Utilidad</p>
+                      <p className="font-mono text-gray-700">
+                        {fmtAmount(row.utilityBase)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla en desktop */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Sorteo
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fecha
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ventas
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Utilidad
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Comisión
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {ledgerRows.map((row) => (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-gray-700">
+                        {row.drawId?.slice(0, 8) || '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {fmtDate(row.draw?.drawnAt || row.createdAt)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
+                        {fmtAmount(row.salesBase)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
+                        {fmtAmount(row.utilityBase)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono font-semibold">
+                        {fmtAmount(row.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

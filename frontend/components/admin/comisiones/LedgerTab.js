@@ -72,8 +72,12 @@ export default function LedgerTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex flex-wrap gap-3 items-end">
+      <details open className="bg-white shadow rounded-lg group">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 list-none flex items-center justify-between">
+          <span>Filtros</span>
+          <span className="text-xs text-gray-500 group-open:rotate-180 transition">▼</span>
+        </summary>
+        <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Proveedor
@@ -83,7 +87,7 @@ export default function LedgerTab() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, apiSystemId: e.target.value }))
               }
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
             >
               <option value="">Todos</option>
               {systems.map((s) => (
@@ -103,7 +107,7 @@ export default function LedgerTab() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, from: e.target.value }))
               }
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
             />
           </div>
           <div>
@@ -116,21 +120,23 @@ export default function LedgerTab() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, to: e.target.value }))
               }
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
             />
           </div>
           {(filters.apiSystemId || filters.from || filters.to) && (
-            <button
-              onClick={() =>
-                setFilters({ apiSystemId: '', from: '', to: '' })
-              }
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              Limpiar
-            </button>
+            <div className="md:col-span-3">
+              <button
+                onClick={() =>
+                  setFilters({ apiSystemId: '', from: '', to: '' })
+                }
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                Limpiar
+              </button>
+            </div>
           )}
         </div>
-      </div>
+      </details>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
@@ -147,56 +153,99 @@ export default function LedgerTab() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Sorteo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Proveedor
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Ventas
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Utilidad
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Comisión
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Fecha
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-gray-700">
-                      {row.drawId?.slice(0, 8) || '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+          <>
+            {/* Cards en móvil */}
+            <div className="md:hidden p-3 space-y-2">
+              {rows.map((row) => (
+                <div
+                  key={row.id}
+                  className="bg-white border border-gray-200 rounded-lg p-4"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-sm font-medium text-gray-900 truncate">
                       {row.apiSystem?.name || row.apiSystemId}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                      {fmtAmount(row.salesBase)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                      {fmtAmount(row.utilityBase)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono font-semibold">
-                      {fmtAmount(row.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    </span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">
                       {fmtDate(row.draw?.drawnAt || row.createdAt)}
-                    </td>
+                    </span>
+                  </div>
+                  <p className="text-2xl font-mono font-bold text-gray-900">
+                    {fmtAmount(row.amount)}
+                  </p>
+                  <p className="text-xs text-gray-500">Comisión</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-xs text-gray-500">Ventas</p>
+                      <p className="font-mono text-gray-700">
+                        {fmtAmount(row.salesBase)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500">Utilidad</p>
+                      <p className="font-mono text-gray-700">
+                        {fmtAmount(row.utilityBase)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-xs font-mono text-gray-500 mt-2">
+                    Sorteo {row.drawId?.slice(0, 8) || '—'}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabla en desktop */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Sorteo
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Proveedor
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Ventas
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Utilidad
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Comisión
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Fecha
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {rows.map((row) => (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-xs font-mono text-gray-700">
+                        {row.drawId?.slice(0, 8) || '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {row.apiSystem?.name || row.apiSystemId}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
+                        {fmtAmount(row.salesBase)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
+                        {fmtAmount(row.utilityBase)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono font-semibold">
+                        {fmtAmount(row.amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {fmtDate(row.draw?.drawnAt || row.createdAt)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

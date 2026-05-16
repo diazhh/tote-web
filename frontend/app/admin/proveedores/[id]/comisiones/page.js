@@ -108,70 +108,144 @@ export default function ProveedorComisionesPage() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Efectivo desde
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tipo de fórmula
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tasa ventas
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tasa utilidad
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Brackets
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Notas
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Creado por
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {configs.map((cfg, idx) => (
-                  <tr
+          <>
+            {/* Cards en móvil */}
+            <div className="md:hidden p-3 space-y-2">
+              {configs.map((cfg, idx) => {
+                const showSales =
+                  cfg.salesRate !== null && cfg.salesRate !== undefined;
+                const showUtility =
+                  cfg.utilityRate !== null && cfg.utilityRate !== undefined;
+                const bracketsCount = Array.isArray(cfg.tiers)
+                  ? cfg.tiers.length
+                  : 0;
+                return (
+                  <div
                     key={cfg.id}
-                    className={idx === 0 ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}
+                    className={
+                      'rounded-lg p-4 border ' +
+                      (idx === 0
+                        ? 'bg-green-50 border-green-200'
+                        : 'bg-white border-gray-200')
+                    }
                   >
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {fmtDate(cfg.effectiveFrom)}
-                      {idx === 0 && (
-                        <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-200 text-green-900">
-                          Vigente
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-xs font-mono">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <span className="text-xs text-gray-600">
+                        {fmtDate(cfg.effectiveFrom)}
+                      </span>
+                      <span
+                        className={
+                          'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' +
+                          (idx === 0
+                            ? 'bg-green-200 text-green-900'
+                            : 'bg-gray-200 text-gray-700')
+                        }
+                      >
+                        {idx === 0 ? 'Vigente' : 'Histórico'}
+                      </span>
+                    </div>
+                    <p className="text-lg font-mono font-bold text-gray-900 break-all">
                       {cfg.formulaType}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                      {cfg.salesRate ?? '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                      {cfg.utilityRate ?? '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
-                      {Array.isArray(cfg.tiers) ? cfg.tiers.length : 0}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
-                      {cfg.notes || ''}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {cfg.createdBy?.email || cfg.createdById || '—'}
-                    </td>
+                    </p>
+                    <div className="mt-2 grid grid-cols-2 gap-2 text-sm text-gray-700">
+                      {showSales && (
+                        <div>
+                          <p className="text-xs text-gray-500">Tasa ventas</p>
+                          <p className="font-mono">{cfg.salesRate}</p>
+                        </div>
+                      )}
+                      {showUtility && (
+                        <div>
+                          <p className="text-xs text-gray-500">Tasa utilidad</p>
+                          <p className="font-mono">{cfg.utilityRate}</p>
+                        </div>
+                      )}
+                      {bracketsCount > 0 && (
+                        <div>
+                          <p className="text-xs text-gray-500">Brackets</p>
+                          <p className="font-mono">{bracketsCount}</p>
+                        </div>
+                      )}
+                    </div>
+                    {cfg.notes && (
+                      <p className="text-sm text-gray-600 mt-2 line-clamp-3">
+                        {cfg.notes}
+                      </p>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      Creado por: {cfg.createdBy?.email || cfg.createdById || '—'}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tabla en desktop */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Efectivo desde
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tipo de fórmula
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tasa ventas
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Tasa utilidad
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Brackets
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Notas
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Creado por
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {configs.map((cfg, idx) => (
+                    <tr
+                      key={cfg.id}
+                      className={idx === 0 ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}
+                    >
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {fmtDate(cfg.effectiveFrom)}
+                        {idx === 0 && (
+                          <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-200 text-green-900">
+                            Vigente
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-xs font-mono">
+                        {cfg.formulaType}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
+                        {cfg.salesRate ?? '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
+                        {cfg.utilityRate ?? '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right">
+                        {Array.isArray(cfg.tiers) ? cfg.tiers.length : 0}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate">
+                        {cfg.notes || ''}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {cfg.createdBy?.email || cfg.createdById || '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

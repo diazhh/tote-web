@@ -73,8 +73,12 @@ export default function SettlementsTab() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-4">
-        <div className="flex flex-wrap gap-3 items-end">
+      <details open className="bg-white shadow rounded-lg group">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-gray-700 list-none flex items-center justify-between">
+          <span>Filtros</span>
+          <span className="text-xs text-gray-500 group-open:rotate-180 transition">▼</span>
+        </summary>
+        <div className="px-4 pb-4 grid grid-cols-1 md:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Año ISO
@@ -85,7 +89,7 @@ export default function SettlementsTab() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, isoYear: e.target.value }))
               }
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm w-24"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
               placeholder="2026"
             />
           </div>
@@ -101,7 +105,7 @@ export default function SettlementsTab() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, isoWeek: e.target.value }))
               }
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm w-20"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
               placeholder="19"
             />
           </div>
@@ -114,7 +118,7 @@ export default function SettlementsTab() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, apiSystemId: e.target.value }))
               }
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
             >
               <option value="">Todos</option>
               {systems.map((s) => (
@@ -133,7 +137,7 @@ export default function SettlementsTab() {
               onChange={(e) =>
                 setFilters((f) => ({ ...f, status: e.target.value }))
               }
-              className="border border-gray-300 rounded px-3 py-1.5 text-sm"
+              className="w-full min-h-11 px-2 py-2 text-sm border border-gray-300 rounded-md"
             >
               <option value="">Todos</option>
               <option value="DRAFT">Borrador</option>
@@ -145,22 +149,24 @@ export default function SettlementsTab() {
             filters.isoWeek ||
             filters.apiSystemId ||
             filters.status) && (
-            <button
-              onClick={() =>
-                setFilters({
-                  isoYear: '',
-                  isoWeek: '',
-                  apiSystemId: '',
-                  status: '',
-                })
-              }
-              className="text-sm text-gray-500 hover:text-gray-700 underline"
-            >
-              Limpiar
-            </button>
+            <div className="md:col-span-4">
+              <button
+                onClick={() =>
+                  setFilters({
+                    isoYear: '',
+                    isoWeek: '',
+                    apiSystemId: '',
+                    status: '',
+                  })
+                }
+                className="text-sm text-gray-500 hover:text-gray-700 underline"
+              >
+                Limpiar
+              </button>
+            </div>
           )}
         </div>
-      </div>
+      </details>
 
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
@@ -177,61 +183,92 @@ export default function SettlementsTab() {
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Proveedor
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Semana
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Monto
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Líneas
-                  </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+          <>
+            {/* Cards en móvil */}
+            <div className="md:hidden p-3 space-y-2">
+              {rows.map((row) => (
+                <Link
+                  key={row.id}
+                  href={`/admin/comisiones/settlements/${row.id}`}
+                  className="block bg-white border border-gray-200 rounded-lg p-4 hover:bg-gray-50"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <span className="text-sm font-medium text-gray-900 truncate">
                       {row.apiSystem?.name || row.apiSystemId}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-mono">
-                      {settlementTag(row)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <StatusBadge status={row.status} />
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
-                      {fmtAmount(row.amount)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">
+                    </span>
+                    <StatusBadge status={row.status} />
+                  </div>
+                  <p className="text-2xl font-mono font-bold text-gray-900">
+                    {fmtAmount(row.amount)}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between text-sm text-gray-600">
+                    <span className="font-mono">{settlementTag(row)}</span>
+                    <span>
+                      Líneas:{' '}
                       {row.ledgerRowCount ?? row._count?.ledgerRows ?? '—'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                      <Link
-                        href={`/admin/comisiones/settlements/${row.id}`}
-                        className="text-blue-600 hover:text-blue-800 underline"
-                      >
-                        Ver detalle
-                      </Link>
-                    </td>
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+
+            {/* Tabla en desktop */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Proveedor
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Semana
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Estado
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Monto
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Líneas
+                    </th>
+                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Acciones
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {rows.map((row) => (
+                    <tr key={row.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {row.apiSystem?.name || row.apiSystemId}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 font-mono">
+                        {settlementTag(row)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <StatusBadge status={row.status} />
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-mono">
+                        {fmtAmount(row.amount)}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-right text-gray-700">
+                        {row.ledgerRowCount ?? row._count?.ledgerRows ?? '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
+                        <Link
+                          href={`/admin/comisiones/settlements/${row.id}`}
+                          className="text-blue-600 hover:text-blue-800 underline"
+                        >
+                          Ver detalle
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
