@@ -862,6 +862,59 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
             )}
           </div>
 
+          {/* Financiero — Phase 14 FIN-REPORT-04. Reads drawData.financial +
+              drawData.financialProviders, which the backend started attaching
+              to GET /draws/:id in Phase 14-02 Task 2 (draw.service.js#getDrawById).
+              Render guard: section is omitted entirely when drawData.financial
+              is null (legacy draw without DrawFinancial row — graceful degrade,
+              no empty placeholders). */}
+          {drawData?.financial && (
+            <section className="bg-gray-50 rounded-lg p-3 sm:p-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center">
+                <span className="mr-2">💰</span>
+                Financiero
+              </h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 mb-4">
+                <MetricCard label="Ventas" value={drawData.financial.totalSales} />
+                <MetricCard label="Premios" value={drawData.financial.totalPrize} />
+                <MetricCard label="Utilidad" value={drawData.financial.utility} highlightSign />
+                <MetricCard label="Tickets" value={drawData.financial.ticketCount} kind="int" />
+              </div>
+              {drawData.financialProviders?.length > 0 && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm bg-white rounded-md border border-gray-200">
+                    <thead className="bg-gray-100 text-gray-700">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium">Proveedor</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium">Ventas</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium">Premios</th>
+                        <th className="px-3 py-2 text-right text-xs font-medium">Tickets</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {drawData.financialProviders.map((fp) => (
+                        <tr key={fp.apiSystemId ?? 'taquilla-online'}>
+                          <td className="px-3 py-2 text-gray-800">
+                            {fp.apiSystem?.name ?? 'Taquilla / Online'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-700">
+                            {Number(fp.totalSales ?? 0).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-red-600">
+                            {Number(fp.totalPrize ?? 0).toFixed(2)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-gray-500">
+                            {fp.ticketCount ?? 0}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </section>
+          )}
+
           {/* Notes */}
           {drawData.notes && (
             <div className="bg-gray-50 rounded-lg p-3 sm:p-4">
@@ -881,6 +934,35 @@ export default function DrawDetailModal({ draw, onClose, onUpdate }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * MetricCard — tiny presentational helper for the Phase 14 Financiero section.
+ *
+ * Renders a labelled value tile matching the visual weight of neighboring
+ * cards in DrawDetailModal. Two display modes:
+ *   - default: monetary, Number(value).toFixed(2)
+ *   - kind="int": whole-number (ticket counts)
+ *
+ * `highlightSign` toggles green/red coloring based on sign (used for Utilidad).
+ */
+function MetricCard({ label, value, kind, highlightSign }) {
+  const isInt = kind === 'int';
+  const num = Number(value);
+  const safeNum = Number.isFinite(num) ? num : 0;
+  const display = isInt
+    ? new Intl.NumberFormat('es-VE').format(safeNum)
+    : safeNum.toFixed(2);
+  let valueColor = 'text-gray-900';
+  if (highlightSign && !isInt) {
+    valueColor = safeNum >= 0 ? 'text-green-700' : 'text-red-700';
+  }
+  return (
+    <div className="bg-white rounded-md border border-gray-200 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wider text-gray-500">{label}</div>
+      <div className={`text-lg font-semibold ${valueColor}`}>{display}</div>
     </div>
   );
 }
