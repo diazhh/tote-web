@@ -12,6 +12,7 @@ import {
   getISOWeekYear,
   startOfISOWeek,
   endOfISOWeek,
+  addDays,
 } from 'date-fns';
 import { fromZonedTime, toZonedTime } from 'date-fns-tz';
 import { es } from 'date-fns/locale';
@@ -320,6 +321,38 @@ export function endOfISOWeekVE(date) {
   const zoned = toZonedTime(date, VENEZUELA_TIMEZONE);
   const endInZone = endOfISOWeek(zoned);
   return fromZonedTime(endInZone, VENEZUELA_TIMEZONE);
+}
+
+// Re-export the raw date-fns helpers — defensive per Phase 14 A1 (Phase 12 may
+// have shipped them on a different name path). getISOWeek / getISOWeekYear at
+// the top of this file are already imported from date-fns; re-export them so
+// Phase 14 callers can use a single import path.
+export { getISOWeek, getISOWeekYear };
+
+/**
+ * UTC Date corresponding to Monday 00:00:00.000 (Venezuela wall-clock) for the
+ * given ISO year + ISO week number. Used by Phase 14 weekly P&L aggregation —
+ * the inclusive lower bound of the week's data window.
+ *
+ * Aligned with Phase 12 D-04 ISO week boundary (the same instant returned by
+ * startOfISOWeekVE when passed any timestamp inside the week). Different entry
+ * point: this one takes the (isoYear, isoWeek) pair directly, while
+ * startOfISOWeekVE takes a Date and computes its ISO week internally.
+ *
+ * Implementation note: Jan 4 always falls inside ISO week 1 of its ISO-year
+ * (definition). We shift Jan 4 forward by (isoWeek - 1) full weeks and then
+ * take startOfISOWeek to land on the Monday. The result is interpreted as
+ * Caracas wall-clock and converted back to UTC.
+ *
+ * @param {number} isoYear - 4-digit ISO year (e.g., 2026)
+ * @param {number} isoWeek - 1..53
+ * @returns {Date} UTC Date (e.g. Monday 04:00:00.000Z)
+ */
+export function getMondayOfISOWeek(isoYear, isoWeek) {
+  const jan4 = new Date(isoYear, 0, 4); // local-time Jan 4 — system TZ
+  const targetInWeek = addDays(jan4, (isoWeek - 1) * 7);
+  const mondayLocal = startOfISOWeek(targetInWeek);
+  return fromZonedTime(mondayLocal, VENEZUELA_TIMEZONE);
 }
 
 // Mantener compatibilidad con nombres antiguos (deprecated)
