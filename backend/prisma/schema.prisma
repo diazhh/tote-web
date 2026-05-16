@@ -1614,7 +1614,7 @@ model AccountingEntryAttachment {
 
 model DrawLiveSnapshot {
   drawId       String   @id
-  totalSales   Decimal  @db.Decimal(15, 2)
+  totalSales   Decimal  @db.Decimal(12, 2)
   ticketCount  Int
   byProvider   Json     // [{ apiSystemId, name, sales, count }, ...]
   refreshedAt  DateTime @default(now())
@@ -1630,11 +1630,15 @@ model DailyAggregateSnapshot {
   gameId       String?
   source       TicketSource?
   apiSystemId  String?
-  totalSales   Decimal       @db.Decimal(15, 2)
+  totalSales   Decimal       @db.Decimal(12, 2)
   ticketCount  Int
-  prizeTotal   Decimal       @db.Decimal(15, 2)
+  prizeTotal   Decimal       @db.Decimal(12, 2)
   refreshedAt  DateTime      @default(now())
 
+  // NULLS NOT DISTINCT — Prisma 5 doesn't generate that clause from @@unique;
+  // it is enforced manually in the migration. Do NOT remove without re-checking
+  // the unique-index DDL in backend/prisma/migrations/ — concurrent upserts
+  // can produce duplicate rows otherwise.
   @@unique([date, gameId, source, apiSystemId])
   @@index([date])
 }

@@ -1,7 +1,7 @@
 -- CreateTable
 CREATE TABLE "DrawLiveSnapshot" (
     "drawId" TEXT NOT NULL,
-    "totalSales" DECIMAL(15,2) NOT NULL,
+    "totalSales" DECIMAL(12,2) NOT NULL,
     "ticketCount" INTEGER NOT NULL,
     "byProvider" JSONB NOT NULL,
     "refreshedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -16,9 +16,9 @@ CREATE TABLE "DailyAggregateSnapshot" (
     "gameId" TEXT,
     "source" "TicketSource",
     "apiSystemId" TEXT,
-    "totalSales" DECIMAL(15,2) NOT NULL,
+    "totalSales" DECIMAL(12,2) NOT NULL,
     "ticketCount" INTEGER NOT NULL,
-    "prizeTotal" DECIMAL(15,2) NOT NULL,
+    "prizeTotal" DECIMAL(12,2) NOT NULL,
     "refreshedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "DailyAggregateSnapshot_pkey" PRIMARY KEY ("id")
@@ -31,7 +31,7 @@ CREATE INDEX "DrawLiveSnapshot_refreshedAt_idx" ON "DrawLiveSnapshot"("refreshed
 CREATE INDEX "DailyAggregateSnapshot_date_idx" ON "DailyAggregateSnapshot"("date");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "DailyAggregateSnapshot_date_gameId_source_apiSystemId_key" ON "DailyAggregateSnapshot"("date", "gameId", "source", "apiSystemId");
+CREATE UNIQUE INDEX "DailyAggregateSnapshot_date_gameId_source_apiSystemId_key" ON "DailyAggregateSnapshot"("date", "gameId", "source", "apiSystemId") NULLS NOT DISTINCT;
 
 -- CreateIndex
 CREATE INDEX "Ticket_drawId_status_idx" ON "Ticket"("drawId", "status");
