@@ -55,8 +55,11 @@ class CommissionController {
       const { apiSystemId } = req.params;
       const configs = await prisma.providerCommissionConfig.findMany({
         where: { apiSystemId },
-        include: { tiers: { orderBy: { minSales: 'asc' } } },
-        orderBy: { effectiveFrom: 'desc' },
+        include: {
+          tiers: { orderBy: { minSales: 'asc' } },
+          game: { select: { id: true, name: true, slug: true } },
+        },
+        orderBy: [{ gameId: 'asc' }, { effectiveFrom: 'desc' }],
       });
       res.json({ success: true, data: configs });
     } catch (err) {
@@ -71,13 +74,23 @@ class CommissionController {
   // ──────────────────────────────────────────────────────────────────────
   async createConfig(req, res) {
     try {
-      const { apiSystemId, formulaType, salesRate, utilityRate, effectiveFrom, notes, tiers } = req.body || {};
+      const { apiSystemId, gameId, formulaType, salesRate, utilityRate, effectiveFrom, notes, tiers } = req.body || {};
 
       if (!apiSystemId || typeof apiSystemId !== 'string') {
         return res.status(400).json({ success: false, error: 'apiSystemId is required' });
       }
       if (!effectiveFrom) {
         return res.status(400).json({ success: false, error: 'effectiveFrom is required' });
+      }
+      // gameId is optional. If provided, validate format AND verify the game exists.
+      if (gameId !== undefined && gameId !== null && gameId !== '') {
+        if (typeof gameId !== 'string') {
+          return res.status(400).json({ success: false, error: 'gameId must be a string UUID' });
+        }
+        const exists = await prisma.game.findUnique({ where: { id: gameId }, select: { id: true } });
+        if (!exists) {
+          return res.status(400).json({ success: false, error: 'gameId no corresponde a un juego existente' });
+        }
       }
       if (!VALID_FORMULA_TYPES.includes(formulaType)) {
         return res.status(400).json({
@@ -137,6 +150,7 @@ class CommissionController {
       // Build data — only include numeric rates if provided
       const data = {
         apiSystemId,
+        gameId: gameId && gameId !== '' ? gameId : null,
         formulaType,
         effectiveFrom: new Date(effectiveFrom),
         notes: notes ?? null,
@@ -156,10 +170,13 @@ class CommissionController {
 
       const created = await prisma.providerCommissionConfig.create({
         data,
-        include: { tiers: { orderBy: { minSales: 'asc' } } },
+        include: {
+          tiers: { orderBy: { minSales: 'asc' } },
+          game: { select: { id: true, name: true, slug: true } },
+        },
       });
 
-      logger.info(`[commission] config created apiSystemId=${apiSystemId} formulaType=${formulaType} id=${created.id}`);
+      logger.info(`[commission] config created apiSystemId=${apiSystemId} gameId=${data.gameId ?? 'ALL'} formulaType=${formulaType} id=${created.id}`);
       res.status(201).json({ success: true, data: created });
     } catch (err) {
       logger.error('Error en createConfig:', err);

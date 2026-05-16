@@ -41,6 +41,7 @@ model Game {
   channels   GameChannel[]
   users      UserGame[] // Usuarios asociados al juego
   adminBots  AdminBotGame[] // Bots de admin asignados
+  commissionConfigs ProviderCommissionConfig[] // Configs de comisión específicos para este juego
 
   @@index([slug])
   @@index([isActive])
@@ -1244,6 +1245,7 @@ model DrawFinancialProvider {
 model ProviderCommissionConfig {
   id            String                @id @default(uuid())
   apiSystemId   String
+  gameId        String?               // NULL = config global del proveedor (aplica a todos los juegos). Si está seteado, sólo aplica a ese juego.
   formulaType   CommissionFormulaType
   salesRate     Decimal?              @db.Decimal(15, 4) // requerido para SALES_PCT / SALES_AND_UTILITY_PCT
   utilityRate   Decimal?              @db.Decimal(15, 4) // requerido para UTILITY_PCT / SALES_AND_UTILITY_PCT
@@ -1253,10 +1255,12 @@ model ProviderCommissionConfig {
   createdAt     DateTime              @default(now())
 
   apiSystem  ApiSystem                  @relation(fields: [apiSystemId], references: [id])
+  game       Game?                      @relation(fields: [gameId], references: [id])
   tiers      ProviderCommissionTier[]
   ledgerRows ProviderCommissionLedger[]
 
-  @@index([apiSystemId, effectiveFrom(sort: Desc)]) // Pattern 1 — effective-config lookup
+  @@index([apiSystemId, gameId, effectiveFrom(sort: Desc)]) // Lookup específico por juego
+  @@index([apiSystemId, effectiveFrom(sort: Desc)]) // Fallback global del proveedor
   @@index([apiSystemId])
 }
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { getSettlements } from '@/lib/api/commissions';
 import StatusBadge from './StatusBadge';
 
@@ -21,13 +22,32 @@ function settlementTag(s) {
   return `${s.isoYear}-W${String(s.isoWeek).padStart(2, '0')}`;
 }
 
+/** Parse a "YYYY-Www" token (e.g. "2026-W20") → { isoYear, isoWeek } or null. */
+function parseWeekToken(token) {
+  if (!token) return null;
+  const m = /^(\d{4})-W(\d{1,2})$/.exec(token);
+  if (!m) return null;
+  const isoYear = parseInt(m[1], 10);
+  const isoWeek = parseInt(m[2], 10);
+  if (!Number.isInteger(isoYear) || !Number.isInteger(isoWeek)) return null;
+  if (isoWeek < 1 || isoWeek > 53) return null;
+  return { isoYear: String(isoYear), isoWeek: String(isoWeek) };
+}
+
 export default function SettlementsTab() {
+  const searchParams = useSearchParams();
   const [systems, setSystems] = useState([]);
-  const [filters, setFilters] = useState({
-    isoYear: '',
-    isoWeek: '',
-    apiSystemId: '',
-    status: '',
+  // Pre-fill from query string: ?week=YYYY-Www&apiSystemId=...
+  const [filters, setFilters] = useState(() => {
+    const weekToken = searchParams?.get('week');
+    const apiSystemId = searchParams?.get('apiSystemId') || '';
+    const parsed = parseWeekToken(weekToken);
+    return {
+      isoYear: parsed?.isoYear || '',
+      isoWeek: parsed?.isoWeek || '',
+      apiSystemId,
+      status: '',
+    };
   });
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);

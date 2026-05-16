@@ -46,8 +46,23 @@ export default function ProveedorComisionesPage() {
 
       const data = await listConfigs(apiSystemId);
       const list = Array.isArray(data) ? data : data?.data || [];
-      // Controller returns rows newest effectiveFrom first.
-      setConfigs(list);
+      // El backend ordena por [gameId asc, effectiveFrom desc] — el primero de
+      // cada grupo (gameId | null) es el vigente para ese alcance.
+      const seenScopes = new Set();
+      const enriched = list.map((cfg) => {
+        const scope = cfg.gameId ?? '_global_';
+        const isCurrent = !seenScopes.has(scope);
+        if (isCurrent) seenScopes.add(scope);
+        return { ...cfg, isCurrent };
+      });
+      // Reordenar: dentro de cada gameId group, ya viene desc por effectiveFrom.
+      // Para mostrar: configs específicas por juego primero, luego globales.
+      enriched.sort((a, b) => {
+        if (!!a.gameId !== !!b.gameId) return a.gameId ? -1 : 1;
+        if ((a.gameId || '') !== (b.gameId || '')) return (a.gameId || '').localeCompare(b.gameId || '');
+        return new Date(b.effectiveFrom).getTime() - new Date(a.effectiveFrom).getTime();
+      });
+      setConfigs(enriched);
     } catch (err) {
       setError(err.message || 'Error cargando configuraciones');
       setConfigs([]);
@@ -111,7 +126,7 @@ export default function ProveedorComisionesPage() {
           <>
             {/* Cards en móvil */}
             <div className="md:hidden p-3 space-y-2">
-              {configs.map((cfg, idx) => {
+              {configs.map((cfg) => {
                 const showSales =
                   cfg.salesRate !== null && cfg.salesRate !== undefined;
                 const showUtility =
@@ -119,12 +134,13 @@ export default function ProveedorComisionesPage() {
                 const bracketsCount = Array.isArray(cfg.tiers)
                   ? cfg.tiers.length
                   : 0;
+                const gameLabel = cfg.game?.name || (cfg.gameId ? cfg.gameId.slice(0, 8) : 'Todos los juegos');
                 return (
                   <div
                     key={cfg.id}
                     className={
                       'rounded-lg p-4 border ' +
-                      (idx === 0
+                      (cfg.isCurrent
                         ? 'bg-green-50 border-green-200'
                         : 'bg-white border-gray-200')
                     }
@@ -136,14 +152,22 @@ export default function ProveedorComisionesPage() {
                       <span
                         className={
                           'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' +
-                          (idx === 0
+                          (cfg.isCurrent
                             ? 'bg-green-200 text-green-900'
                             : 'bg-gray-200 text-gray-700')
                         }
                       >
-                        {idx === 0 ? 'Vigente' : 'Histórico'}
+                        {cfg.isCurrent ? 'Vigente' : 'Histórico'}
                       </span>
                     </div>
+                    <span
+                      className={
+                        'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium mb-2 ' +
+                        (cfg.gameId ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800')
+                      }
+                    >
+                      {cfg.gameId ? `Juego: ${gameLabel}` : 'Todos los juegos'}
+                    </span>
                     <p className="text-lg font-mono font-bold text-gray-900 break-all">
                       {cfg.formulaType}
                     </p>
@@ -189,6 +213,9 @@ export default function ProveedorComisionesPage() {
                       Efectivo desde
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Juego
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Tipo de fórmula
                     </th>
                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -209,18 +236,28 @@ export default function ProveedorComisionesPage() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {configs.map((cfg, idx) => (
+                  {configs.map((cfg) => (
                     <tr
                       key={cfg.id}
-                      className={idx === 0 ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}
+                      className={cfg.isCurrent ? 'bg-green-50 hover:bg-green-100' : 'hover:bg-gray-50'}
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                         {fmtDate(cfg.effectiveFrom)}
-                        {idx === 0 && (
+                        {cfg.isCurrent && (
                           <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-200 text-green-900">
                             Vigente
                           </span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm">
+                        <span
+                          className={
+                            'inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ' +
+                            (cfg.gameId ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800')
+                          }
+                        >
+                          {cfg.gameId ? (cfg.game?.name || cfg.gameId.slice(0, 8)) : 'Todos los juegos'}
+                        </span>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-xs font-mono">
                         {cfg.formulaType}

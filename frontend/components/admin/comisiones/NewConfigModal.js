@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createConfig } from '@/lib/api/commissions';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
 
 // Append-only config creator (F-5). Supports all 4 formula types per
 // FIN-COMM-01: SALES_PCT, UTILITY_PCT, SALES_AND_UTILITY_PCT, TIERED.
@@ -20,6 +22,8 @@ const FORMULA_OPTIONS = [
 
 export default function NewConfigModal({ apiSystemId, onClose, onCreated }) {
   const [formulaType, setFormulaType] = useState('SALES_PCT');
+  const [gameId, setGameId] = useState(''); // '' = aplica a todos los juegos
+  const [games, setGames] = useState([]);
   const [effectiveFrom, setEffectiveFrom] = useState(() =>
     // Local datetime string suitable for <input type="datetime-local">
     new Date().toISOString().slice(0, 16)
@@ -30,6 +34,18 @@ export default function NewConfigModal({ apiSystemId, onClose, onCreated }) {
   const [tiers, setTiers] = useState([{ minSales: '0', maxSales: '', rate: '' }]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  // Cargar lista de juegos para el dropdown
+  useEffect(() => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+    fetch(`${API_URL}/games`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.json())
+      .then((data) => {
+        const arr = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+        setGames(arr);
+      })
+      .catch(() => setGames([]));
+  }, []);
 
   const needsSalesRate =
     formulaType === 'SALES_PCT' || formulaType === 'SALES_AND_UTILITY_PCT';
@@ -61,6 +77,7 @@ export default function NewConfigModal({ apiSystemId, onClose, onCreated }) {
     try {
       const body = {
         apiSystemId,
+        gameId: gameId || null,
         formulaType,
         effectiveFrom: new Date(effectiveFrom).toISOString(),
         notes: notes || undefined,
@@ -101,6 +118,26 @@ export default function NewConfigModal({ apiSystemId, onClose, onCreated }) {
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Juego
+            </label>
+            <select
+              value={gameId}
+              onChange={(e) => setGameId(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+            >
+              <option value="">Todos los juegos (config global del proveedor)</option>
+              {games.map((g) => (
+                <option key={g.id} value={g.id}>{g.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Si seleccionas un juego, esta config aplica sólo a ese juego. La
+              config global (Todos) sirve de fallback para los demás juegos del proveedor.
+            </p>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Tipo de fórmula *

@@ -53,16 +53,30 @@ export class DrawFinancialNotReadyError extends Error {
 
 /**
  * Find the ProviderCommissionConfig that was effective for `apiSystemId` at the
- * given `drawnAt`. Uses the @@index([apiSystemId, effectiveFrom(sort: Desc)])
- * from Plan 12-01.
+ * given `drawnAt`, prefiriendo configs específicos del juego sobre globales.
+ *
+ * Regla "más específico gana":
+ *   1. Si existe un config con `gameId === draw.gameId` y `effectiveFrom <= drawnAt`,
+ *      retorna el más reciente.
+ *   2. Si no, cae al config con `gameId IS NULL` (global del proveedor).
+ *   3. Si tampoco hay, retorna null (provider sin config → skip silencioso aguas arriba).
  *
  * @param {string} apiSystemId
  * @param {Date} drawnAt
- * @returns {Promise<object|null>} config row with `tiers` included, or null
+ * @param {string} [gameId] - opcional; cuando se pasa, prioriza configs ligados a ese juego
+ * @returns {Promise<object|null>} config row con `tiers` incluido, o null
  */
-export async function findEffectiveConfig(apiSystemId, drawnAt) {
+export async function findEffectiveConfig(apiSystemId, drawnAt, gameId = null) {
+  if (gameId) {
+    const gameSpecific = await prisma.providerCommissionConfig.findFirst({
+      where: { apiSystemId, gameId, effectiveFrom: { lte: drawnAt } },
+      orderBy: { effectiveFrom: 'desc' },
+      include: { tiers: { orderBy: { minSales: 'asc' } } },
+    });
+    if (gameSpecific) return gameSpecific;
+  }
   return prisma.providerCommissionConfig.findFirst({
-    where: { apiSystemId, effectiveFrom: { lte: drawnAt } },
+    where: { apiSystemId, gameId: null, effectiveFrom: { lte: drawnAt } },
     orderBy: { effectiveFrom: 'desc' },
     include: { tiers: { orderBy: { minSales: 'asc' } } },
   });
@@ -155,7 +169,7 @@ export async function getCumulativeWeeklySales(apiSystemId, drawnAt) {
 export async function computeAndUpsertLedgerForDraw(drawId) {
   const draw = await prisma.draw.findUnique({
     where: { id: drawId },
-    select: { drawnAt: true },
+    select: { drawnAt: true, gameId: true },
   });
   if (!draw) throw new Error(`Draw ${drawId} no encontrado`);
 
@@ -169,12 +183,14 @@ export async function computeAndUpsertLedgerForDraw(drawId) {
   let skipped = 0;
 
   for (const row of providers) {
-    const config = await findEffectiveConfig(row.apiSystemId, draw.drawnAt);
+    // Prefiere config específico por juego; cae al global si no existe.
+    const config = await findEffectiveConfig(row.apiSystemId, draw.drawnAt, draw.gameId);
     if (!config) {
       // D-01 — silent skip, structured warning, no row written.
       logger.warn('[commission] no_config_at_drawnAt', {
         drawId,
         apiSystemId: row.apiSystemId,
+        gameId: draw.gameId,
         reason: 'no_config_at_drawnAt',
       });
       skipped++;
