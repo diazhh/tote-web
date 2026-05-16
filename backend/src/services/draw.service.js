@@ -116,6 +116,20 @@ export class DrawService {
         },
       });
 
+      // v1.4: attach DrawLiveSnapshot for non-DRAWN / non-CANCELLED draws.
+      // For DRAWN draws, `financial` (already included above) is authoritative.
+      if (draw && draw.status !== 'DRAWN' && draw.status !== 'CANCELLED') {
+        const liveSnap = await prisma.drawLiveSnapshot.findUnique({ where: { drawId: id } });
+        if (liveSnap) {
+          draw.liveSnapshot = {
+            totalSales: liveSnap.totalSales,
+            ticketCount: liveSnap.ticketCount,
+            byProvider: liveSnap.byProvider,
+            refreshedAt: liveSnap.refreshedAt,
+          };
+        }
+      }
+
       return draw;
     } catch (error) {
       logger.error(`Error obteniendo sorteo ${id}:`, error);
