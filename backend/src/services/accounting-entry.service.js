@@ -74,6 +74,7 @@ const IMMUTABLE = new Set([
   'entryDate',
   'exchangeRateId',
   'type',
+  'accountId', // v2 — no se puede mover un asiento entre cuentas
 ]);
 
 /**
@@ -101,8 +102,26 @@ export async function createEntry({
   currency,
   amount,
   settlementId,
+  accountId, // v2
   createdById,
 }) {
+  // v2: accountId requerido + moneda debe coincidir con cuenta
+  if (!accountId) {
+    throw new Error('accountId es requerido');
+  }
+  const account = await prisma.account.findUnique({ where: { id: accountId } });
+  if (!account) {
+    throw new Error(`Cuenta ${accountId} no existe`);
+  }
+  if (!account.isActive) {
+    throw new Error(`Cuenta ${account.name} está inactiva`);
+  }
+  if (account.currency !== currency) {
+    throw new Error(
+      `Moneda del asiento (${currency}) no coincide con la moneda de la cuenta ${account.name} (${account.currency})`,
+    );
+  }
+
   let amountBsF;
   let originalAmount = null;
   let exchangeRateId = null;
@@ -144,6 +163,7 @@ export async function createEntry({
       originalCurrency: currency,
       exchangeRateId,
       settlementId: settlementId ?? null,
+      accountId, // v2
       createdById,
     },
   });
@@ -284,6 +304,7 @@ export async function listEntries({
       category: true,
       exchangeRate: true,
       settlement: true,
+      account: true, // v2
     },
   });
 }
@@ -304,6 +325,7 @@ export async function getEntry(id) {
       exchangeRate: true,
       settlement: true,
       attachments: true,
+      account: true, // v2
       reverses: true,
       reversedBy: true,
     },

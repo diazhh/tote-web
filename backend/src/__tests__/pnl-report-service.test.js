@@ -164,6 +164,7 @@ describe('Phase 14 Plan 14-03 — getWeeklyPnl (FIN-REPORT-05)', () => {
         originalCurrency: 'BsF',
         description: `${TEST_PREFIX}-expense`,
         createdById: userId,
+        accountId: '00000000-0000-0000-0000-000000000001', // v2 default account
       },
     });
     expenseEntryId = exp.id;
@@ -178,6 +179,7 @@ describe('Phase 14 Plan 14-03 — getWeeklyPnl (FIN-REPORT-05)', () => {
         originalCurrency: 'BsF',
         description: `${TEST_PREFIX}-income`,
         createdById: userId,
+        accountId: '00000000-0000-0000-0000-000000000001', // v2 default account
       },
     });
     incomeEntryId = inc.id;

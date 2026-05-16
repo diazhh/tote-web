@@ -100,6 +100,7 @@ describe('Phase 14 Plan 14-03 — P-B PAYMENT double-count guard', () => {
         description: `${TEST_PREFIX}-payment`,
         createdById: userId,
         settlementId,
+        accountId: '00000000-0000-0000-0000-000000000001', // v2 default account
       },
     });
     paymentEntryId = payment.id;
@@ -114,6 +115,7 @@ describe('Phase 14 Plan 14-03 — P-B PAYMENT double-count guard', () => {
         originalCurrency: 'BsF',
         description: `${TEST_PREFIX}-expense`,
         createdById: userId,
+        accountId: '00000000-0000-0000-0000-000000000001', // v2 default account
       },
     });
     expenseEntryId = expense.id;

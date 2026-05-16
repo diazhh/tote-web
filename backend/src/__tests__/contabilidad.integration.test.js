@@ -63,6 +63,8 @@ let entryId;
 let attachmentId;
 let reversalId;
 let createdEntryDate;                                          // string from API response
+let defaultBsFAccountId;                                       // v2 — required by accounting-entry.service
+let defaultUsdAccountId;                                       // v2 — required by USD entries
 
 // Minimal valid PDF: header + EOF marker. file-type recognises it as application/pdf.
 const VALID_PDF_BYTES = Buffer.from(
@@ -153,6 +155,29 @@ beforeAll(async () => {
   if (!category) throw new Error('No active EXPENSE category in local DB — seed before running this test');
   categoryId = category.id;
 
+  // v2 — accounting-entry.service requires accountId. Use the seeded default BsF
+  // account and ensure a USD counterpart exists for USD entries in this test.
+  defaultBsFAccountId = '00000000-0000-0000-0000-000000000001';
+  const defaultBsF = await prisma.account.findUnique({ where: { id: defaultBsFAccountId } });
+  if (!defaultBsF) {
+    throw new Error('Default BsF account 00000000-0000-0000-0000-000000000001 missing — run Wave 1 backfill');
+  }
+  // USD default — created idempotently for this test (no fixed UUID seeded yet).
+  const usd = await prisma.account.upsert({
+    where: { id: '00000000-0000-0000-0000-000000000002' },
+    update: {},
+    create: {
+      id: '00000000-0000-0000-0000-000000000002',
+      name: 'Sin clasificar USD',
+      currency: 'USD',
+      openingBalance: '0',
+      openingDate: new Date('2026-01-01'),
+      createdById: adminUser.id,
+      isActive: true,
+    },
+  });
+  defaultUsdAccountId = usd.id;
+
   // Build inline express app — same critical wiring as index.js for Phase 13 paths.
   app = express();
   app.set('trust proxy', 1);                                   // P-8 — make req.ip work as in prod
@@ -224,6 +249,7 @@ describe('Phase 13 — contabilidad integration', () => {
         currency: 'USD',
         amount: '10',
         description: `${TEST_PREFIX}-expense`,
+        accountId: defaultUsdAccountId, // v2
       },
     });
     expect(entryRes.status).toBe(201);
@@ -253,6 +279,7 @@ describe('Phase 13 — contabilidad integration', () => {
         currency: 'USD',
         amount: '5',
         description: `${TEST_PREFIX}-no-rate`,
+        accountId: defaultUsdAccountId, // v2
       },
     });
     expect(res.status).toBe(400);
