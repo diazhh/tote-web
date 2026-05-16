@@ -31,3 +31,8 @@ export const uploadReceipt = multer({
     files: 1,
   },
 });
+
+export const uploadTransferReceipt = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_BYTES, files: 1 },
+});
