@@ -1,48 +1,57 @@
 import { prisma } from '../lib/prisma.js';
+import { Prisma } from '@prisma/client';
 import logger from '../lib/logger.js';
+
+const D = Prisma.Decimal;
 
 /**
  * Aggregate active tickets for a draw and UPSERT DrawLiveSnapshot.
- * Excludes CANCELLED tickets. Source-agnostic (webhook + scrape + taquilla
- * all roll up). Per-provider breakdown stored as JSON for cheap reads.
+ * Excludes CANCELLED tickets. Source-aware: each provider entry preserves
+ * the ticket-level TicketSource so daily aggregates can rollup per source
+ * without losing PUSH vs SCRAPE vs PULL distinctions.
  */
 export async function computeDrawLiveSnapshot(drawId) {
   const tickets = await prisma.ticket.findMany({
     where: { drawId, status: { not: 'CANCELLED' } },
     select: {
       amount: true,
+      source: true,
       apiSystemId: true,
       apiSystem: { select: { name: true } },
     },
   });
 
-  let totalSales = 0;
+  let totalSales = new D(0);
   const byProviderMap = new Map();
 
   for (const t of tickets) {
-    const amt = Number(t.amount);
-    totalSales += amt;
-    const key = t.apiSystemId || '__taquilla__';
+    const amt = new D(t.amount);
+    totalSales = totalSales.plus(amt);
+    const key = `${t.apiSystemId || '__taquilla__'}|${t.source}`;
     if (!byProviderMap.has(key)) {
       byProviderMap.set(key, {
         apiSystemId: t.apiSystemId || null,
+        source: t.source,
         name: t.apiSystem?.name || 'TAQUILLA',
-        sales: 0,
+        sales: new D(0),
         count: 0,
       });
     }
     const entry = byProviderMap.get(key);
-    entry.sales += amt;
+    entry.sales = entry.sales.plus(amt);
     entry.count += 1;
   }
 
   const byProvider = Array.from(byProviderMap.values()).map((p) => ({
-    ...p,
+    apiSystemId: p.apiSystemId,
+    source: p.source,
+    name: p.name,
     sales: Number(p.sales.toFixed(2)),
+    count: p.count,
   }));
 
   const data = {
-    totalSales: Number(totalSales.toFixed(2)),
+    totalSales: totalSales.toFixed(2),
     ticketCount: tickets.length,
     byProvider,
     refreshedAt: new Date(),
@@ -54,12 +63,13 @@ export async function computeDrawLiveSnapshot(drawId) {
     update: data,
   });
 
+  logger.info(`[live-snapshot] draw=${drawId} totalSales=${data.totalSales} tickets=${data.ticketCount} providers=${byProvider.length}`);
+
   return data;
 }
 
-// Test seam: lets unit tests inject a live-snapshot lookup. In production this
-// is the default resolver which reads from prisma.drawLiveSnapshot.
-let _liveSnapResolver = async (drawId) => {
+// Default resolver: reads from prisma.drawLiveSnapshot.
+const _defaultLiveSnapResolver = async (drawId) => {
   const row = await prisma.drawLiveSnapshot.findUnique({
     where: { drawId },
     include: { draw: { select: { gameId: true } } },
@@ -68,14 +78,19 @@ let _liveSnapResolver = async (drawId) => {
   return {
     drawId: row.drawId,
     gameId: row.draw?.gameId || null,
-    totalSales: Number(row.totalSales),
+    totalSales: new D(row.totalSales),
     ticketCount: row.ticketCount,
     byProvider: row.byProvider || [],
   };
 };
 
+// Test seam: lets unit tests inject a live-snapshot lookup. Passing null
+// (or omitting the argument) restores the default — tests should do that
+// in beforeEach to prevent state leaks between cases.
+let _liveSnapResolver = _defaultLiveSnapResolver;
+
 export function __setLiveSnapResolver(fn) {
-  _liveSnapResolver = fn;
+  _liveSnapResolver = fn ?? _defaultLiveSnapResolver;
 }
 
 function startOfDay(d) {
@@ -88,16 +103,26 @@ function bucketKey(gameId, source, apiSystemId) {
   return `${gameId || 'null'}|${source || 'null'}|${apiSystemId || 'null'}`;
 }
 
+function modeToSource(mode) {
+  // ApiSystemMode enum is PULL | PUSH | SCRAPE. Map to TicketSource.
+  if (mode === 'PUSH') return 'WEBHOOK_PUSH';
+  if (mode === 'SCRAPE') return 'EXTERNAL_SCRAPE';
+  // PULL (legacy SRQ) and unknown → EXTERNAL_API
+  return 'EXTERNAL_API';
+}
+
 /**
  * Aggregate the day's results per (gameId, source, apiSystemId).
  *
  * Reads:
- *   - DrawFinancial for draws that are DRAWN today (authoritative).
- *   - DrawLiveSnapshot for draws that are SCHEDULED/CLOSED today (interim).
+ *   - DrawFinancial for draws DRAWN today (authoritative). Source is resolved
+ *     from the joined ApiSystem.mode.
+ *   - DrawLiveSnapshot for draws not yet DRAWN today. Source is carried in
+ *     byProvider entries (set by computeDrawLiveSnapshot from Ticket.source).
  *
  * Writes a row per non-empty bucket into DailyAggregateSnapshot.
  *
- * Race-safe: deleteMany(date)+upsert pattern → idempotent across re-runs.
+ * Race-safe: deleteMany(date) + upsert — idempotent across re-runs.
  */
 export async function computeDailyAggregateSnapshot(date) {
   const day = startOfDay(date);
@@ -112,27 +137,41 @@ export async function computeDailyAggregateSnapshot(date) {
 
   const buckets = new Map();
 
+  function addToBucket(gameId, source, apiSystemId, sales, count, prize) {
+    const k = bucketKey(gameId, source, apiSystemId);
+    const acc = buckets.get(k) || {
+      gameId, source, apiSystemId,
+      totalSales: new D(0),
+      ticketCount: 0,
+      prizeTotal: new D(0),
+    };
+    acc.totalSales = acc.totalSales.plus(sales);
+    acc.ticketCount += count;
+    acc.prizeTotal = acc.prizeTotal.plus(prize);
+    buckets.set(k, acc);
+  }
+
   if (drawnIds.length > 0) {
     const finRows = await prisma.drawFinancial.findMany({
       where: { drawId: { in: drawnIds } },
       include: {
         draw: { select: { gameId: true } },
-        providers: true,
+        providers: { include: { apiSystem: { select: { mode: true } } } },
       },
     });
 
     for (const fr of finRows) {
       const gameId = fr.draw?.gameId;
       for (const p of fr.providers || []) {
-        // Source heuristic: apiSystemId present → EXTERNAL_API (PUSH/PULL/SCRAPE — coarse);
-        // null → TAQUILLA_ONLINE. Per-source detail comes from the apiSystemId column itself.
-        const source = p.apiSystemId ? 'EXTERNAL_API' : 'TAQUILLA_ONLINE';
-        const k = bucketKey(gameId, source, p.apiSystemId);
-        const acc = buckets.get(k) || { gameId, source, apiSystemId: p.apiSystemId, totalSales: 0, ticketCount: 0, prizeTotal: 0 };
-        acc.totalSales += Number(p.totalSales);
-        acc.ticketCount += p.ticketCount;
-        acc.prizeTotal += Number(p.totalPrize);
-        buckets.set(k, acc);
+        const source = p.apiSystemId ? modeToSource(p.apiSystem?.mode) : 'TAQUILLA_ONLINE';
+        addToBucket(
+          gameId,
+          source,
+          p.apiSystemId,
+          new D(p.totalSales),
+          p.ticketCount,
+          new D(p.totalPrize),
+        );
       }
     }
   }
@@ -141,19 +180,20 @@ export async function computeDailyAggregateSnapshot(date) {
     const live = await _liveSnapResolver(drawId);
     if (!live) continue;
     for (const p of live.byProvider || []) {
-      const source = p.apiSystemId ? 'EXTERNAL_API' : 'TAQUILLA_ONLINE';
-      const k = bucketKey(live.gameId, source, p.apiSystemId);
-      const acc = buckets.get(k) || { gameId: live.gameId, source, apiSystemId: p.apiSystemId, totalSales: 0, ticketCount: 0, prizeTotal: 0 };
-      acc.totalSales += Number(p.sales);
-      acc.ticketCount += p.count;
-      // prize for non-DRAWN draws is unknown → stays 0
-      buckets.set(k, acc);
+      addToBucket(
+        live.gameId,
+        p.source || (p.apiSystemId ? 'EXTERNAL_API' : 'TAQUILLA_ONLINE'), // fallback for snapshot rows written before this fix
+        p.apiSystemId,
+        new D(p.sales),
+        p.count,
+        new D(0), // prize unknown for non-DRAWN draws
+      );
     }
   }
 
-  // Wipe-and-write — idempotent, simpler than per-row diff.
   await prisma.dailyAggregateSnapshot.deleteMany({ where: { date: day } });
 
+  const now = new Date();
   for (const acc of buckets.values()) {
     await prisma.dailyAggregateSnapshot.upsert({
       where: {
@@ -169,19 +209,21 @@ export async function computeDailyAggregateSnapshot(date) {
         gameId: acc.gameId,
         source: acc.source,
         apiSystemId: acc.apiSystemId,
-        totalSales: Number(acc.totalSales.toFixed(2)),
+        totalSales: acc.totalSales.toFixed(2),
         ticketCount: acc.ticketCount,
-        prizeTotal: Number(acc.prizeTotal.toFixed(2)),
-        refreshedAt: new Date(),
+        prizeTotal: acc.prizeTotal.toFixed(2),
+        refreshedAt: now,
       },
       update: {
-        totalSales: Number(acc.totalSales.toFixed(2)),
+        totalSales: acc.totalSales.toFixed(2),
         ticketCount: acc.ticketCount,
-        prizeTotal: Number(acc.prizeTotal.toFixed(2)),
-        refreshedAt: new Date(),
+        prizeTotal: acc.prizeTotal.toFixed(2),
+        refreshedAt: now,
       },
     });
   }
+
+  logger.info(`[daily-snapshot] date=${day.toISOString().slice(0,10)} buckets=${buckets.size}`);
 
   return { bucketsWritten: buckets.size };
 }

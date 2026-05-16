@@ -20,15 +20,16 @@ beforeAll(async () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  svc.__setLiveSnapResolver(null); // restore default
 });
 
 describe('computeDrawLiveSnapshot', () => {
   it('aggregates totalSales + ticketCount + byProvider from raw tickets', async () => {
     prismaLib.prisma.ticket.findMany.mockResolvedValueOnce([
-      { amount: '10.00', apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
-      { amount: '5.50',  apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
-      { amount: '20.00', apiSystemId: 'sys-b', apiSystem: { name: 'B' } },
-      { amount: '7.25',  apiSystemId: null,    apiSystem: null },
+      { amount: '10.00', source: 'WEBHOOK_PUSH',    apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
+      { amount: '5.50',  source: 'WEBHOOK_PUSH',    apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
+      { amount: '20.00', source: 'EXTERNAL_SCRAPE', apiSystemId: 'sys-b', apiSystem: { name: 'B' } },
+      { amount: '7.25',  source: 'TAQUILLA_ONLINE', apiSystemId: null,    apiSystem: null },
     ]);
     prismaLib.prisma.drawLiveSnapshot.upsert.mockResolvedValueOnce({});
 
@@ -41,9 +42,9 @@ describe('computeDrawLiveSnapshot', () => {
     expect(args.create.ticketCount).toBe(4);
     expect(args.create.byProvider).toEqual(
       expect.arrayContaining([
-        { apiSystemId: 'sys-a', name: 'A',         sales: 15.5,  count: 2 },
-        { apiSystemId: 'sys-b', name: 'B',         sales: 20,    count: 1 },
-        { apiSystemId: null,    name: 'TAQUILLA',  sales: 7.25,  count: 1 },
+        { apiSystemId: 'sys-a', source: 'WEBHOOK_PUSH',    name: 'A',        sales: 15.5, count: 2 },
+        { apiSystemId: 'sys-b', source: 'EXTERNAL_SCRAPE', name: 'B',        sales: 20,   count: 1 },
+        { apiSystemId: null,    source: 'TAQUILLA_ONLINE', name: 'TAQUILLA', sales: 7.25, count: 1 },
       ]),
     );
   });
@@ -87,12 +88,11 @@ describe('computeDailyAggregateSnapshot', () => {
         ticketCount: 5,
         draw: { gameId: 'g1' },
         providers: [
-          { apiSystemId: 'sys-a', totalSales: '60.00', totalPrize: '20.00', ticketCount: 3 },
-          { apiSystemId: null,    totalSales: '40.00', totalPrize: '20.00', ticketCount: 2 },
+          { apiSystemId: 'sys-a', totalSales: '60.00', totalPrize: '20.00', ticketCount: 3, apiSystem: { mode: 'PUSH'   } },
+          { apiSystemId: null,    totalSales: '40.00', totalPrize: '20.00', ticketCount: 2, apiSystem: null               },
         ],
       },
     ]);
-    prismaLib.prisma.ticket.findMany.mockResolvedValue([]); // unused in this branch
     prismaLib.prisma.dailyAggregateSnapshot.deleteMany.mockResolvedValueOnce({ count: 0 });
     prismaLib.prisma.dailyAggregateSnapshot.upsert.mockResolvedValue({});
 
@@ -102,14 +102,40 @@ describe('computeDailyAggregateSnapshot', () => {
       gameId: 'g1',
       totalSales: 50,
       ticketCount: 2,
-      byProvider: [{ apiSystemId: 'sys-b', name: 'B', sales: 50, count: 2 }],
+      byProvider: [{ apiSystemId: 'sys-b', source: 'EXTERNAL_SCRAPE', name: 'B', sales: 50, count: 2 }],
     });
-    svc.__setLiveSnapResolver(liveSnapMock); // implementation must expose this test seam
+    svc.__setLiveSnapResolver(liveSnapMock);
 
     await svc.computeDailyAggregateSnapshot(new Date('2026-05-16'));
 
-    // Expect at least 3 upsert calls (sys-a from DRAWN, taquilla from DRAWN, sys-b from CLOSED)
     expect(prismaLib.prisma.dailyAggregateSnapshot.upsert).toHaveBeenCalledTimes(3);
+
+    const calls = prismaLib.prisma.dailyAggregateSnapshot.upsert.mock.calls.map((c) => c[0]);
+    const bucketKeys = calls.map((c) => {
+      const k = c.where.date_gameId_source_apiSystemId;
+      return `${k.gameId}|${k.source}|${k.apiSystemId}`;
+    });
+    expect(new Set(bucketKeys).size).toBe(3);
+    expect(bucketKeys).toEqual(expect.arrayContaining([
+      'g1|WEBHOOK_PUSH|sys-a',
+      'g1|TAQUILLA_ONLINE|null',
+      'g1|EXTERNAL_SCRAPE|sys-b',
+    ]));
+
+    // amounts add up
+    const sysA = calls.find((c) => c.where.date_gameId_source_apiSystemId.apiSystemId === 'sys-a');
+    expect(Number(sysA.create.totalSales)).toBe(60);
+    expect(Number(sysA.create.prizeTotal)).toBe(20);
+    expect(sysA.create.ticketCount).toBe(3);
+
+    const taquilla = calls.find((c) => c.where.date_gameId_source_apiSystemId.apiSystemId === null);
+    expect(Number(taquilla.create.totalSales)).toBe(40);
+    expect(taquilla.create.source).toBe('TAQUILLA_ONLINE');
+
+    const sysB = calls.find((c) => c.where.date_gameId_source_apiSystemId.apiSystemId === 'sys-b');
+    expect(Number(sysB.create.totalSales)).toBe(50);
+    expect(Number(sysB.create.prizeTotal)).toBe(0);
+    expect(sysB.create.ticketCount).toBe(2);
   });
 
   it('clears previous rows for the date before writing', async () => {
