@@ -14,7 +14,7 @@ export async function computeDrawLiveSnapshot(drawId) {
   const tickets = await prisma.ticket.findMany({
     where: { drawId, status: { not: 'CANCELLED' } },
     select: {
-      amount: true,
+      totalAmount: true,
       source: true,
       apiSystemId: true,
       apiSystem: { select: { name: true } },
@@ -25,7 +25,7 @@ export async function computeDrawLiveSnapshot(drawId) {
   const byProviderMap = new Map();
 
   for (const t of tickets) {
-    const amt = new D(t.amount);
+    const amt = new D(t.totalAmount);
     totalSales = totalSales.plus(amt);
     const key = `${t.apiSystemId || '__taquilla__'}|${t.source}`;
     if (!byProviderMap.has(key)) {
@@ -155,27 +155,27 @@ export async function computeDailyAggregateSnapshot(date) {
   }
 
   if (drawnIds.length > 0) {
-    const finRows = await prisma.drawFinancial.findMany({
+    // DrawFinancialProvider has a direct FK to Draw (NOT to DrawFinancial).
+    // Query the per-provider table directly — flat iteration, cheaper join.
+    const finRows = await prisma.drawFinancialProvider.findMany({
       where: { drawId: { in: drawnIds } },
       include: {
+        apiSystem: { select: { mode: true } },
         draw: { select: { gameId: true } },
-        providers: { include: { apiSystem: { select: { mode: true } } } },
       },
     });
 
-    for (const fr of finRows) {
-      const gameId = fr.draw?.gameId;
-      for (const p of fr.providers || []) {
-        const source = p.apiSystemId ? modeToSource(p.apiSystem?.mode) : 'TAQUILLA_ONLINE';
-        addToBucket(
-          gameId,
-          source,
-          p.apiSystemId,
-          new D(p.totalSales),
-          p.ticketCount,
-          new D(p.totalPrize),
-        );
-      }
+    for (const p of finRows) {
+      const gameId = p.draw?.gameId;
+      const source = p.apiSystemId ? modeToSource(p.apiSystem?.mode) : 'TAQUILLA_ONLINE';
+      addToBucket(
+        gameId,
+        source,
+        p.apiSystemId,
+        new D(p.totalSales),
+        p.ticketCount,
+        new D(p.totalPrize),
+      );
     }
   }
 
@@ -194,36 +194,25 @@ export async function computeDailyAggregateSnapshot(date) {
     }
   }
 
+  // Wipe-and-create — idempotent, simpler than per-row upsert with composite
+  // unique. Prisma upsert's `where` clause does not accept NULL in nullable
+  // composite-key columns even when the DB index uses NULLS NOT DISTINCT.
+  // Since deleteMany clears the day, plain createMany is correct and faster.
   await prisma.dailyAggregateSnapshot.deleteMany({ where: { date: day } });
 
-  const now = new Date();
-  for (const acc of buckets.values()) {
-    await prisma.dailyAggregateSnapshot.upsert({
-      where: {
-        date_gameId_source_apiSystemId: {
-          date: day,
-          gameId: acc.gameId,
-          source: acc.source,
-          apiSystemId: acc.apiSystemId,
-        },
-      },
-      create: {
-        date: day,
-        gameId: acc.gameId,
-        source: acc.source,
-        apiSystemId: acc.apiSystemId,
-        totalSales: acc.totalSales.toFixed(2),
-        ticketCount: acc.ticketCount,
-        prizeTotal: acc.prizeTotal.toFixed(2),
-        refreshedAt: now,
-      },
-      update: {
-        totalSales: acc.totalSales.toFixed(2),
-        ticketCount: acc.ticketCount,
-        prizeTotal: acc.prizeTotal.toFixed(2),
-        refreshedAt: now,
-      },
-    });
+  if (buckets.size > 0) {
+    const now = new Date();
+    const rows = Array.from(buckets.values()).map((acc) => ({
+      date: day,
+      gameId: acc.gameId,
+      source: acc.source,
+      apiSystemId: acc.apiSystemId,
+      totalSales: acc.totalSales.toFixed(2),
+      ticketCount: acc.ticketCount,
+      prizeTotal: acc.prizeTotal.toFixed(2),
+      refreshedAt: now,
+    }));
+    await prisma.dailyAggregateSnapshot.createMany({ data: rows });
   }
 
   logger.info(`[daily-snapshot] date=${day.toISOString().slice(0,10)} buckets=${buckets.size}`);

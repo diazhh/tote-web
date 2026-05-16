@@ -5,8 +5,9 @@ jest.unstable_mockModule('../../lib/prisma.js', () => ({
     ticket: { findMany: jest.fn() },
     drawLiveSnapshot: { upsert: jest.fn(), findUnique: jest.fn() },
     draw: { findMany: jest.fn() },
-    dailyAggregateSnapshot: { upsert: jest.fn(), deleteMany: jest.fn() },
+    dailyAggregateSnapshot: { createMany: jest.fn(), deleteMany: jest.fn() },
     drawFinancial: { findMany: jest.fn() },
+    drawFinancialProvider: { findMany: jest.fn() },
   },
 }));
 
@@ -26,10 +27,10 @@ beforeEach(() => {
 describe('computeDrawLiveSnapshot', () => {
   it('aggregates totalSales + ticketCount + byProvider from raw tickets', async () => {
     prismaLib.prisma.ticket.findMany.mockResolvedValueOnce([
-      { amount: '10.00', source: 'WEBHOOK_PUSH',    apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
-      { amount: '5.50',  source: 'WEBHOOK_PUSH',    apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
-      { amount: '20.00', source: 'EXTERNAL_SCRAPE', apiSystemId: 'sys-b', apiSystem: { name: 'B' } },
-      { amount: '7.25',  source: 'TAQUILLA_ONLINE', apiSystemId: null,    apiSystem: null },
+      { totalAmount: '10.00', source: 'WEBHOOK_PUSH',    apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
+      { totalAmount: '5.50',  source: 'WEBHOOK_PUSH',    apiSystemId: 'sys-a', apiSystem: { name: 'A' } },
+      { totalAmount: '20.00', source: 'EXTERNAL_SCRAPE', apiSystemId: 'sys-b', apiSystem: { name: 'B' } },
+      { totalAmount: '7.25',  source: 'TAQUILLA_ONLINE', apiSystemId: null,    apiSystem: null },
     ]);
     prismaLib.prisma.drawLiveSnapshot.upsert.mockResolvedValueOnce({});
 
@@ -80,21 +81,12 @@ describe('computeDailyAggregateSnapshot', () => {
       { id: 'd1', gameId: 'g1', status: 'DRAWN' },
       { id: 'd2', gameId: 'g1', status: 'CLOSED' },
     ]);
-    prismaLib.prisma.drawFinancial.findMany.mockResolvedValueOnce([
-      {
-        drawId: 'd1',
-        totalSales: '100.00',
-        totalPrize: '40.00',
-        ticketCount: 5,
-        draw: { gameId: 'g1' },
-        providers: [
-          { apiSystemId: 'sys-a', totalSales: '60.00', totalPrize: '20.00', ticketCount: 3, apiSystem: { mode: 'PUSH'   } },
-          { apiSystemId: null,    totalSales: '40.00', totalPrize: '20.00', ticketCount: 2, apiSystem: null               },
-        ],
-      },
+    prismaLib.prisma.drawFinancialProvider.findMany.mockResolvedValueOnce([
+      { drawId: 'd1', apiSystemId: 'sys-a', totalSales: '60.00', totalPrize: '20.00', ticketCount: 3, apiSystem: { mode: 'PUSH' }, draw: { gameId: 'g1' } },
+      { drawId: 'd1', apiSystemId: null,    totalSales: '40.00', totalPrize: '20.00', ticketCount: 2, apiSystem: null,             draw: { gameId: 'g1' } },
     ]);
     prismaLib.prisma.dailyAggregateSnapshot.deleteMany.mockResolvedValueOnce({ count: 0 });
-    prismaLib.prisma.dailyAggregateSnapshot.upsert.mockResolvedValue({});
+    prismaLib.prisma.dailyAggregateSnapshot.createMany.mockResolvedValueOnce({ count: 3 });
 
     // Stub the live-side lookup
     const liveSnapMock = jest.fn().mockResolvedValueOnce({
@@ -108,13 +100,10 @@ describe('computeDailyAggregateSnapshot', () => {
 
     await svc.computeDailyAggregateSnapshot(new Date('2026-05-16'));
 
-    expect(prismaLib.prisma.dailyAggregateSnapshot.upsert).toHaveBeenCalledTimes(3);
-
-    const calls = prismaLib.prisma.dailyAggregateSnapshot.upsert.mock.calls.map((c) => c[0]);
-    const bucketKeys = calls.map((c) => {
-      const k = c.where.date_gameId_source_apiSystemId;
-      return `${k.gameId}|${k.source}|${k.apiSystemId}`;
-    });
+    expect(prismaLib.prisma.dailyAggregateSnapshot.createMany).toHaveBeenCalledTimes(1);
+    const rows = prismaLib.prisma.dailyAggregateSnapshot.createMany.mock.calls[0][0].data;
+    expect(rows).toHaveLength(3);
+    const bucketKeys = rows.map((r) => `${r.gameId}|${r.source}|${r.apiSystemId}`);
     expect(new Set(bucketKeys).size).toBe(3);
     expect(bucketKeys).toEqual(expect.arrayContaining([
       'g1|WEBHOOK_PUSH|sys-a',
@@ -122,25 +111,24 @@ describe('computeDailyAggregateSnapshot', () => {
       'g1|EXTERNAL_SCRAPE|sys-b',
     ]));
 
-    // amounts add up
-    const sysA = calls.find((c) => c.where.date_gameId_source_apiSystemId.apiSystemId === 'sys-a');
-    expect(Number(sysA.create.totalSales)).toBe(60);
-    expect(Number(sysA.create.prizeTotal)).toBe(20);
-    expect(sysA.create.ticketCount).toBe(3);
+    const sysA = rows.find((r) => r.apiSystemId === 'sys-a');
+    expect(Number(sysA.totalSales)).toBe(60);
+    expect(Number(sysA.prizeTotal)).toBe(20);
+    expect(sysA.ticketCount).toBe(3);
 
-    const taquilla = calls.find((c) => c.where.date_gameId_source_apiSystemId.apiSystemId === null);
-    expect(Number(taquilla.create.totalSales)).toBe(40);
-    expect(taquilla.create.source).toBe('TAQUILLA_ONLINE');
+    const taquilla = rows.find((r) => r.apiSystemId === null);
+    expect(Number(taquilla.totalSales)).toBe(40);
+    expect(taquilla.source).toBe('TAQUILLA_ONLINE');
 
-    const sysB = calls.find((c) => c.where.date_gameId_source_apiSystemId.apiSystemId === 'sys-b');
-    expect(Number(sysB.create.totalSales)).toBe(50);
-    expect(Number(sysB.create.prizeTotal)).toBe(0);
-    expect(sysB.create.ticketCount).toBe(2);
+    const sysB = rows.find((r) => r.apiSystemId === 'sys-b');
+    expect(Number(sysB.totalSales)).toBe(50);
+    expect(Number(sysB.prizeTotal)).toBe(0);
+    expect(sysB.ticketCount).toBe(2);
   });
 
   it('clears previous rows for the date before writing', async () => {
     prismaLib.prisma.draw.findMany.mockResolvedValueOnce([]);
-    prismaLib.prisma.drawFinancial.findMany.mockResolvedValueOnce([]);
+    prismaLib.prisma.drawFinancialProvider.findMany.mockResolvedValueOnce([]);
     prismaLib.prisma.dailyAggregateSnapshot.deleteMany.mockResolvedValueOnce({ count: 7 });
 
     await svc.computeDailyAggregateSnapshot(new Date('2026-05-16'));
