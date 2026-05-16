@@ -125,6 +125,30 @@ export async function registerAllWorkers(boss) {
   );
   logger.info('[pg-boss] Worker weekly-settlement-snapshot registrado (trigger via cron Linux, Lunes 06:00 VE)');
 
+  // ======================================================================
+  // Phase v1.4 — perf cache layer
+  // refresh-live-snapshots (cron 1/min) + refresh-daily-snapshot (cron 1/min)
+  // Cron lines live in /etc/cron.d/tote-triggers on prod. Allowlist is in
+  // trigger-pgboss-cron.mjs.
+  // ======================================================================
+  const { refreshLiveSnapshotsWorker } = await import('./workers/refresh-live-snapshots.worker.js');
+  const { refreshDailySnapshotWorker } = await import('./workers/refresh-daily-snapshot.worker.js');
+
+  await boss.createQueue(QUEUES.REFRESH_LIVE_SNAPSHOTS);
+  await boss.createQueue(QUEUES.REFRESH_DAILY_SNAPSHOT);
+
+  await boss.work(
+    QUEUES.REFRESH_LIVE_SNAPSHOTS,
+    QUEUE_CONFIGS[QUEUES.REFRESH_LIVE_SNAPSHOTS],
+    refreshLiveSnapshotsWorker,
+  );
+  await boss.work(
+    QUEUES.REFRESH_DAILY_SNAPSHOT,
+    QUEUE_CONFIGS[QUEUES.REFRESH_DAILY_SNAPSHOT],
+    refreshDailySnapshotWorker,
+  );
+  logger.info('[pg-boss] Workers refresh-live-snapshots + refresh-daily-snapshot registrados (cron 1/min)');
+
   // Retry failed publications — siempre activo, cada 5 minutos
   const { retryFailedPublicationsWorker } = await import('./workers/retry-failed-publications.worker.js');
   await boss.createQueue(QUEUES.RETRY_FAILED_PUBLICATIONS);
