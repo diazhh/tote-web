@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Plus, Edit, Trash2, Power, PowerOff, TestTube, BarChart3, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Power, PowerOff, TestTube, BarChart3, RefreshCw, Percent } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000';
 
@@ -452,6 +452,13 @@ export default function ProveedoresPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Link
+                        href={`/admin/proveedores/${system.id}/comisiones`}
+                        className="p-2.5 text-blue-600 hover:bg-blue-50 rounded"
+                        title="Configurar comisiones"
+                      >
+                        <Percent className="w-5 h-5" />
+                      </Link>
                       <button
                         onClick={() => handleToggleSystem(system.id, system.isActive)}
                         className={`p-2.5 rounded ${
