@@ -79,18 +79,26 @@ export async function invalidate(key) {
   }
 }
 
-/** Invalidate every key recorded under a tracking-set name. */
-export async function invalidatePattern(pattern) {
+/**
+ * Invalidate every key recorded under a tracking-set name.
+ *
+ * NOTE: this is NOT a glob match — `trackingSetName` is treated as an exact
+ * identifier appended to `tote:v1:idx:`. Callers typically pass a glob-shaped
+ * string (e.g. `"tote:v1:report:*"`) purely as a human-readable label, not for
+ * matching semantics. The `SETEX` call site must use the same string in
+ * `opts.trackingSet`.
+ */
+export async function invalidatePattern(trackingSetName) {
   const c = getClient();
   if (!c) return;
-  const setKey = `${TRACKING_SET_PREFIX}${pattern}`;
+  const setKey = `${TRACKING_SET_PREFIX}${trackingSetName}`;
   try {
     const members = await withTimeout(c.smembers(setKey), REDIS_TIMEOUT_MS);
     if (!members || members.length === 0) return;
     await withTimeout(c.unlink(...members), REDIS_TIMEOUT_MS);
     await withTimeout(c.del(setKey), REDIS_TIMEOUT_MS);
   } catch (err) {
-    logger.warn(`[cache] invalidatePattern failed pattern=${pattern} err=${err.message}`);
+    logger.warn(`[cache] invalidatePattern failed name=${trackingSetName} err=${err.message}`);
   }
 }
 

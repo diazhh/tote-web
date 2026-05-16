@@ -93,6 +93,33 @@ describe('cacheOrCompute', () => {
     expect(result).toEqual({ ok: true });
     expect(fn).toHaveBeenCalled();
   }, 1000);
+
+  it('returns computed value even when SETEX fails', async () => {
+    mockGet.mockResolvedValueOnce(null);
+    mockSetex.mockRejectedValueOnce(new Error('redis_down'));
+    const fn = jest.fn().mockResolvedValue({ ok: 1 });
+
+    const result = await redisLib.cacheOrCompute('test:key', 30, fn);
+
+    expect(result).toEqual({ ok: 1 });
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns cached falsy values (0, false, null) without recomputing', async () => {
+    mockGet.mockResolvedValueOnce('0');
+    const fn = jest.fn();
+    expect(await redisLib.cacheOrCompute('k', 30, fn)).toBe(0);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('registers key in tracking set on miss when opts.trackingSet is provided', async () => {
+    mockGet.mockResolvedValueOnce(null);
+    const fn = jest.fn().mockResolvedValue({ ok: true });
+
+    await redisLib.cacheOrCompute('tote:v1:report:abc', 60, fn, { trackingSet: 'tote:v1:report:*' });
+
+    expect(mockSadd).toHaveBeenCalledWith('tote:v1:idx:tote:v1:report:*', 'tote:v1:report:abc');
+  });
 });
 
 describe('invalidate', () => {
@@ -138,6 +165,19 @@ describe('isHealthy', () => {
     process.env.REDIS_ENABLED = 'false';
     jest.resetModules();
     redisLib = await import('../redis.js');
+    expect(await redisLib.isHealthy()).toBe(false);
+  });
+
+  it('returns false when client status is not ready', async () => {
+    // Override the RedisMock for this one test to return a non-ready client
+    RedisMock.mockImplementationOnce(() => ({
+      get: mockGet, setex: mockSetex, del: mockDel, unlink: mockUnlink,
+      smembers: mockSmembers, sadd: mockSadd, on: mockOn, quit: mockQuit,
+      status: 'connecting',
+    }));
+    jest.resetModules();
+    redisLib = await import('../redis.js');
+
     expect(await redisLib.isHealthy()).toBe(false);
   });
 });
