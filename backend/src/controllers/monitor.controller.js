@@ -69,12 +69,14 @@ class MonitorController {
         resolvedTo   = todayStr;
       }
 
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
       const report = await monitorService.getDailyReport({
         dateFrom:    resolvedFrom,
         dateTo:      resolvedTo,
         gameId:      gameId      || null,
         source:      source      || null,
-        apiSystemId: apiSystemId || null
+        apiSystemId: apiSystemId || null,
+        useMaterialized,
       });
       res.json({ success: true, data: report });
     } catch (error) {
@@ -118,12 +120,14 @@ class MonitorController {
       const filterLabel = filterParts.join(' | ');
 
       // Fetch report data
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
       const report = await monitorService.getDailyReport({
         dateFrom:    resolvedFrom,
         dateTo:      resolvedTo,
         gameId:      gameId      || null,
         source:      source      || null,
         apiSystemId: apiSystemId || null,
+        useMaterialized,
       });
 
       // Currency formatter
@@ -359,12 +363,14 @@ class MonitorController {
   async getAccountingReport(req, res) {
     try {
       const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
       const data = await accountingReportService.getAccountingReport({
         dateFrom,
         dateTo,
         gameId: gameId || null,
         source: source || null,
         apiSystemId: apiSystemId || null,
+        useMaterialized,
       });
       res.json({ success: true, data });
     } catch (error) {
@@ -383,12 +389,14 @@ class MonitorController {
   async downloadAccountingExcel(req, res) {
     try {
       const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
+      const useMaterialized = process.env.REPORT_USE_MATERIALIZED === 'true';
       const buffer = await accountingReportService.buildAccountingExcel({
         dateFrom,
         dateTo,
         gameId: gameId || null,
         source: source || null,
         apiSystemId: apiSystemId || null,
+        useMaterialized,
       });
       const filename = `reporte-contable-${dateFrom}-${dateTo}.xlsx`;
       res.setHeader(

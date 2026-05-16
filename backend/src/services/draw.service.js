@@ -105,6 +105,14 @@ export class DrawService {
           winnerItem: true,
           template: true,
           publications: true,
+          // Phase 14 FIN-REPORT-04 (O3) — surface materialized financial aggregates so the
+          // DrawDetailModal financial card can render without a separate endpoint.
+          financial: true,
+          financialProviders: {
+            include: {
+              apiSystem: { select: { id: true, name: true, slug: true, mode: true } },
+            },
+          },
         },
       });
 

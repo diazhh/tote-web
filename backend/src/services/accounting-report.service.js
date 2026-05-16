@@ -1,6 +1,8 @@
 import ExcelJS from 'exceljs';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import { resolveApiSystemFilter } from './monitor.service.js';
 
 const MAX_RANGE_DAYS = 365;
 
@@ -33,7 +35,19 @@ class AccountingReportService {
    *   totals: { totalSales, totalPrize, utility, ticketCount }
    * }>}
    */
-  async getAccountingReport({ dateFrom, dateTo, gameId = null, source = null, apiSystemId = null } = {}) {
+  async getAccountingReport({ dateFrom, dateTo, gameId = null, source = null, apiSystemId = null, useMaterialized = false } = {}) {
+    if (useMaterialized) {
+      return this._getAccountingReportMaterialized({ dateFrom, dateTo, gameId, source, apiSystemId });
+    }
+    return this._getAccountingReportLegacy({ dateFrom, dateTo, gameId, source, apiSystemId });
+  }
+
+  /**
+   * LEGACY branch — verbatim move of pre-refactor getAccountingReport body.
+   * Only the apiSystem PULL/PUSH/SCRAPE resolution block is replaced with the shared
+   * resolveApiSystemFilter helper — same downstream behavior.
+   */
+  async _getAccountingReportLegacy({ dateFrom, dateTo, gameId = null, source = null, apiSystemId = null } = {}) {
     this._validateInputs({ dateFrom, dateTo, gameId });
 
     if (gameId) {
@@ -56,23 +70,15 @@ class AccountingReportService {
       ...(gameId && { gameId }),
     };
 
-    // apiSystemId: resolve PUSH/SCRAPE vs PULL providers
-    // (mismo patrón que monitor.service.getDailyReport)
+    // apiSystemId: resolve PUSH/SCRAPE vs PULL providers via shared helper.
     let pushProviderFilter = false;
     if (apiSystemId) {
-      const apiSystem = await prisma.apiSystem.findUnique({
-        where: { id: apiSystemId },
-        select: { mode: true },
-      });
-      if (apiSystem?.mode === 'PUSH' || apiSystem?.mode === 'SCRAPE') {
+      const resolved = await resolveApiSystemFilter(apiSystemId);
+      if (resolved.pushProviderFilter) {
         pushProviderFilter = true;
       } else {
         // PULL providers: filter draws by ApiDrawMapping
-        const mappings = await prisma.apiDrawMapping.findMany({
-          where: { apiConfig: { apiSystemId } },
-          select: { drawId: true },
-        });
-        if (mappings.length === 0) {
+        if (resolved.drawIdsForPull.length === 0) {
           return {
             dateFrom,
             dateTo,
@@ -83,7 +89,7 @@ class AccountingReportService {
             totals: { totalSales: 0, totalPrize: 0, utility: 0, ticketCount: 0 },
           };
         }
-        drawWhere.id = { in: mappings.map((m) => m.drawId) };
+        drawWhere.id = { in: resolved.drawIdsForPull };
       }
     }
 
@@ -176,6 +182,130 @@ class AccountingReportService {
       dateTo,
       gameId: gameId || null,
       source: source || null,
+      apiSystemId: apiSystemId || null,
+      rows,
+      totals,
+    };
+  }
+
+  /**
+   * MATERIALIZED branch — aggregates from DrawFinancial (+ DrawFinancialProvider) per (date, gameId).
+   *
+   * Response shape identical to _getAccountingReportLegacy (FIN-REPORT-03).
+   *
+   * Falls back to legacy when:
+   *   - `source` filter is set: per-ticket source is not preserved by materialized aggregates
+   */
+  async _getAccountingReportMaterialized({ dateFrom, dateTo, gameId = null, source = null, apiSystemId = null } = {}) {
+    if (source) {
+      logger.warn(`[accounting-report.service] _getAccountingReportMaterialized: source filter '${source}' not supported — falling back to legacy`);
+      return this._getAccountingReportLegacy({ dateFrom, dateTo, gameId, source, apiSystemId });
+    }
+
+    this._validateInputs({ dateFrom, dateTo, gameId });
+
+    if (gameId) {
+      const game = await prisma.game.findUnique({
+        where: { id: gameId },
+        select: { id: true },
+      });
+      if (!game) {
+        const err = new Error(`Game ${gameId} no encontrado`);
+        err.statusCode = 400;
+        throw err;
+      }
+    }
+
+    const fromDate = new Date(`${dateFrom}T00:00:00.000Z`);
+    const toDate   = new Date(`${dateTo}T00:00:00.000Z`);
+
+    // Resolve apiSystem filter via shared helper.
+    const resolved = await resolveApiSystemFilter(apiSystemId);
+    if (apiSystemId && !resolved.pushProviderFilter && resolved.drawIdsForPull.length === 0) {
+      return {
+        dateFrom, dateTo,
+        gameId: gameId || null,
+        source: null,
+        apiSystemId,
+        rows: [],
+        totals: { totalSales: 0, totalPrize: 0, utility: 0, ticketCount: 0 },
+      };
+    }
+
+    const gameFilter = gameId
+      ? Prisma.sql`AND d."gameId" = ${gameId}`
+      : Prisma.empty;
+    const pullDrawFilter = (apiSystemId && !resolved.pushProviderFilter)
+      ? Prisma.sql`AND d.id IN (${Prisma.join(resolved.drawIdsForPull)})`
+      : Prisma.empty;
+
+    // When a PUSH/SCRAPE apiSystem filter is active, swap the join target so we
+    // aggregate the per-provider row instead of the whole-draw row.
+    const aggregateRows = (apiSystemId && resolved.pushProviderFilter)
+      ? await prisma.$queryRaw`
+          SELECT to_char(d."drawDate" AT TIME ZONE 'UTC', 'YYYY-MM-DD')         AS "date",
+                 d."gameId"                                                      AS "gameId",
+                 g.name                                                          AS "game",
+                 COALESCE(SUM(dfp."totalSales"), 0)::numeric(12,2)               AS "totalSales",
+                 COALESCE(SUM(dfp."totalPrize"), 0)::numeric(12,2)               AS "totalPrize",
+                 (COALESCE(SUM(dfp."totalSales"), 0)
+                    - COALESCE(SUM(dfp."totalPrize"), 0))::numeric(12,2)         AS "utility",
+                 COALESCE(SUM(dfp."ticketCount"), 0)::int                        AS "ticketCount"
+          FROM   "Draw" d
+          JOIN   "Game" g                  ON g.id = d."gameId"
+          LEFT JOIN "DrawFinancialProvider" dfp ON dfp."drawId" = d.id AND dfp."apiSystemId" = ${apiSystemId}
+          WHERE  d."drawDate" >= ${fromDate}
+            AND  d."drawDate" <= ${toDate}
+            ${gameFilter}
+            ${pullDrawFilter}
+          GROUP  BY 1, 2, 3
+          ORDER  BY 1 ASC, 3 ASC
+        `
+      : await prisma.$queryRaw`
+          SELECT to_char(d."drawDate" AT TIME ZONE 'UTC', 'YYYY-MM-DD')         AS "date",
+                 d."gameId"                                                      AS "gameId",
+                 g.name                                                          AS "game",
+                 COALESCE(SUM(df."totalSales"), 0)::numeric(12,2)                AS "totalSales",
+                 COALESCE(SUM(df."totalPrize"), 0)::numeric(12,2)                AS "totalPrize",
+                 (COALESCE(SUM(df."totalSales"), 0)
+                    - COALESCE(SUM(df."totalPrize"), 0))::numeric(12,2)          AS "utility",
+                 COALESCE(SUM(df."ticketCount"), 0)::int                         AS "ticketCount"
+          FROM   "Draw" d
+          JOIN   "Game" g            ON g.id = d."gameId"
+          LEFT JOIN "DrawFinancial" df ON df."drawId" = d.id
+          WHERE  d."drawDate" >= ${fromDate}
+            AND  d."drawDate" <= ${toDate}
+            ${gameFilter}
+            ${pullDrawFilter}
+          GROUP  BY 1, 2, 3
+          ORDER  BY 1 ASC, 3 ASC
+        `;
+
+    const rows = aggregateRows.map((r) => ({
+      date:        r.date,
+      gameId:      r.gameId,
+      game:        r.game,
+      totalSales:  parseFloat(r.totalSales),
+      totalPrize:  parseFloat(r.totalPrize),
+      utility:     parseFloat(r.utility),
+      ticketCount: parseInt(r.ticketCount, 10),
+    }));
+
+    const totals = rows.reduce(
+      (acc, r) => ({
+        totalSales: acc.totalSales + r.totalSales,
+        totalPrize: acc.totalPrize + r.totalPrize,
+        utility:    acc.utility    + r.utility,
+        ticketCount: acc.ticketCount + r.ticketCount,
+      }),
+      { totalSales: 0, totalPrize: 0, utility: 0, ticketCount: 0 },
+    );
+
+    return {
+      dateFrom,
+      dateTo,
+      gameId: gameId || null,
+      source: null,
       apiSystemId: apiSystemId || null,
       rows,
       totals,
