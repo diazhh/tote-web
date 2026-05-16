@@ -226,3 +226,124 @@ const contabilidadApi = {
 };
 
 export default contabilidadApi;
+
+// ---------- Cuentas (v2) ----------
+
+export async function fetchAccounts({ includeInactive = false } = {}) {
+  const res = await fetch(
+    `${API_URL}/contabilidad/cuentas${qs({ includeInactive: includeInactive ? 'true' : '' })}`,
+    { headers: authHeaders() },
+  );
+  return jsonOrThrow(res);
+}
+
+export async function fetchAccount(id) {
+  const res = await fetch(`${API_URL}/contabilidad/cuentas/${id}`, { headers: authHeaders() });
+  return jsonOrThrow(res);
+}
+
+export async function createAccount(body) {
+  const res = await fetch(`${API_URL}/contabilidad/cuentas`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(res);
+}
+
+export async function updateAccount(id, patch) {
+  const res = await fetch(`${API_URL}/contabilidad/cuentas/${id}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(patch),
+  });
+  return jsonOrThrow(res);
+}
+
+export async function deactivateAccount(id) {
+  const res = await fetch(`${API_URL}/contabilidad/cuentas/${id}/deactivate`, {
+    method: 'PATCH', headers: authHeaders(),
+  });
+  return jsonOrThrow(res);
+}
+
+export async function reactivateAccount(id) {
+  const res = await fetch(`${API_URL}/contabilidad/cuentas/${id}/reactivate`, {
+    method: 'PATCH', headers: authHeaders(),
+  });
+  return jsonOrThrow(res);
+}
+
+// ---------- Transferencias (v2) ----------
+
+export async function fetchTransfers(filters = {}) {
+  const res = await fetch(
+    `${API_URL}/contabilidad/transferencias${qs(filters)}`,
+    { headers: authHeaders() },
+  );
+  return jsonOrThrow(res);
+}
+
+export async function fetchTransfer(id) {
+  const res = await fetch(`${API_URL}/contabilidad/transferencias/${id}`, { headers: authHeaders() });
+  return jsonOrThrow(res);
+}
+
+export async function createTransfer(body) {
+  const res = await fetch(`${API_URL}/contabilidad/transferencias`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body),
+  });
+  return jsonOrThrow(res);
+}
+
+export async function reverseTransfer(id, reversalReason) {
+  const res = await fetch(`${API_URL}/contabilidad/transferencias/${id}/reverse`, {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ reversalReason }),
+  });
+  return jsonOrThrow(res);
+}
+
+export async function uploadTransferAttachment(transferId, file) {
+  const fd = new FormData();
+  fd.append('file', file);
+  const res = await fetch(`${API_URL}/contabilidad/transferencias/${transferId}/attachments`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: fd,
+  });
+  return jsonOrThrow(res);
+}
+
+export function downloadTransferAttachmentUrl(transferId, attId) {
+  return `${API_URL}/contabilidad/transferencias/${transferId}/attachments/${attId}`;
+}
+
+export async function deleteTransferAttachment(transferId, attId) {
+  const res = await fetch(`${API_URL}/contabilidad/transferencias/${transferId}/attachments/${attId}`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  });
+  return jsonOrThrow(res);
+}
+
+// ---------- Flujo de caja (v2) ----------
+
+export async function fetchCashFlow({ from, to, accountId } = {}) {
+  const res = await fetch(
+    `${API_URL}/contabilidad/flujo-caja${qs({ from, to, accountId })}`,
+    { headers: authHeaders() },
+  );
+  return jsonOrThrow(res);
+}
+
+export function cashFlowExcelUrl({ from, to, accountId } = {}) {
+  return `${API_URL}/contabilidad/flujo-caja/excel${qs({ from, to, accountId })}`;
+}
+
+export function cashFlowPdfUrl({ from, to, accountId } = {}) {
+  return `${API_URL}/contabilidad/flujo-caja/pdf${qs({ from, to, accountId })}`;
+}
