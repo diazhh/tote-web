@@ -31,6 +31,8 @@ import { emitToAll, emitToGame } from '../lib/socket.js';
 import prizeProcessorService from './prize-processor.service.js';
 import adminNotificationService from './admin-notification.service.js';
 import drawStatsService from './draw-stats.service.js';
+import { getBoss } from '../queue/boss.js';
+import { QUEUES, QUEUE_CONFIGS } from '../queue/constants.js';
 
 /**
  * @param {object} tripleDraw - sorteo Triple ya DRAWN, con game + winnerItem incluidos.
@@ -145,6 +147,27 @@ export async function cascadeTerminalDraws(tripleDraw) {
         `💰 [cascade] Premios Terminal: ${prizes.winnersCount} ganadores, ` +
         `$${prizes.totalPrizesAwarded.toFixed(2)} en premios`
       );
+      // CRÍTICO: marcar prizesProcessed=true para que DrawFinancial PRIZES
+      // no se rechace con PrizesNotProcessedError. Step-process-prizes.worker
+      // lo hace en su flujo regular, pero el cascade Terminal lo bypassa.
+      await prisma.draw.update({
+        where: { id: updatedTerminal.id },
+        data: { prizesProcessed: true },
+      });
+
+      // Encolar DrawFinancial PRIZES + commission (mismo patrón que
+      // step-process-prizes.worker líneas 62-71). Si no se encolan, los
+      // sorteos Terminal aparecen en /admin/reportes con totalPrize=0 y
+      // commission=0 — exactamente el bug observado el 2026-05-16.
+      const boss = getBoss();
+      await boss.send(QUEUES.CALCULATE_DRAW_FINANCIALS, { drawId: updatedTerminal.id, phase: 'PRIZES' }, {
+        singletonKey: `df-prizes-${updatedTerminal.id}`,
+        ...QUEUE_CONFIGS[QUEUES.CALCULATE_DRAW_FINANCIALS],
+      });
+      await boss.send(QUEUES.CALCULATE_PROVIDER_COMMISSION, { drawId: updatedTerminal.id }, {
+        singletonKey: `comm-${updatedTerminal.id}`,
+        ...QUEUE_CONFIGS[QUEUES.CALCULATE_PROVIDER_COMMISSION],
+      });
     } catch (err) {
       logger.error(`[cascade] Error premios Terminal ${updatedTerminal.id}: ${err.message}`);
     }

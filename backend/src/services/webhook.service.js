@@ -64,12 +64,15 @@ async function createWebhookTicket(normalized, logId, apiSystemId, tx = prisma) 
       providerData: normalized.providerData ?? null,
       details: {
         create: normalized.details.map((d) => ({
+          // F-X: drawId siempre presente. Adapters multi-draw pasan d.drawId
+          // explícito; los single-draw caen al drawId del ticket. DrawFinancial
+          // PRIZES filtra por td.drawId — NULL = invisible para reportes.
+          drawId: d.drawId ?? normalized.drawId,
           gameItemId: d.gameItemId,
           amount: d.amount,
           multiplier: d.multiplier,
           prize: 0,
           status: 'ACTIVE',
-          ...(d.drawId ? { drawId: d.drawId } : {}),
         })),
       },
     },
