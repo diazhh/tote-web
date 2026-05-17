@@ -385,7 +385,7 @@ class ApiIntegrationService {
 
       // Crear Ticket + TicketDetail para cada ticket agrupado
       for (const ticketGroup of ticketsGrouped) {
-        const saved = await this.saveTicketWithDetails(drawId, ticketGroup);
+        const saved = await this.saveTicketWithDetails(drawId, ticketGroup, apiSystemId);
         if (saved) {
           imported++;
         } else {
@@ -584,9 +584,13 @@ class ApiIntegrationService {
    * Guardar un ticket con sus detalles
    * @param {string} drawId - ID del sorteo
    * @param {Object} ticketData - Datos del ticket agrupado
+   * @param {string} [apiSystemId] - ID del ApiSystem (SRQ) — necesario para
+   *   que DrawFinancialProvider y la engine de comisiones agrupen este
+   *   ticket bajo el proveedor correcto. Sin esto, el ticket queda en el
+   *   bucket NULL (casa) y no genera ledger de comisión.
    * @returns {boolean} True si se guardó correctamente
    */
-  async saveTicketWithDetails(drawId, ticketData) {
+  async saveTicketWithDetails(drawId, ticketData, apiSystemId = null) {
     try {
       // Verificar si ya existe el ticket
       const existing = await prisma.ticket.findFirst({
@@ -608,6 +612,7 @@ class ApiIntegrationService {
       await prisma.ticket.create({
         data: {
           drawId,
+          apiSystemId,
           source: 'EXTERNAL_API',
           externalTicketId: ticketData.externalTicketId,
           totalAmount,
@@ -616,6 +621,7 @@ class ApiIntegrationService {
           providerData: ticketData.providerData,
           details: {
             create: ticketData.details.map(detail => ({
+              drawId,
               gameItemId: detail.gameItemId,
               amount: detail.amount,
               multiplier: detail.multiplier,
