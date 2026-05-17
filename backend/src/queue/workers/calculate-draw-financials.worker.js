@@ -57,6 +57,11 @@ export async function calculateDrawFinancialsWorker(jobs) {
   // authoritative DrawFinancial write that just committed.
   try {
     await invalidate(`tote:v1:draw:${drawId}:snap`);
+    // Monitor caches (banca/item stats) — invalidar siempre, sales-only y
+    // prizes-final ambos cambian los números visibles en /admin/monitor.
+    await invalidate(`tote:v1:banca:stats:${drawId}`);
+    await invalidate(`tote:v1:items:stats:full:${drawId}`);
+    await invalidatePattern(`tote:v1:items:stats:${drawId}:*`);
     if (phase === 'PRIZES') {
       await prisma.drawLiveSnapshot.deleteMany({ where: { drawId } });
       await invalidatePattern('tote:v1:report:daily:*');

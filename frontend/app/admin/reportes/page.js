@@ -439,9 +439,11 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      {/* Breakdown tables — SUMM-02 / SUMM-03 */}
+      {/* Breakdown tables — SUMM-02 / SUMM-03
+          Stacked full-width: con columnas Comisión + Neto las tablas necesitan
+          el ancho completo del viewport en escritorio. */}
       {report && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-4">
+        <div className="space-y-2 sm:space-y-4">
           {/* By Game — SUMM-02 */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">

@@ -44,10 +44,19 @@ export async function resolveApiSystemFilter(apiSystemId) {
 
 class MonitorService {
   /**
-   * Obtener estadísticas por banca para un sorteo
+   * Obtener estadísticas por banca para un sorteo.
+   * Cacheado 60s en Redis para soportar el auto-refresh de /admin/monitor (90s).
    * @param {string} drawId - ID del sorteo
    */
   async getBancaStats(drawId) {
+    return cacheOrCompute(
+      `tote:v1:banca:stats:${drawId}`,
+      60,
+      () => this._getBancaStatsUncached(drawId),
+    );
+  }
+
+  async _getBancaStatsUncached(drawId) {
     try {
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
@@ -145,6 +154,14 @@ class MonitorService {
    * @param {string} drawId - ID del sorteo
    */
   async getItemStats(drawId) {
+    return cacheOrCompute(
+      `tote:v1:items:stats:full:${drawId}`,
+      60,
+      () => this._getItemStatsUncached(drawId),
+    );
+  }
+
+  async _getItemStatsUncached(drawId) {
     try {
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
@@ -386,7 +403,9 @@ class MonitorService {
     };
     const hash = crypto.createHash('sha1').update(JSON.stringify(normalized)).digest('hex');
     const key = `tote:v1:items:stats:${drawId}:${hash}`;
-    return cacheOrCompute(key, 30, () => this._getItemStatsFilteredUncached(drawId, filters));
+    // TTL 60s — coordina con auto-refresh del frontend (90s). Mantiene cache
+    // caliente durante refrescos consecutivos del admin.
+    return cacheOrCompute(key, 60, () => this._getItemStatsFilteredUncached(drawId, filters));
   }
 
   async _getItemStatsFilteredUncached(drawId, { source = null, apiSystemId = null } = {}) {

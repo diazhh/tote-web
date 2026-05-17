@@ -63,6 +63,15 @@ export default function MonitorPage() {
     }
   }, [selectedDraw, activeTab]);
 
+  // Auto-refresh cada 90s para que los admins vean las jugadas
+  // sin tener que recargar manualmente. Solo aplica si hay un sorteo
+  // seleccionado y la pestaña no es 'reporte' (que tiene su propia recarga).
+  useEffect(() => {
+    if (!selectedDraw || activeTab === 'reporte') return;
+    const id = setInterval(() => { fetchData(); }, 90_000);
+    return () => clearInterval(id);
+  }, [selectedDraw, activeTab]);
+
   const fetchGames = async () => {
     try {
       const response = await axios.get('/games');
