@@ -261,6 +261,7 @@ class MaxplayService {
               details: {
                 deleteMany: {},
                 create: [{
+                  drawId,
                   gameItemId: gameItem.id,
                   amount: row.venta,
                   multiplier: gameItem.multiplier,
@@ -280,6 +281,7 @@ class MaxplayService {
               providerData,
               details: {
                 create: [{
+                  drawId,
                   gameItemId: gameItem.id,
                   amount: row.venta,
                   multiplier: gameItem.multiplier,
