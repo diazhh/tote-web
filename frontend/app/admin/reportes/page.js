@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Calendar, Gamepad2, DollarSign, Trophy, TrendingUp, TrendingDown,
+  Calendar, Gamepad2, DollarSign, Trophy, TrendingUp, TrendingDown, Percent,
   FileText, RefreshCw, ChevronLeft, ChevronRight, ChevronUp, ChevronDown,
   Download, X, Eye, ArrowUp, ArrowDown, Search
 } from 'lucide-react';
@@ -375,13 +375,13 @@ export default function ReportesPage() {
       </div>
 
       {/* Summary cards — SUMM-01 / FILT-04 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg shrink-0">
             <DollarSign className="w-5 h-5 text-blue-600" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-gray-500">Ventas Totales</p>
+            <p className="text-xs text-gray-500">Ventas</p>
             <p className="text-lg font-bold text-gray-900 truncate">{fmt(totals?.totalSales)}</p>
             <p className="text-xs text-gray-400">{totals?.drawCount ?? 0} sorteos</p>
           </div>
@@ -392,33 +392,49 @@ export default function ReportesPage() {
             <Trophy className="w-5 h-5 text-red-500" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-gray-500">Premios Pagados</p>
+            <p className="text-xs text-gray-500">Premios</p>
             <p className="text-lg font-bold text-gray-900 truncate">{fmt(totals?.totalPrize)}</p>
             <p className="text-xs text-gray-400">{totals?.totalTickets ?? 0} tickets</p>
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-          <div className={`p-2.5 rounded-lg shrink-0 ${(totals?.totalBalance ?? 0) >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-            {(totals?.totalBalance ?? 0) >= 0
-              ? <TrendingUp className="w-5 h-5 text-green-600" />
-              : <TrendingDown className="w-5 h-5 text-red-500" />}
+          <div className="p-2.5 bg-amber-50 rounded-lg shrink-0">
+            <Percent className="w-5 h-5 text-amber-600" />
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-gray-500">Balance</p>
-            <p className={`text-lg font-bold truncate ${(totals?.totalBalance ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-              {fmt(totals?.totalBalance)}
-            </p>
+            <p className="text-xs text-gray-500">Comisiones</p>
+            <p className="text-lg font-bold text-amber-700 truncate">{fmt(totals?.totalCommission)}</p>
           </div>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
-          <div className="p-2.5 bg-purple-50 rounded-lg shrink-0">
-            <FileText className="w-5 h-5 text-purple-600" />
+          <div className={`p-2.5 rounded-lg shrink-0 ${(totals?.totalBalance ?? 0) >= 0 ? 'bg-gray-50' : 'bg-red-50'}`}>
+            {(totals?.totalBalance ?? 0) >= 0
+              ? <TrendingUp className="w-5 h-5 text-gray-600" />
+              : <TrendingDown className="w-5 h-5 text-red-500" />}
           </div>
           <div className="min-w-0">
-            <p className="text-xs text-gray-500">Tickets</p>
-            <p className="text-lg font-bold text-gray-900 truncate">{totals?.totalTickets ?? 0}</p>
+            <p className="text-xs text-gray-500">Bruto</p>
+            <p className={`text-lg font-bold truncate ${(totals?.totalBalance ?? 0) >= 0 ? 'text-gray-700' : 'text-red-500'}`}>
+              {fmt(totals?.totalBalance)}
+            </p>
+            <p className="text-[10px] text-gray-400">ventas − premios</p>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
+          <div className={`p-2.5 rounded-lg shrink-0 ${(totals?.totalNet ?? 0) >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+            {(totals?.totalNet ?? 0) >= 0
+              ? <TrendingUp className="w-5 h-5 text-green-600" />
+              : <TrendingDown className="w-5 h-5 text-red-500" />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-gray-500 font-semibold">Neto</p>
+            <p className={`text-lg font-bold truncate ${(totals?.totalNet ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+              {fmt(totals?.totalNet)}
+            </p>
+            <p className="text-[10px] text-gray-400">bruto − comisión</p>
           </div>
         </div>
       </div>
@@ -437,23 +453,25 @@ export default function ReportesPage() {
                 <table className="hidden md:table w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Balance</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Sort.</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Comisión</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-700">Neto</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Sort.</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {report.byGame.map(row => (
                       <tr key={row.gameId} className="hover:bg-gray-50/50">
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{row.game}</td>
-                        <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
-                        <td className="px-4 py-2.5 text-right text-red-600">{fmt(row.totalPrize)}</td>
-                        <td className={`px-4 py-2.5 text-right font-medium ${row.totalBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {fmt(row.totalBalance)}
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{row.game}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
+                        <td className="px-3 py-2.5 text-right text-red-600">{fmt(row.totalPrize)}</td>
+                        <td className="px-3 py-2.5 text-right text-amber-700">{fmt(row.totalCommission)}</td>
+                        <td className={`px-3 py-2.5 text-right font-semibold ${row.totalNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {fmt(row.totalNet)}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-500">{row.drawCount}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-500">{row.drawCount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -466,7 +484,7 @@ export default function ReportesPage() {
                         <span className="font-semibold text-gray-800 text-sm truncate">{row.game}</span>
                         <span className="text-[11px] text-gray-400 shrink-0">{row.drawCount} sort.</span>
                       </div>
-                      <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 text-xs">
                         <div>
                           <div className="text-gray-500">Ventas</div>
                           <div className="font-medium text-gray-800">{fmt(row.totalSales)}</div>
@@ -476,9 +494,13 @@ export default function ReportesPage() {
                           <div className="font-medium text-red-600">{fmt(row.totalPrize)}</div>
                         </div>
                         <div>
-                          <div className="text-gray-500">Balance</div>
-                          <div className={`font-bold ${row.totalBalance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                            {fmt(row.totalBalance)}
+                          <div className="text-gray-500">Comisión</div>
+                          <div className="font-medium text-amber-700">{fmt(row.totalCommission)}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500 font-semibold">Neto</div>
+                          <div className={`font-bold ${row.totalNet >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {fmt(row.totalNet)}
                           </div>
                         </div>
                       </div>
@@ -502,19 +524,27 @@ export default function ReportesPage() {
                 <table className="hidden md:table w-full text-sm">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Fuente</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
+                      <th className="px-3 py-2.5 text-left text-xs font-medium text-gray-500">Fuente</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Comisión</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-700">Neto</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {report.bySource.map(row => (
                       <tr key={sourceRowKey(row)} className="hover:bg-gray-50/50">
-                        <td className="px-4 py-2.5 font-medium text-gray-800">
+                        <td className="px-3 py-2.5 font-medium text-gray-800">
                           {sourceRowLabel(row)}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
-                        <td className="px-4 py-2.5 text-right text-gray-500">{row.ticketCount}</td>
+                        <td className="px-3 py-2.5 text-right text-gray-700">{fmt(row.totalSales)}</td>
+                        <td className="px-3 py-2.5 text-right text-red-600">{fmt(row.totalPrize)}</td>
+                        <td className="px-3 py-2.5 text-right text-amber-700">{fmt(row.totalCommission)}</td>
+                        <td className={`px-3 py-2.5 text-right font-semibold ${(row.totalNet ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {fmt(row.totalNet)}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-gray-500">{row.ticketCount}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -522,13 +552,32 @@ export default function ReportesPage() {
                 {/* Mobile cards */}
                 <ul className="md:hidden divide-y divide-gray-100">
                   {report.bySource.map(row => (
-                    <li key={sourceRowKey(row)} className="px-4 py-3 flex items-center justify-between gap-3">
-                      <span className="font-medium text-gray-800 text-sm truncate">
-                        {sourceRowLabel(row)}
-                      </span>
-                      <div className="text-right shrink-0">
-                        <div className="text-sm font-semibold text-gray-800">{fmt(row.totalSales)}</div>
-                        <div className="text-[11px] text-gray-500">{row.ticketCount} tickets</div>
+                    <li key={sourceRowKey(row)} className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <span className="font-medium text-gray-800 text-sm truncate">
+                          {sourceRowLabel(row)}
+                        </span>
+                        <span className="text-[11px] text-gray-400 shrink-0">{row.ticketCount} tickets</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <div className="text-gray-500">Ventas</div>
+                          <div className="font-medium text-gray-800">{fmt(row.totalSales)}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Premios</div>
+                          <div className="font-medium text-red-600">{fmt(row.totalPrize)}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500">Comisión</div>
+                          <div className="font-medium text-amber-700">{fmt(row.totalCommission)}</div>
+                        </div>
+                        <div>
+                          <div className="text-gray-500 font-semibold">Neto</div>
+                          <div className={`font-bold ${(row.totalNet ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {fmt(row.totalNet)}
+                          </div>
+                        </div>
                       </div>
                     </li>
                   ))}
@@ -597,32 +646,34 @@ export default function ReportesPage() {
                       <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Estado</th>
                       <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Ganador</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Balance</th>
-                      <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
-                      <th className="px-4 py-2.5 text-center text-xs font-medium text-gray-500 w-10"></th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Comisión</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-700">Neto</th>
+                      <th className="px-3 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
+                      <th className="px-3 py-2.5 text-center text-xs font-medium text-gray-500 w-10"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {paginatedDraws.map(draw => (
                       <tr key={draw.drawId} className="hover:bg-gray-50/50 cursor-pointer" onClick={() => handleDrawClick(draw.drawId)}>
-                        <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{fmtDate(draw.drawDate)}</td>
-                        <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">{draw.drawTime ?? '—'}</td>
-                        <td className="px-4 py-2.5 font-medium text-gray-800">{draw.game}</td>
-                        <td className="px-4 py-2.5">{statusBadge(draw.status)}</td>
-                        <td className="px-4 py-2.5 text-gray-700">
+                        <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{fmtDate(draw.drawDate)}</td>
+                        <td className="px-3 py-2.5 text-gray-700 whitespace-nowrap">{draw.drawTime ?? '—'}</td>
+                        <td className="px-3 py-2.5 font-medium text-gray-800">{draw.game}</td>
+                        <td className="px-3 py-2.5">{statusBadge(draw.status)}</td>
+                        <td className="px-3 py-2.5 text-gray-700">
                           {draw.winnerItem
                             ? `${draw.winnerItem.number} — ${draw.winnerItem.name}`
                             : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-700">{fmt(draw.totalSales)}</td>
-                        <td className="px-4 py-2.5 text-right text-red-600">{fmt(draw.totalPrize)}</td>
-                        <td className={`px-4 py-2.5 text-right font-medium ${draw.balance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {fmt(draw.balance)}
+                        <td className="px-3 py-2.5 text-right text-gray-700">{fmt(draw.totalSales)}</td>
+                        <td className="px-3 py-2.5 text-right text-red-600">{fmt(draw.totalPrize)}</td>
+                        <td className="px-3 py-2.5 text-right text-amber-700">{fmt(draw.commission)}</td>
+                        <td className={`px-3 py-2.5 text-right font-semibold ${(draw.net ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {fmt(draw.net)}
                         </td>
-                        <td className="px-4 py-2.5 text-right text-gray-500">{draw.ticketCount}</td>
-                        <td className="px-4 py-2.5 text-center">
+                        <td className="px-3 py-2.5 text-right text-gray-500">{draw.ticketCount}</td>
+                        <td className="px-3 py-2.5 text-center">
                           <Eye className="w-4 h-4 text-blue-600 inline" />
                         </td>
                       </tr>
@@ -655,7 +706,7 @@ export default function ReportesPage() {
                         </span>
                       )}
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
                       <div>
                         <div className="text-gray-500">Ventas</div>
                         <div className="font-medium text-gray-800">{fmt(draw.totalSales)}</div>
@@ -665,9 +716,13 @@ export default function ReportesPage() {
                         <div className="font-medium text-red-600">{fmt(draw.totalPrize)}</div>
                       </div>
                       <div>
-                        <div className="text-gray-500">Balance</div>
-                        <div className={`font-bold ${draw.balance >= 0 ? 'text-green-600' : 'text-red-500'}`}>
-                          {fmt(draw.balance)}
+                        <div className="text-gray-500">Comisión</div>
+                        <div className="font-medium text-amber-700">{fmt(draw.commission)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-500 font-semibold">Neto</div>
+                        <div className={`font-bold ${(draw.net ?? 0) >= 0 ? 'text-green-600' : 'text-red-500'}`}>
+                          {fmt(draw.net)}
                         </div>
                       </div>
                     </div>
