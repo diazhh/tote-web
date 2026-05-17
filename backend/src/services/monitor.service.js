@@ -758,8 +758,12 @@ class MonitorService {
         };
       }
 
-      const fromDate = new Date(fromDateStr + 'T00:00:00.000Z');
-      const toDate   = new Date(toDateStr   + 'T00:00:00.000Z');
+      // F-X — comparar como ::date para evitar shift por TZ del servidor.
+      // `drawDate` es DATE; pasar un Date JS (timestamptz) hace que Postgres
+      // case el date a timestamp en TZ del server (e.g. CEST → 22:00 UTC del día anterior),
+      // produciendo rangos vacíos cuando dateFrom == dateTo.
+      const fromDate = fromDateStr;
+      const toDate   = toDateStr;
 
       // Resolve apiSystem filter via the shared helper (same as legacy).
       const resolved = await resolveApiSystemFilter(apiSystemId);
@@ -800,8 +804,8 @@ class MonitorService {
         JOIN   "Game" g          ON g.id = d."gameId"
         LEFT JOIN "GameItem" wi  ON wi.id = d."winnerItemId"
         LEFT JOIN "DrawFinancial" df ON df."drawId" = d.id
-        WHERE  d."drawDate" >= ${fromDate}
-          AND  d."drawDate" <= ${toDate}
+        WHERE  d."drawDate" >= ${fromDate}::date
+          AND  d."drawDate" <= ${toDate}::date
           ${gameFilter}
           ${pullDrawFilter}
         ORDER  BY d."drawDate" ASC, d."drawTime" ASC
