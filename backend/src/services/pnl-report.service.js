@@ -85,12 +85,20 @@ class PnlReportService {
       const isProviderFiltered = !!apiSystemId;
 
       // ── Parallel data fetch ────────────────────────────────────────
+      // weekCommissions: sumar del ledger en vivo (refleja cada totalización
+      // inmediatamente). ProviderWeeklySettlement queda como tabla de
+      // "liquidación congelada" pero NO es la fuente del reporte.
       const [drawAggRows, commissionsAgg, settlementIdRows, expensesAgg, expenseIdRows, otherIncomeAgg, otherIncomeIdRows, rateRow] = await Promise.all([
         this._fetchDrawAggregate({ windowStartUtc, windowEndUtc, apiSystemId }),
-        prisma.providerWeeklySettlement.aggregate({
-          where: { isoYear, isoWeek, ...(apiSystemId && { apiSystemId }) },
-          _sum: { amount: true },
-        }),
+        prisma.$queryRaw`
+          SELECT COALESCE(SUM(pcl.amount), 0)::numeric(18,8) AS amount
+          FROM   "ProviderCommissionLedger" pcl
+          JOIN   "Draw" d ON d.id = pcl."drawId"
+          WHERE  d."drawnAt" >= ${windowStartUtc}
+            AND  d."drawnAt" <  ${windowEndUtc}
+            AND  d."drawnAt" IS NOT NULL
+            ${apiSystemId ? Prisma.sql`AND pcl."apiSystemId" = ${apiSystemId}` : Prisma.empty}
+        `,
         prisma.providerWeeklySettlement.findMany({
           where: { isoYear, isoWeek, ...(apiSystemId && { apiSystemId }) },
           select: { id: true },
@@ -132,8 +140,9 @@ class PnlReportService {
       const weekPrizes = new Decimal((drawAgg.weekPrizes ?? 0).toString());
       const weekGrossUtility = weekIncome.minus(weekPrizes);
 
+      // commissionsAgg ahora viene del $queryRaw como [{amount}] (no _sum.amount).
       const weekCommissions = new Decimal(
-        (commissionsAgg?._sum?.amount ?? 0).toString(),
+        (commissionsAgg?.[0]?.amount ?? 0).toString(),
       );
 
       let weekExpenses = null;     // null when provider-filtered (D-04)
@@ -343,26 +352,26 @@ class PnlReportService {
 
     if (rows.length === 0) return [];
 
-    // One settlement lookup per provider — bounded by O(providers) ≤ 10.
-    const apiSystemIds = rows.map((r) => r.apiSystemId).filter((id) => id !== null);
-    const settlements = apiSystemIds.length > 0
-      ? await prisma.providerWeeklySettlement.findMany({
-          where: {
-            isoYear,
-            isoWeek,
-            apiSystemId: { in: apiSystemIds },
-          },
-          select: { apiSystemId: true, amount: true },
-        })
-      : [];
-    const settlementByProvider = new Map(
-      settlements.map((s) => [s.apiSystemId, new Decimal(s.amount.toString())]),
+    // Comisión en vivo: sumar ProviderCommissionLedger del rango por provider.
+    // Refleja inmediatamente cada totalización; no depende del weekly snapshot.
+    const commissionRows = await prisma.$queryRaw`
+      SELECT pcl."apiSystemId"                                  AS "apiSystemId",
+             COALESCE(SUM(pcl.amount), 0)::numeric(18,8)         AS amount
+      FROM   "ProviderCommissionLedger" pcl
+      JOIN   "Draw" d ON d.id = pcl."drawId"
+      WHERE  d."drawnAt" >= ${windowStartUtc}
+        AND  d."drawnAt" <  ${windowEndUtc}
+        AND  d."drawnAt" IS NOT NULL
+      GROUP  BY pcl."apiSystemId"
+    `;
+    const commissionByProvider = new Map(
+      commissionRows.map((r) => [r.apiSystemId, new Decimal((r.amount ?? 0).toString())]),
     );
 
     return rows.map((r) => {
       const income = new Decimal((r.weekIncome ?? 0).toString());
       const prizes = new Decimal((r.weekPrizes ?? 0).toString());
-      const commission = settlementByProvider.get(r.apiSystemId) ?? new Decimal(0);
+      const commission = commissionByProvider.get(r.apiSystemId) ?? new Decimal(0);
       const net = income.minus(prizes).minus(commission);
       return {
         apiSystemId:   r.apiSystemId, // null = Taquilla / Online bucket

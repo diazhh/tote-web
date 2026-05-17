@@ -194,13 +194,14 @@ export const computeAndUpsertPrizes = async (drawId, totalizedAt) => {
     GROUP  BY t."apiSystemId"
   `;
 
-  // ----- 4. Upsert DrawFinancial: write totalPrize, utility, totalizedAt.
-  //          Do NOT overwrite closedAt (preserves the value written by phase SALES).
-  //          The create branch is only hit if PRIZES runs without SALES ever firing —
-  //          should be impossible in normal pipeline order but the upsert stays idempotent. -----
+  // ----- 4. Upsert DrawFinancial: write totalSales, totalPrize, utility,
+  //          ticketCount, totalizedAt. Re-escribir sales+ticketCount aquí
+  //          captura los tickets late-arriving entre SALES y PRIZES (sync 5min
+  //          de SRQ/Maxplay puede traer tickets después del cierre).
+  //          NO sobreescribe closedAt (lo preserva SALES). -----
   await prisma.drawFinancial.upsert({
     where: { drawId },
-    update: { totalPrize, utility, totalizedAt },
+    update: { totalSales, totalPrize, utility, ticketCount, totalizedAt },
     create: {
       drawId,
       totalSales,
@@ -212,9 +213,9 @@ export const computeAndUpsertPrizes = async (drawId, totalizedAt) => {
     },
   });
 
-  // ----- 5. Per-provider prize upserts via D-08 pattern. Update totalPrize only;
-  //          leave totalSales/ticketCount alone (already populated by phase SALES,
-  //          re-aggregation matches the same snapshot anyway). -----
+  // ----- 5. Per-provider upserts via D-08 pattern. Re-escribir totalSales y
+  //          ticketCount además del totalPrize — captura tickets late-arriving
+  //          igual que el upsert de DrawFinancial arriba. -----
   for (const row of byProvider) {
     const apiSystemId = row.apiSystemId ?? null;
     const existing = await prisma.drawFinancialProvider.findFirst({
@@ -223,7 +224,11 @@ export const computeAndUpsertPrizes = async (drawId, totalizedAt) => {
     if (existing) {
       await prisma.drawFinancialProvider.update({
         where: { id: existing.id },
-        data: { totalPrize: row.totalPrize },
+        data: {
+          totalSales: row.totalSales,
+          totalPrize: row.totalPrize,
+          ticketCount: row.ticketCount,
+        },
       });
     } else {
       // Defensive — provider absent at SALES time but present here. Create with full set.

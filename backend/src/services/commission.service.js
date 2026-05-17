@@ -252,6 +252,25 @@ export async function computeAndUpsertLedgerForDraw(drawId) {
     providersProcessed++;
   }
 
+  // Materializar la comisión total del sorteo en DrawFinancial.commission para
+  // que /admin/reportes pueda leerla en un SELECT directo sin recomputar.
+  // Best-effort: si DrawFinancial no existe (caso defensivo), no se rompe.
+  try {
+    const sumRows = await prisma.providerCommissionLedger.aggregate({
+      where: { drawId },
+      _sum: { amount: true },
+    });
+    const totalCommission = new Decimal((sumRows._sum.amount ?? 0).toString()).toFixed(2);
+    await prisma.drawFinancial.update({
+      where: { drawId },
+      data: { commission: totalCommission },
+    });
+  } catch (err) {
+    logger.warn(
+      `[commission] DrawFinancial.commission update fallido drawId=${drawId}: ${err.message}`,
+    );
+  }
+
   logger.info(
     `[commission] computeAndUpsertLedgerForDraw drawId=${drawId} processed=${providersProcessed} skipped=${skipped}`,
   );

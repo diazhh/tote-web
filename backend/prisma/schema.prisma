@@ -1194,6 +1194,7 @@ model DrawFinancial {
   totalSales  Decimal @default(0) @db.Decimal(12, 2) // Σ TicketDetail.amount where Ticket.status != CANCELLED
   totalPrize  Decimal @default(0) @db.Decimal(12, 2) // Σ TicketDetail.prize (post phase PRIZES)
   utility     Decimal @default(0) @db.Decimal(12, 2) // totalSales - totalPrize
+  commission  Decimal @default(0) @db.Decimal(12, 2) // Σ ProviderCommissionLedger.amount para este sorteo (escrito por commission worker post-PRIZES)
   ticketCount Int     @default(0) // COUNT DISTINCT ticketId
 
   // Timestamps de las dos fases del worker

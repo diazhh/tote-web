@@ -799,6 +799,7 @@ class MonitorService {
                wi.name                                               AS "winnerName",
                COALESCE(df."totalSales", 0)::numeric(12,2)           AS "totalSales",
                COALESCE(df."totalPrize", 0)::numeric(12,2)           AS "totalPrize",
+               COALESCE(df."commission", 0)::numeric(12,2)           AS "commission",
                COALESCE(df."ticketCount", 0)::int                    AS "ticketCount"
         FROM   "Draw" d
         JOIN   "Game" g          ON g.id = d."gameId"
@@ -812,8 +813,9 @@ class MonitorService {
       `;
 
       // If a PUSH/SCRAPE apiSystem filter is active, replace the per-draw totals with
-      // the provider-specific aggregate from DrawFinancialProvider.
+      // the provider-specific aggregate from DrawFinancialProvider + Ledger.
       let providerOverride = null;
+      let providerCommissionByDraw = null;
       if (apiSystemId && resolved.pushProviderFilter) {
         const drawIds = rows.map((r) => r.drawId);
         if (drawIds.length > 0) {
@@ -822,8 +824,18 @@ class MonitorService {
             select: { drawId: true, totalSales: true, totalPrize: true, ticketCount: true },
           });
           providerOverride = new Map(providerRows.map((p) => [p.drawId, p]));
+          // Commission specific to this provider — sum ledger filtered.
+          const commRows = await prisma.providerCommissionLedger.groupBy({
+            by: ['drawId'],
+            where: { apiSystemId, drawId: { in: drawIds } },
+            _sum: { amount: true },
+          });
+          providerCommissionByDraw = new Map(
+            commRows.map((c) => [c.drawId, parseFloat((c._sum.amount ?? 0).toString())]),
+          );
         } else {
           providerOverride = new Map();
+          providerCommissionByDraw = new Map();
         }
       }
 
@@ -841,11 +853,27 @@ class MonitorService {
               ...(apiSystemId && resolved.pushProviderFilter ? { apiSystemId } : {}),
             },
             select: {
-              drawId: true, apiSystemId: true, totalSales: true, ticketCount: true,
+              drawId: true, apiSystemId: true, totalSales: true, totalPrize: true, ticketCount: true,
               apiSystem: { select: { mode: true } },
             },
           })
         : [];
+
+      // Commission por (drawId, apiSystemId) — sumar del ledger para alimentar bySource.
+      const commissionByDrawAndProvider = new Map();
+      if (drawIds.length > 0) {
+        const commRows = await prisma.providerCommissionLedger.groupBy({
+          by: ['drawId', 'apiSystemId'],
+          where: { drawId: { in: drawIds } },
+          _sum: { amount: true },
+        });
+        for (const c of commRows) {
+          commissionByDrawAndProvider.set(
+            `${c.drawId}::${c.apiSystemId}`,
+            parseFloat((c._sum.amount ?? 0).toString()),
+          );
+        }
+      }
 
       const bySourceMap = {};
       for (const row of providerAgg) {
@@ -862,11 +890,20 @@ class MonitorService {
             apiSystemId: sysId,
             apiSystemName: null,
             totalSales: 0,
+            totalPrize: 0,
+            totalCommission: 0,
+            totalNet: 0,
             ticketCount: 0,
           };
         }
-        bySourceMap[key].totalSales  += parseFloat(row.totalSales);
-        bySourceMap[key].ticketCount += row.ticketCount;
+        const sales = parseFloat(row.totalSales);
+        const prize = parseFloat(row.totalPrize);
+        const comm  = commissionByDrawAndProvider.get(`${row.drawId}::${row.apiSystemId}`) ?? 0;
+        bySourceMap[key].totalSales      += sales;
+        bySourceMap[key].totalPrize      += prize;
+        bySourceMap[key].totalCommission += comm;
+        bySourceMap[key].totalNet        += sales - prize - comm;
+        bySourceMap[key].ticketCount     += row.ticketCount;
       }
       await this._enrichBySourceWithProviderNames(bySourceMap);
 
@@ -875,8 +912,9 @@ class MonitorService {
       const byGameMap = {};
 
       for (const row of rows) {
-        let totalSales = parseFloat(row.totalSales);
-        let totalPrize = parseFloat(row.totalPrize);
+        let totalSales  = parseFloat(row.totalSales);
+        let totalPrize  = parseFloat(row.totalPrize);
+        let commission  = parseFloat(row.commission);
         let ticketCount = parseInt(row.ticketCount, 10);
 
         if (providerOverride) {
@@ -885,14 +923,17 @@ class MonitorService {
             totalSales  = parseFloat(override.totalSales);
             totalPrize  = parseFloat(override.totalPrize);
             ticketCount = override.ticketCount;
+            commission  = providerCommissionByDraw.get(row.drawId) ?? 0;
           } else {
-            totalSales = 0;
-            totalPrize = 0;
+            totalSales  = 0;
+            totalPrize  = 0;
+            commission  = 0;
             ticketCount = 0;
           }
         }
 
         const balance = totalSales - totalPrize;
+        const net     = balance - commission;
 
         report.push({
           drawId:      row.drawId,
@@ -904,35 +945,43 @@ class MonitorService {
           winnerItem:  row.winnerItemId ? { number: row.winnerNumber, name: row.winnerName } : null,
           totalSales,
           totalPrize,
+          commission,
           balance,
+          net,
           ticketCount,
         });
 
         if (!byGameMap[row.gameId]) {
           byGameMap[row.gameId] = {
-            gameId:       row.gameId,
-            game:         row.game,
-            totalSales:   0,
-            totalPrize:   0,
-            totalBalance: 0,
-            totalTickets: 0,
-            drawCount:    0,
+            gameId:          row.gameId,
+            game:            row.game,
+            totalSales:      0,
+            totalPrize:      0,
+            totalCommission: 0,
+            totalBalance:    0,
+            totalNet:        0,
+            totalTickets:    0,
+            drawCount:       0,
           };
         }
         const g = byGameMap[row.gameId];
-        g.totalSales   += totalSales;
-        g.totalPrize   += totalPrize;
-        g.totalBalance += balance;
-        g.totalTickets += ticketCount;
+        g.totalSales      += totalSales;
+        g.totalPrize      += totalPrize;
+        g.totalCommission += commission;
+        g.totalBalance    += balance;
+        g.totalNet        += net;
+        g.totalTickets    += ticketCount;
         g.drawCount++;
       }
 
       const totals = {
-        totalSales:   report.reduce((sum, r) => sum + r.totalSales,  0),
-        totalPrize:   report.reduce((sum, r) => sum + r.totalPrize,  0),
-        totalBalance: report.reduce((sum, r) => sum + r.balance,     0),
-        totalTickets: report.reduce((sum, r) => sum + r.ticketCount, 0),
-        drawCount:    report.length,
+        totalSales:      report.reduce((sum, r) => sum + r.totalSales,  0),
+        totalPrize:      report.reduce((sum, r) => sum + r.totalPrize,  0),
+        totalCommission: report.reduce((sum, r) => sum + r.commission,  0),
+        totalBalance:    report.reduce((sum, r) => sum + r.balance,     0),
+        totalNet:        report.reduce((sum, r) => sum + r.net,         0),
+        totalTickets:    report.reduce((sum, r) => sum + r.ticketCount, 0),
+        drawCount:       report.length,
       };
 
       return {
