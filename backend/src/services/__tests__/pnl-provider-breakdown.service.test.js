@@ -8,7 +8,8 @@
  *   2. SALES_AND_UTILITY_PCT — sales+utility commission per game, totals, net to house
  *   3. UTILITY_PCT only — salesRate/salesCommission null, utility math
  *   4. SALES_PCT only — utilityRate/utilityCommission null, sales math
- *   (More cases added in Tasks 4-5.)
+ *   5. Missing config — configMissing flag + warning emitted, commission=0
+ *   6. Negative gross with utilityRate — utility component reduces commission, warning emitted
  */
 
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
@@ -158,5 +159,48 @@ describe('getProviderBreakdownForWeek — SALES_PCT only', () => {
     expect(row.utilityCommission).toBeNull();
     expect(row.totalCommission).toBe('40.00');
     expect(row.netToHouse).toBe('360.00');
+  });
+});
+
+describe('getProviderBreakdownForWeek — warnings', () => {
+  test('emits warning when no config vigente for a game', async () => {
+    mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'p1', name: 'Prov' });
+    mockPrisma.$queryRaw.mockResolvedValueOnce([
+      { gameId: 'g1', gameName: 'JUEGO X', sales: '1000', prizes: '500' },
+    ]);
+    mockPrisma.providerCommissionConfig.findFirst.mockResolvedValue(null);
+
+    const out = await service.getProviderBreakdownForWeek({
+      apiSystemId: 'p1', isoYear: 2026, isoWeek: 21,
+    });
+
+    expect(out.byGame[0].configMissing).toBe(true);
+    expect(out.byGame[0].totalCommission).toBe('0.00');
+    expect(out.byGame[0].netToHouse).toBe('500.00');
+    expect(out.warnings).toContain('Sin config vigente para: JUEGO X');
+  });
+
+  test('emits warning when gross is negative and utilityRate is set', async () => {
+    mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'p1', name: 'Maxplay' });
+    mockPrisma.$queryRaw.mockResolvedValueOnce([
+      { gameId: 'g1', gameName: 'TRIPLE PANTERA', sales: '17595.00', prizes: '30100.00' },
+    ]);
+    mockPrisma.providerCommissionConfig.findFirst.mockResolvedValueOnce({
+      id: 'c1', formulaType: 'SALES_AND_UTILITY_PCT',
+      salesRate: '26.00', utilityRate: '35.00',
+      effectiveFrom: new Date('2026-05-04'),
+      gameId: 'g1', tiers: [],
+    });
+
+    const out = await service.getProviderBreakdownForWeek({
+      apiSystemId: 'p1', isoYear: 2026, isoWeek: 21,
+    });
+
+    expect(out.byGame[0].gross).toBe('-12505.00');
+    expect(out.byGame[0].utilityCommission).toBe('-4376.75');
+    expect(out.byGame[0].totalCommission).toBe('197.95');
+    expect(out.warnings).toContain(
+      'Utilidad negativa en TRIPLE PANTERA: el componente de utilidad redujo la comisión'
+    );
   });
 });
