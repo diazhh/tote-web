@@ -10,6 +10,7 @@
  *   4. SALES_PCT only — utilityRate/utilityCommission null, sales math
  *   5. Missing config — configMissing flag + warning emitted, commission=0
  *   6. Negative gross with utilityRate — utility component reduces commission, warning emitted
+ *   7. Configs grouping — games sharing identical formula+rates+effectiveFrom collapse into one entry
  */
 
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
@@ -202,5 +203,43 @@ describe('getProviderBreakdownForWeek — warnings', () => {
     expect(out.warnings).toContain(
       'Utilidad negativa en TRIPLE PANTERA: el componente de utilidad redujo la comisión'
     );
+  });
+});
+
+describe('getProviderBreakdownForWeek — configs grouping', () => {
+  test('groups games sharing identical formula+rates+effectiveFrom into one entry', async () => {
+    mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'p1', name: 'SRQ' });
+    mockPrisma.$queryRaw.mockResolvedValueOnce([
+      { gameId: 'g1', gameName: 'LOTOANIMALITO', sales: '100', prizes: '50' },
+      { gameId: 'g2', gameName: 'LOTTOPANTERA', sales: '100', prizes: '50' },
+      { gameId: 'g3', gameName: 'TRIPLE PANTERA', sales: '100', prizes: '50' },
+    ]);
+    const sameDate = new Date('2025-12-20');
+    mockPrisma.providerCommissionConfig.findFirst
+      .mockResolvedValueOnce({
+        id: 'c1', formulaType: 'SALES_AND_UTILITY_PCT',
+        salesRate: '16.00', utilityRate: '30.00',
+        effectiveFrom: sameDate, gameId: 'g1', tiers: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'c2', formulaType: 'SALES_AND_UTILITY_PCT',
+        salesRate: '16.00', utilityRate: '30.00',
+        effectiveFrom: sameDate, gameId: 'g2', tiers: [],
+      })
+      .mockResolvedValueOnce({
+        id: 'c3', formulaType: 'SALES_AND_UTILITY_PCT',
+        salesRate: '25.00', utilityRate: '30.00',
+        effectiveFrom: sameDate, gameId: 'g3', tiers: [],
+      });
+
+    const out = await service.getProviderBreakdownForWeek({
+      apiSystemId: 'p1', isoYear: 2026, isoWeek: 21,
+    });
+
+    expect(out.configs).toHaveLength(2);
+    const sixteen = out.configs.find((c) => c.salesRate === '16.00');
+    expect(sixteen.gameNames).toEqual(['LOTOANIMALITO', 'LOTTOPANTERA']);
+    const twentyFive = out.configs.find((c) => c.salesRate === '25.00');
+    expect(twentyFive.gameNames).toEqual(['TRIPLE PANTERA']);
   });
 });
