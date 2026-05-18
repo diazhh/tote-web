@@ -53,6 +53,123 @@ export async function getProviderBreakdownForWeek({ apiSystemId, isoYear, isoWee
     ORDER BY g.name
   `;
 
+  const byGame = [];
+  const totals = {
+    sales: new Decimal(0),
+    prizes: new Decimal(0),
+    gross: new Decimal(0),
+    salesCommission: new Decimal(0),
+    utilityCommission: new Decimal(0),
+    totalCommission: new Decimal(0),
+    netToHouse: new Decimal(0),
+  };
+  const warnings = [];
+  const configsByKey = new Map();
+
+  // Refdate para findEffectiveConfig: último instante de la semana.
+  const refDate = new Date(windowEndUtc.getTime() - 1);
+
+  for (const row of rows) {
+    const sales = new Decimal((row.sales ?? 0).toString());
+    const prizes = new Decimal((row.prizes ?? 0).toString());
+    const gross = sales.minus(prizes);
+
+    const config = await findEffectiveConfig(apiSystemId, refDate, row.gameId);
+
+    let salesRate = null;
+    let utilityRate = null;
+    let salesCommission = null;
+    let utilityCommission = null;
+    let totalCommission = new Decimal(0);
+    let tierLabel = null;
+    const configMissing = !config;
+
+    if (config) {
+      const ft = config.formulaType;
+      if (ft === 'SALES_PCT' || ft === 'SALES_AND_UTILITY_PCT') {
+        salesRate = new Decimal(config.salesRate.toString()).toFixed(2);
+        salesCommission = sales.times(config.salesRate.toString()).dividedBy(100);
+      }
+      if (ft === 'UTILITY_PCT' || ft === 'SALES_AND_UTILITY_PCT') {
+        utilityRate = new Decimal(config.utilityRate.toString()).toFixed(2);
+        utilityCommission = gross.times(config.utilityRate.toString()).dividedBy(100);
+      }
+      if (ft === 'TIERED') {
+        const cumulative = await getCumulativeWeeklySales(apiSystemId, refDate);
+        const cum = new Decimal(cumulative);
+        const bracket = (config.tiers || []).find((t) => {
+          const min = new Decimal(t.minSales.toString());
+          if (cum.lt(min)) return false;
+          if (t.maxSales == null) return true;
+          return cum.lt(new Decimal(t.maxSales.toString()));
+        });
+        if (bracket) {
+          salesRate = new Decimal(bracket.rate.toString()).toFixed(2);
+          salesCommission = sales.times(bracket.rate.toString()).dividedBy(100);
+          const maxLabel = bracket.maxSales == null ? '∞' : bracket.maxSales.toString();
+          tierLabel = `${salesRate}% — tramo [${bracket.minSales.toString()}, ${maxLabel})`;
+        }
+      }
+
+      totalCommission = (salesCommission ?? new Decimal(0)).plus(utilityCommission ?? new Decimal(0));
+
+      const key = `${config.formulaType}|${config.salesRate?.toString() ?? ''}|${config.utilityRate?.toString() ?? ''}|${config.effectiveFrom?.toISOString?.() ?? config.effectiveFrom}`;
+      if (!configsByKey.has(key)) {
+        configsByKey.set(key, {
+          gameIds: [],
+          gameNames: [],
+          formulaType: config.formulaType,
+          salesRate: config.salesRate != null ? new Decimal(config.salesRate.toString()).toFixed(2) : null,
+          utilityRate: config.utilityRate != null ? new Decimal(config.utilityRate.toString()).toFixed(2) : null,
+          tiers: (config.tiers || []).map((t) => ({
+            minSales: t.minSales.toString(),
+            maxSales: t.maxSales == null ? null : t.maxSales.toString(),
+            rate: new Decimal(t.rate.toString()).toFixed(2),
+          })),
+          effectiveFrom: config.effectiveFrom instanceof Date
+            ? config.effectiveFrom.toISOString().slice(0, 10)
+            : String(config.effectiveFrom).slice(0, 10),
+        });
+      }
+      const bucket = configsByKey.get(key);
+      bucket.gameIds.push(row.gameId);
+      bucket.gameNames.push(row.gameName);
+    } else {
+      warnings.push(`Sin config vigente para: ${row.gameName}`);
+    }
+
+    if (utilityCommission && gross.isNegative() && utilityRate) {
+      warnings.push(`Utilidad negativa en ${row.gameName}: el componente de utilidad redujo la comisión`);
+    }
+
+    const netToHouse = gross.minus(totalCommission);
+
+    byGame.push({
+      gameId: row.gameId,
+      gameName: row.gameName,
+      sales: sales.toFixed(2),
+      prizes: prizes.toFixed(2),
+      gross: gross.toFixed(2),
+      formulaType: config?.formulaType ?? null,
+      salesRate,
+      salesCommission: salesCommission ? salesCommission.toFixed(2) : null,
+      utilityRate,
+      utilityCommission: utilityCommission ? utilityCommission.toFixed(2) : null,
+      totalCommission: totalCommission.toFixed(2),
+      netToHouse: netToHouse.toFixed(2),
+      configMissing,
+      tierLabel,
+    });
+
+    totals.sales = totals.sales.plus(sales);
+    totals.prizes = totals.prizes.plus(prizes);
+    totals.gross = totals.gross.plus(gross);
+    if (salesCommission) totals.salesCommission = totals.salesCommission.plus(salesCommission);
+    if (utilityCommission) totals.utilityCommission = totals.utilityCommission.plus(utilityCommission);
+    totals.totalCommission = totals.totalCommission.plus(totalCommission);
+    totals.netToHouse = totals.netToHouse.plus(netToHouse);
+  }
+
   return {
     isoYear,
     isoWeek,
@@ -60,17 +177,17 @@ export async function getProviderBreakdownForWeek({ apiSystemId, isoYear, isoWee
     weekEnd: new Date(windowEndUtc.getTime() - 1).toISOString().slice(0, 10),
     apiSystemId: apiSystem.id,
     apiSystemName: apiSystem.name,
-    configs: [],
-    byGame: [],
+    configs: Array.from(configsByKey.values()),
+    byGame,
     totals: {
-      sales: fmt(0),
-      prizes: fmt(0),
-      gross: fmt(0),
-      salesCommission: fmt(0),
-      utilityCommission: fmt(0),
-      totalCommission: fmt(0),
-      netToHouse: fmt(0),
+      sales: totals.sales.toFixed(2),
+      prizes: totals.prizes.toFixed(2),
+      gross: totals.gross.toFixed(2),
+      salesCommission: totals.salesCommission.toFixed(2),
+      utilityCommission: totals.utilityCommission.toFixed(2),
+      totalCommission: totals.totalCommission.toFixed(2),
+      netToHouse: totals.netToHouse.toFixed(2),
     },
-    warnings: [],
+    warnings,
   };
 }
