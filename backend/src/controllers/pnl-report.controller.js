@@ -70,6 +70,46 @@ class PnlReportController {
   }
 
   /**
+   * GET /api/reportes/pnl/semanal/provider-breakdown
+   * Requires apiSystemId; per-game commission breakdown for the ISO week.
+   */
+  async getProviderBreakdown(req, res) {
+    try {
+      const params = validateWeekParams(req.query);
+      if (!params.apiSystemId) {
+        return res.status(400).json({
+          success: false,
+          error: 'apiSystemId es requerido para el desglose por proveedor',
+        });
+      }
+      const { getProviderBreakdownForWeek } = await import(
+        '../services/pnl-provider-breakdown.service.js'
+      );
+      const data = await getProviderBreakdownForWeek({
+        apiSystemId: params.apiSystemId,
+        isoYear: params.isoYear,
+        isoWeek: params.isoWeek,
+      });
+      res.json({ success: true, data });
+    } catch (error) {
+      if (error.statusCode === 400) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+      if (error.statusCode === 404) {
+        return res.status(404).json({ success: false, error: error.message });
+      }
+      logger.error('[pnl-report.controller] getProviderBreakdown failed', {
+        error: error?.message,
+        stack: error?.stack,
+      });
+      res.status(500).json({
+        success: false,
+        error: 'Error obteniendo desglose de comisión por proveedor',
+      });
+    }
+  }
+
+  /**
    * GET /api/reportes/pnl/semanal/excel
    */
   async downloadPnlExcel(req, res) {
