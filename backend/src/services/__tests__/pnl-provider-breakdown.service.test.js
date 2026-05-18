@@ -6,7 +6,9 @@
  * Coverage:
  *   1. Empty week → empty byGame, zero totals, no warnings
  *   2. SALES_AND_UTILITY_PCT — sales+utility commission per game, totals, net to house
- *   (More cases added in Tasks 3-5.)
+ *   3. UTILITY_PCT only — salesRate/salesCommission null, utility math
+ *   4. SALES_PCT only — utilityRate/utilityCommission null, sales math
+ *   (More cases added in Tasks 4-5.)
  */
 
 import { jest, describe, test, expect, beforeAll, beforeEach } from '@jest/globals';
@@ -103,5 +105,58 @@ describe('getProviderBreakdownForWeek — SALES_AND_UTILITY_PCT', () => {
     expect(out.totals.totalCommission).toBe('26512.05');
     expect(out.totals.netToHouse).toBe('14807.94');
     expect(out.warnings).toEqual([]);
+  });
+});
+
+describe('getProviderBreakdownForWeek — UTILITY_PCT only', () => {
+  test('emits salesRate=null, computes utility commission from gross', async () => {
+    mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'p2', name: 'virtuales' });
+    mockPrisma.$queryRaw.mockResolvedValueOnce([
+      { gameId: 'g1', gameName: 'LOTOANIMALITO', sales: '32843.00', prizes: '22200.00' },
+    ]);
+    mockPrisma.providerCommissionConfig.findFirst.mockResolvedValueOnce({
+      id: 'c1', formulaType: 'UTILITY_PCT',
+      salesRate: null, utilityRate: '70.00',
+      effectiveFrom: new Date('2026-04-07'),
+      gameId: null, tiers: [],
+    });
+
+    const out = await service.getProviderBreakdownForWeek({
+      apiSystemId: 'p2', isoYear: 2026, isoWeek: 21,
+    });
+
+    const row = out.byGame[0];
+    expect(row.salesRate).toBeNull();
+    expect(row.salesCommission).toBeNull();
+    expect(row.utilityRate).toBe('70.00');
+    expect(row.utilityCommission).toBe('7450.10');
+    expect(row.totalCommission).toBe('7450.10');
+    expect(row.netToHouse).toBe('3192.90');
+  });
+});
+
+describe('getProviderBreakdownForWeek — SALES_PCT only', () => {
+  test('emits utilityRate=null, computes sales commission only', async () => {
+    mockPrisma.apiSystem.findUnique.mockResolvedValue({ id: 'p3', name: 'Some' });
+    mockPrisma.$queryRaw.mockResolvedValueOnce([
+      { gameId: 'g1', gameName: 'LOTTOPANTERA', sales: '500.00', prizes: '100.00' },
+    ]);
+    mockPrisma.providerCommissionConfig.findFirst.mockResolvedValueOnce({
+      id: 'c1', formulaType: 'SALES_PCT',
+      salesRate: '8.00', utilityRate: null,
+      effectiveFrom: new Date('2026-01-01'),
+      gameId: null, tiers: [],
+    });
+
+    const out = await service.getProviderBreakdownForWeek({
+      apiSystemId: 'p3', isoYear: 2026, isoWeek: 21,
+    });
+    const row = out.byGame[0];
+    expect(row.salesRate).toBe('8.00');
+    expect(row.salesCommission).toBe('40.00');
+    expect(row.utilityRate).toBeNull();
+    expect(row.utilityCommission).toBeNull();
+    expect(row.totalCommission).toBe('40.00');
+    expect(row.netToHouse).toBe('360.00');
   });
 });
