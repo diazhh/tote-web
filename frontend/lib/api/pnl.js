@@ -70,6 +70,18 @@ const pnlAPI = {
   },
 
   /**
+   * Fetch the per-provider commission breakdown for a single ISO week.
+   * Used to render the provider drill-down view alongside getWeeklyPnl.
+   * @param {{isoYear: number, isoWeek: number, apiSystemId?: string|null}} params
+   * @returns {Promise<object>} response.data (the API envelope; consumers read `.data`)
+   */
+  getProviderBreakdown: async (params) => {
+    const sp = buildParams(params);
+    const response = await api.get(`/reportes/pnl/semanal/provider-breakdown?${sp.toString()}`);
+    return response.data;
+  },
+
+  /**
    * Download the weekly P&L Excel workbook (xlsx). Triggers a Blob save
    * via a transient <a download> click. Uses the authenticated axios
    * instance so the Authorization header is attached by the interceptor.
