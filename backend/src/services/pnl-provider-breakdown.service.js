@@ -1,10 +1,13 @@
 /**
  * Desglose de comisión por proveedor para una semana ISO.
  *
- * Reusa commission.service.js para mantener una única fuente de verdad sobre
- * las fórmulas. Las cantidades de comisión calculadas aquí DEBEN coincidir
- * (al céntimo) con SUM(ProviderCommissionLedger.amount) para los sorteos de
- * la semana — si difieren agregamos warning, no bloqueamos.
+ * A diferencia de `commission.service.js#computeCommission`, que retorna un
+ * único monto total, este módulo necesita el desglose por componente
+ * (com. ventas + com. utilidad) para la UI. Por eso la fórmula se aplica
+ * inline, no reusando computeCommission. La aritmética sigue las mismas
+ * reglas y debe cuadrar al céntimo con `SUM(ProviderCommissionLedger.amount)`
+ * para los sorteos de la semana — si difieren agregamos un warning, no
+ * bloqueamos.
  *
  * @module pnl-provider-breakdown.service
  */
@@ -14,14 +17,108 @@ import logger from '../lib/logger.js';
 import { getMondayOfISOWeek } from '../lib/dateUtils.js';
 import {
   findEffectiveConfig,
-  computeCommission,
   getCumulativeWeeklySales,
 } from './commission.service.js';
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-function fmt(dec) {
-  return new Decimal(dec ?? 0).toFixed(2);
+/**
+ * Compute the per-row commission breakdown given a row's sales/prizes/gross
+ * and the effective config. Returns `{ salesRate, utilityRate, salesCommission,
+ * utilityCommission, totalCommission, tierLabel }` where amounts are Decimal
+ * (or null), rates are strings (or null), and tierLabel is string (or null).
+ *
+ * When `config == null`, returns all-null amounts/rates and a zero
+ * totalCommission so the no-config path remains arithmetically harmless.
+ */
+function computeRowBreakdown(sales, prizes, gross, config, cumulativeWeeklySales) {
+  let salesRate = null;
+  let utilityRate = null;
+  let salesCommission = null;
+  let utilityCommission = null;
+  let tierLabel = null;
+
+  if (!config) {
+    return {
+      salesRate,
+      utilityRate,
+      salesCommission,
+      utilityCommission,
+      totalCommission: new Decimal(0),
+      tierLabel,
+    };
+  }
+
+  const ft = config.formulaType;
+  if (ft === 'SALES_PCT' || ft === 'SALES_AND_UTILITY_PCT') {
+    salesRate = new Decimal(config.salesRate.toString()).toFixed(2);
+    salesCommission = sales.times(config.salesRate.toString()).dividedBy(100);
+  }
+  if (ft === 'UTILITY_PCT' || ft === 'SALES_AND_UTILITY_PCT') {
+    utilityRate = new Decimal(config.utilityRate.toString()).toFixed(2);
+    utilityCommission = gross.times(config.utilityRate.toString()).dividedBy(100);
+  }
+  if (ft === 'TIERED') {
+    const cum = new Decimal(cumulativeWeeklySales);
+    const bracket = (config.tiers || []).find((t) => {
+      const min = new Decimal(t.minSales.toString());
+      if (cum.lt(min)) return false;
+      if (t.maxSales == null) return true;
+      return cum.lt(new Decimal(t.maxSales.toString()));
+    });
+    if (!bracket) {
+      throw new Error(
+        `No matching TIERED bracket for cumulative weekly sales ${cum.toString()}`
+      );
+    }
+    salesRate = new Decimal(bracket.rate.toString()).toFixed(2);
+    salesCommission = sales.times(bracket.rate.toString()).dividedBy(100);
+    const maxLabel = bracket.maxSales == null ? '∞' : bracket.maxSales.toString();
+    tierLabel = `${salesRate}% — tramo [${bracket.minSales.toString()}, ${maxLabel})`;
+  }
+
+  const totalCommission = (salesCommission ?? new Decimal(0)).plus(
+    utilityCommission ?? new Decimal(0)
+  );
+
+  return {
+    salesRate,
+    utilityRate,
+    salesCommission,
+    utilityCommission,
+    totalCommission,
+    tierLabel,
+  };
+}
+
+/**
+ * Build the entry object stored in `configsByKey` for a given effective config.
+ * The Map and key computation stay in the main loop; only the entry-object
+ * construction is centralized here.
+ */
+function buildConfigBucketEntry(config) {
+  return {
+    gameIds: [],
+    gameNames: [],
+    formulaType: config.formulaType,
+    salesRate:
+      config.salesRate != null
+        ? new Decimal(config.salesRate.toString()).toFixed(2)
+        : null,
+    utilityRate:
+      config.utilityRate != null
+        ? new Decimal(config.utilityRate.toString()).toFixed(2)
+        : null,
+    tiers: (config.tiers || []).map((t) => ({
+      minSales: t.minSales.toString(),
+      maxSales: t.maxSales == null ? null : t.maxSales.toString(),
+      rate: new Decimal(t.rate.toString()).toFixed(2),
+    })),
+    effectiveFrom:
+      config.effectiveFrom instanceof Date
+        ? config.effectiveFrom.toISOString().slice(0, 10)
+        : String(config.effectiveFrom).slice(0, 10),
+  };
 }
 
 export async function getProviderBreakdownForWeek({ apiSystemId, isoYear, isoWeek }) {
@@ -75,61 +172,26 @@ export async function getProviderBreakdownForWeek({ apiSystemId, isoYear, isoWee
     const gross = sales.minus(prizes);
 
     const config = await findEffectiveConfig(apiSystemId, refDate, row.gameId);
+    const cumulativeWeeklySales =
+      config?.formulaType === 'TIERED'
+        ? await getCumulativeWeeklySales(apiSystemId, refDate)
+        : null;
 
-    let salesRate = null;
-    let utilityRate = null;
-    let salesCommission = null;
-    let utilityCommission = null;
-    let totalCommission = new Decimal(0);
-    let tierLabel = null;
+    const {
+      salesRate,
+      utilityRate,
+      salesCommission,
+      utilityCommission,
+      totalCommission,
+      tierLabel,
+    } = computeRowBreakdown(sales, prizes, gross, config, cumulativeWeeklySales);
+
     const configMissing = !config;
 
     if (config) {
-      const ft = config.formulaType;
-      if (ft === 'SALES_PCT' || ft === 'SALES_AND_UTILITY_PCT') {
-        salesRate = new Decimal(config.salesRate.toString()).toFixed(2);
-        salesCommission = sales.times(config.salesRate.toString()).dividedBy(100);
-      }
-      if (ft === 'UTILITY_PCT' || ft === 'SALES_AND_UTILITY_PCT') {
-        utilityRate = new Decimal(config.utilityRate.toString()).toFixed(2);
-        utilityCommission = gross.times(config.utilityRate.toString()).dividedBy(100);
-      }
-      if (ft === 'TIERED') {
-        const cumulative = await getCumulativeWeeklySales(apiSystemId, refDate);
-        const cum = new Decimal(cumulative);
-        const bracket = (config.tiers || []).find((t) => {
-          const min = new Decimal(t.minSales.toString());
-          if (cum.lt(min)) return false;
-          if (t.maxSales == null) return true;
-          return cum.lt(new Decimal(t.maxSales.toString()));
-        });
-        if (bracket) {
-          salesRate = new Decimal(bracket.rate.toString()).toFixed(2);
-          salesCommission = sales.times(bracket.rate.toString()).dividedBy(100);
-          const maxLabel = bracket.maxSales == null ? '∞' : bracket.maxSales.toString();
-          tierLabel = `${salesRate}% — tramo [${bracket.minSales.toString()}, ${maxLabel})`;
-        }
-      }
-
-      totalCommission = (salesCommission ?? new Decimal(0)).plus(utilityCommission ?? new Decimal(0));
-
       const key = `${config.formulaType}|${config.salesRate?.toString() ?? ''}|${config.utilityRate?.toString() ?? ''}|${config.effectiveFrom?.toISOString?.() ?? config.effectiveFrom}`;
       if (!configsByKey.has(key)) {
-        configsByKey.set(key, {
-          gameIds: [],
-          gameNames: [],
-          formulaType: config.formulaType,
-          salesRate: config.salesRate != null ? new Decimal(config.salesRate.toString()).toFixed(2) : null,
-          utilityRate: config.utilityRate != null ? new Decimal(config.utilityRate.toString()).toFixed(2) : null,
-          tiers: (config.tiers || []).map((t) => ({
-            minSales: t.minSales.toString(),
-            maxSales: t.maxSales == null ? null : t.maxSales.toString(),
-            rate: new Decimal(t.rate.toString()).toFixed(2),
-          })),
-          effectiveFrom: config.effectiveFrom instanceof Date
-            ? config.effectiveFrom.toISOString().slice(0, 10)
-            : String(config.effectiveFrom).slice(0, 10),
-        });
+        configsByKey.set(key, buildConfigBucketEntry(config));
       }
       const bucket = configsByKey.get(key);
       bucket.gameIds.push(row.gameId);
