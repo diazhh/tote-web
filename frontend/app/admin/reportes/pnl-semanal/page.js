@@ -43,6 +43,7 @@ import { getISOWeek, getISOWeekYear, subWeeks, addWeeks, setISOWeek, setISOWeekY
 import { es } from 'date-fns/locale';
 import api from '@/lib/api/axios';
 import pnlAPI from '@/lib/api/pnl';
+import ProviderCommissionBreakdown from '@/components/admin/reportes/ProviderCommissionBreakdown';
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -466,6 +467,16 @@ export default function PnlSemanalPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Provider commission breakdown — only when provider selected */}
+          {providerFiltered && (
+            <ProviderCommissionBreakdown
+              isoYear={isoYear}
+              isoWeek={isoWeek}
+              apiSystemId={apiSystemId}
+              apiSystemName={providers.find((p) => p.id === apiSystemId)?.name}
+            />
+          )}
 
           {/* Drill-down + export buttons */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white rounded-xl shadow-sm border border-gray-100 p-4">
