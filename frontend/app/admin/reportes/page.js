@@ -374,8 +374,10 @@ export default function ReportesPage() {
         </div>
       </div>
 
-      {/* Summary cards — SUMM-01 / FILT-04 */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
+      {/* Summary cards — SUMM-01 / FILT-04
+          En mobile: 1 widget por fila (los montos no caben en 2 cols).
+          ≥sm: 3 cols, ≥lg: 5 cols. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex items-center gap-3">
           <div className="p-2.5 bg-blue-50 rounded-lg shrink-0">
             <DollarSign className="w-5 h-5 text-blue-600" />
