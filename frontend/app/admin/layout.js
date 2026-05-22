@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useAuthStore from '@/lib/stores/authStore';
-import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle, DollarSign, Plug, Activity, FileText, BarChart3, List, Scale, History, BookOpen, TrendingUp, Percent } from 'lucide-react';
+import { LayoutDashboard, Trophy, Calendar, Settings, LogOut, Users, MessageSquare, Send, Instagram, Facebook, Music, Bot, Menu, X, PauseCircle, DollarSign, Plug, Activity, FileText, BarChart3, List, Scale, History, BookOpen, TrendingUp, Percent, Sparkles } from 'lucide-react';
+import changelogApi from '@/lib/api/changelog';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -12,6 +13,37 @@ export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const { user, isAuthenticated, logout, checkAuth } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [changelogUnread, setChangelogUnread] = useState(0);
+
+  // Polling del badge: carga al inicio + escucha evento 'changelog:seen'
+  // que dispara la página /admin/changelog cuando el user la abre.
+  useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    if (!['ADMIN', 'OPERATOR', 'TAQUILLA_ADMIN'].includes(user.role)) return;
+
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const since = typeof window !== 'undefined' ? localStorage.getItem('lastSeenChangelogAt') : null;
+        const res = await changelogApi.unreadCount(since);
+        if (!cancelled && res?.success) setChangelogUnread(res.data.count || 0);
+      } catch {
+        // silencioso — no es crítico
+      }
+    };
+
+    refresh();
+    const onSeen = () => refresh();
+    window.addEventListener('changelog:seen', onSeen);
+    // Refresh cada 5 min por si alguien publica algo mientras la sesión está abierta
+    const interval = setInterval(refresh, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('changelog:seen', onSeen);
+      clearInterval(interval);
+    };
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     const verify = async () => {
@@ -26,6 +58,8 @@ export default function AdminLayout({ children }) {
         const userObj = JSON.parse(userData);
         if (userObj.role === 'PLAYER') {
           router.push('/dashboard');
+        } else if (userObj.role === 'FISCALIZADOR') {
+          router.push('/fiscalizar');
         }
       }
     };
@@ -85,6 +119,7 @@ export default function AdminLayout({ children }) {
       ]
     },
     { name: 'Configuración', href: '/admin/configuracion', icon: Settings, excludeForTaquilla: true },
+    { name: 'Novedades', href: '/admin/changelog', icon: Sparkles, taquillaAccess: true, badgeKey: 'changelog' },
   ];
 
   const filteredNav = navigation.filter(item => {
@@ -185,6 +220,7 @@ export default function AdminLayout({ children }) {
               const Icon = item.icon;
               const isActive = pathname === item.href;
               
+              const badgeCount = item.badgeKey === 'changelog' ? changelogUnread : 0;
               return (
                 <Link
                   key={item.name}
@@ -197,7 +233,12 @@ export default function AdminLayout({ children }) {
                   }`}
                 >
                   <Icon className="w-5 h-5 mr-3" />
-                  {item.name}
+                  <span className="flex-1">{item.name}</span>
+                  {badgeCount > 0 && (
+                    <span className="ml-2 inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-[10px] font-bold text-white bg-red-500 rounded-full">
+                      {badgeCount > 99 ? '99+' : badgeCount}
+                    </span>
+                  )}
                 </Link>
               );
             }
