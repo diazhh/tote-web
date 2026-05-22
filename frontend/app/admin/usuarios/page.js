@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import useAuthStore from '@/lib/stores/authStore';
 import authAPI from '@/lib/api/auth';
 import { toast } from 'sonner';
-import { Users, Shield, Eye, UserPlus, Edit2, X, Loader2, Gamepad2 } from 'lucide-react';
+import { Users, Shield, Eye, UserPlus, Edit2, X, Loader2, Gamepad2, Building2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { formatCaracasDate } from '@/lib/utils/dateUtils';
 
@@ -13,10 +13,12 @@ export default function UsuariosPage() {
   const { user } = useAuthStore();
   const [users, setUsers] = useState([]);
   const [games, setGames] = useState([]);
+  const [apiSystems, setApiSystems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAssignGamesModal, setShowAssignGamesModal] = useState(false);
+  const [showAssignApiSystemsModal, setShowAssignApiSystemsModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [saving, setSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -24,7 +26,8 @@ export default function UsuariosPage() {
     email: '',
     password: '',
     role: 'OPERATOR',
-    isActive: true
+    isActive: true,
+    fiscalIncludeTaquilla: false,
   });
 
   useEffect(() => {
@@ -36,6 +39,7 @@ export default function UsuariosPage() {
     }
     loadUsers();
     loadGames();
+    loadApiSystems();
   }, [user, router]);
 
   const loadUsers = async () => {
@@ -70,6 +74,46 @@ export default function UsuariosPage() {
     }
   };
 
+  const loadApiSystems = async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api';
+      const res = await fetch(`${API_URL}/providers/systems`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      // /providers/systems devuelve un array directo según otras pantallas.
+      setApiSystems(Array.isArray(data) ? data : (data?.data || []));
+    } catch (error) {
+      console.error('Error loading api systems:', error);
+    }
+  };
+
+  const handleAssignApiSystems = async (userId, apiSystemIds) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api';
+      const res = await fetch(`${API_URL}/auth/users/${userId}/api-systems`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ apiSystemIds }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Proveedores asignados correctamente');
+        setShowAssignApiSystemsModal(false);
+        setSelectedUser(null);
+      } else {
+        toast.error(data.error || 'Error al asignar proveedores');
+      }
+    } catch (error) {
+      toast.error('Error al asignar proveedores');
+    }
+  };
+
   const handleAssignGames = async (userId, gameIds) => {
     try {
       const token = localStorage.getItem('accessToken');
@@ -96,7 +140,7 @@ export default function UsuariosPage() {
   };
 
   const resetForm = () => {
-    setFormData({ username: '', email: '', password: '', role: 'OPERATOR', isActive: true });
+    setFormData({ username: '', email: '', password: '', role: 'OPERATOR', isActive: true, fiscalIncludeTaquilla: false });
   };
 
   const handleCreateUser = async (e) => {
@@ -133,7 +177,12 @@ export default function UsuariosPage() {
     if (!selectedUser) return;
     setSaving(true);
     try {
-      const updates = { email: formData.email || undefined, role: formData.role, isActive: formData.isActive };
+      const updates = {
+        email: formData.email || undefined,
+        role: formData.role,
+        isActive: formData.isActive,
+        fiscalIncludeTaquilla: formData.role === 'FISCALIZADOR' ? !!formData.fiscalIncludeTaquilla : undefined,
+      };
       if (formData.password) updates.password = formData.password;
       const response = await authAPI.updateUser(selectedUser.id, updates);
       if (response.success) {
@@ -166,7 +215,14 @@ export default function UsuariosPage() {
 
   const openEditModal = (u) => {
     setSelectedUser(u);
-    setFormData({ username: u.username, email: u.email || '', password: '', role: u.role, isActive: u.isActive });
+    setFormData({
+      username: u.username,
+      email: u.email || '',
+      password: '',
+      role: u.role,
+      isActive: u.isActive,
+      fiscalIncludeTaquilla: !!u.fiscalIncludeTaquilla,
+    });
     setShowEditModal(true);
   };
 
@@ -189,11 +245,15 @@ export default function UsuariosPage() {
     const styles = {
       ADMIN: 'bg-purple-100 text-purple-800',
       OPERATOR: 'bg-blue-100 text-blue-800',
-      VIEWER: 'bg-gray-100 text-gray-800'
+      VIEWER: 'bg-gray-100 text-gray-800',
+      FISCALIZADOR: 'bg-amber-100 text-amber-800',
+      TAQUILLA_ADMIN: 'bg-cyan-100 text-cyan-800',
+      PROVIDER: 'bg-indigo-100 text-indigo-800',
+      PLAYER: 'bg-emerald-100 text-emerald-800',
     };
 
     return (
-      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[role]}`}>
+      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[role] || 'bg-gray-100 text-gray-800'}`}>
         {role}
       </span>
     );
@@ -289,6 +349,18 @@ export default function UsuariosPage() {
                       >
                         <Gamepad2 className="w-4 h-4" />
                       </button>
+                      {u.role === 'FISCALIZADOR' && (
+                        <button
+                          onClick={() => {
+                            setSelectedUser(u);
+                            setShowAssignApiSystemsModal(true);
+                          }}
+                          className="text-amber-600 hover:text-amber-900 p-1"
+                          title="Asignar proveedores"
+                        >
+                          <Building2 className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => openEditModal(u)}
                         className="text-blue-600 hover:text-blue-900 p-1"
@@ -341,6 +413,7 @@ export default function UsuariosPage() {
                   <option value="OPERATOR">Operador</option>
                   <option value="ADMIN">Administrador</option>
                   <option value="VIEWER">Visor</option>
+                  <option value="FISCALIZADOR">Fiscalizador</option>
                 </select>
               </div>
               <div className="flex justify-end gap-3 pt-4">
@@ -385,8 +458,26 @@ export default function UsuariosPage() {
                   <option value="OPERATOR">Operador</option>
                   <option value="ADMIN">Administrador</option>
                   <option value="VIEWER">Visor</option>
+                  <option value="FISCALIZADOR">Fiscalizador</option>
                 </select>
               </div>
+              {formData.role === 'FISCALIZADOR' && (
+                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
+                  <p className="text-xs text-amber-900">
+                    Configura el alcance del fiscalizador con los botones <Gamepad2 className="inline w-3 h-3 mx-0.5" /> y <Building2 className="inline w-3 h-3 mx-0.5" /> en la lista.
+                    Si no asignas nada, verá <strong>todo</strong>.
+                  </p>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={!!formData.fiscalIncludeTaquilla}
+                      onChange={(e) => setFormData({ ...formData, fiscalIncludeTaquilla: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 rounded"
+                    />
+                    Incluir Taquilla Online (tickets sin proveedor)
+                  </label>
+                </div>
+              )}
               <div className="flex items-center">
                 <input type="checkbox" id="isActive" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="w-4 h-4 text-blue-600 rounded" />
                 <label htmlFor="isActive" className="ml-2 text-sm text-gray-700">Usuario activo</label>
@@ -413,6 +504,19 @@ export default function UsuariosPage() {
             setSelectedUser(null);
           }}
           onSave={handleAssignGames}
+        />
+      )}
+
+      {/* Assign Api Systems Modal */}
+      {showAssignApiSystemsModal && selectedUser && (
+        <AssignApiSystemsModal
+          user={selectedUser}
+          apiSystems={apiSystems}
+          onClose={() => {
+            setShowAssignApiSystemsModal(false);
+            setSelectedUser(null);
+          }}
+          onSave={handleAssignApiSystems}
         />
       )}
     </div>
@@ -511,6 +615,104 @@ function AssignGamesModal({ user, games, onClose, onSave }) {
             onClick={handleSave}
             disabled={saving || loading}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            Guardar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AssignApiSystemsModal({ user, apiSystems, onClose, onSave }) {
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem('accessToken');
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:10000/api';
+        const res = await fetch(`${API_URL}/auth/users/${user.id}/api-systems`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success) setSelectedIds(data.data.map((s) => s.id));
+      } catch (e) {
+        console.error('Error loading user api-systems:', e);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [user.id]);
+
+  const toggle = (id) =>
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+
+  const handleSave = async () => {
+    setSaving(true);
+    await onSave(user.id, selectedIds);
+    setSaving(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl p-6 w-full max-w-md">
+        <h2 className="text-xl font-bold mb-2">Asignar Proveedores</h2>
+        <p className="text-gray-600 text-sm mb-4">
+          Selecciona los proveedores visibles para <strong>{user.username}</strong>.
+          Si dejas vacío, verá <strong>todos</strong>.
+        </p>
+
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          </div>
+        ) : apiSystems.length === 0 ? (
+          <p className="text-sm text-gray-400 py-4">No hay proveedores registrados.</p>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-y-auto">
+            {apiSystems.map((s) => (
+              <label
+                key={s.id}
+                className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition ${
+                  selectedIds.includes(s.id)
+                    ? 'border-amber-500 bg-amber-50'
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(s.id)}
+                  onChange={() => toggle(s.id)}
+                  className="w-4 h-4 text-amber-600 rounded"
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-gray-900 truncate">{s.name}</p>
+                  <p className="text-xs text-gray-500">
+                    {s.mode || s.slug || ''}
+                  </p>
+                </div>
+              </label>
+            ))}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || loading}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50 flex items-center gap-2"
           >
             {saving && <Loader2 className="w-4 h-4 animate-spin" />}
             Guardar

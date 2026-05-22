@@ -167,7 +167,8 @@ class AuthService {
           isActive: true,
           lastLoginAt: true,
           createdAt: true,
-          apiSystemId: true
+          apiSystemId: true,
+          fiscalIncludeTaquilla: true
         }
       });
 
@@ -228,6 +229,7 @@ class AuthService {
           telegramUserId: true,
           isActive: true,
           lastLoginAt: true,
+          fiscalIncludeTaquilla: true,
           createdAt: true
         },
         orderBy: { createdAt: 'desc' }
@@ -251,7 +253,8 @@ class AuthService {
           ...(data.email && { email: data.email }),
           ...(data.role && { role: data.role }),
           ...(data.telegramUserId !== undefined && { telegramUserId: data.telegramUserId }),
-          ...(data.isActive !== undefined && { isActive: data.isActive })
+          ...(data.isActive !== undefined && { isActive: data.isActive }),
+          ...(data.fiscalIncludeTaquilla !== undefined && { fiscalIncludeTaquilla: !!data.fiscalIncludeTaquilla })
         },
         select: {
           id: true,
@@ -260,6 +263,7 @@ class AuthService {
           role: true,
           telegramUserId: true,
           isActive: true,
+          fiscalIncludeTaquilla: true,
           createdAt: true
         }
       });
@@ -518,6 +522,52 @@ class AuthService {
       return true;
     } catch (error) {
       logger.error('Error al asignar juegos al usuario:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener proveedores (ApiSystem) asignados a un fiscalizador.
+   * Convención: lista vacía → ve todos (en el endpoint del reporte).
+   */
+  async getUserApiSystems(userId) {
+    try {
+      const rows = await prisma.userApiSystem.findMany({
+        where: { userId },
+        include: {
+          apiSystem: {
+            select: { id: true, name: true, slug: true, mode: true, isActive: true },
+          },
+        },
+      });
+      return rows.map((r) => r.apiSystem);
+    } catch (error) {
+      logger.error('Error al obtener proveedores del usuario:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Asignar proveedores a un fiscalizador (reemplaza la lista completa).
+   * @param {string} userId
+   * @param {string[]} apiSystemIds
+   */
+  async assignApiSystemsToUser(userId, apiSystemIds) {
+    try {
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) throw new Error('Usuario no encontrado');
+
+      await prisma.userApiSystem.deleteMany({ where: { userId } });
+      if (apiSystemIds.length > 0) {
+        await prisma.userApiSystem.createMany({
+          data: apiSystemIds.map((apiSystemId) => ({ userId, apiSystemId })),
+          skipDuplicates: true,
+        });
+      }
+      logger.info(`Proveedores asignados al usuario ${user.username}: ${apiSystemIds.length}`);
+      return true;
+    } catch (error) {
+      logger.error('Error al asignar proveedores al usuario:', error);
       throw error;
     }
   }

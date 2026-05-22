@@ -20,5 +20,7 @@ router.get('/users', authenticate, authorize('ADMIN'), authController.listUsers.
 router.patch('/users/:id', authenticate, authorize('ADMIN'), authController.updateUser.bind(authController));
 router.get('/users/:id/games', authenticate, authorize('ADMIN'), authController.getUserGames.bind(authController));
 router.post('/users/:id/games', authenticate, authorize('ADMIN'), authController.assignGamesToUser.bind(authController));
+router.get('/users/:id/api-systems', authenticate, authorize('ADMIN'), authController.getUserApiSystems.bind(authController));
+router.post('/users/:id/api-systems', authenticate, authorize('ADMIN'), authController.assignApiSystemsToUser.bind(authController));
 
 export default router;

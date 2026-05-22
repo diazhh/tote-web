@@ -34,6 +34,8 @@ export default function LoginPage() {
         router.push('/admin/depositos');
       } else if (user.role === 'PROVIDER') {
         router.push('/proveedor');
+      } else if (user.role === 'FISCALIZADOR') {
+        router.push('/fiscalizar');
       } else if (user.role === 'PLAYER') {
         router.push('/dashboard');
       }
@@ -68,6 +70,8 @@ export default function LoginPage() {
         router.push('/admin/depositos');
       } else if (user.role === 'PROVIDER') {
         router.push('/proveedor');
+      } else if (user.role === 'FISCALIZADOR') {
+        router.push('/fiscalizar');
       } else if (user.role === 'PLAYER') {
         router.push('/dashboard');
       }

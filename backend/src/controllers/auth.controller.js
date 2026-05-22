@@ -298,6 +298,40 @@ class AuthController {
       });
     }
   }
+
+  /**
+   * GET /api/auth/users/:id/api-systems
+   * Proveedores asignados a un fiscalizador.
+   */
+  async getUserApiSystems(req, res) {
+    try {
+      const { id } = req.params;
+      const apiSystems = await authService.getUserApiSystems(id);
+      res.json({ success: true, data: apiSystems });
+    } catch (error) {
+      logger.error('Error en getUserApiSystems:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * POST /api/auth/users/:id/api-systems
+   * Body: { apiSystemIds: string[] }
+   */
+  async assignApiSystemsToUser(req, res) {
+    try {
+      const { id } = req.params;
+      const { apiSystemIds } = req.body;
+      if (!Array.isArray(apiSystemIds)) {
+        return res.status(400).json({ success: false, error: 'apiSystemIds debe ser un array' });
+      }
+      await authService.assignApiSystemsToUser(id, apiSystemIds);
+      res.json({ success: true, message: `${apiSystemIds.length} proveedor(es) asignado(s) al usuario` });
+    } catch (error) {
+      logger.error('Error en assignApiSystemsToUser:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
 }
 
 export default new AuthController();

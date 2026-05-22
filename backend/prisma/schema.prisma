@@ -379,6 +379,17 @@ model User {
   apiSystemId String?
   apiSystem   ApiSystem? @relation(fields: [apiSystemId], references: [id])
 
+  // Rol FISCALIZADOR: cuando true, su universo de reporte incluye Taquilla Online
+  // (tickets sin apiSystemId). Default false. Solo se lee si role = FISCALIZADOR.
+  fiscalIncludeTaquilla Boolean @default(false)
+
+  // Relación M2M con ApiSystem para scope del fiscalizador.
+  // (Para el rol PROVIDER se sigue usando apiSystemId singular arriba.)
+  fiscalApiSystems UserApiSystem[]
+
+  // Entradas de changelog creadas por este usuario.
+  changelogEntries ChangelogEntry[] @relation("ChangelogAuthor")
+
   @@index([username])
   @@index([email])
   @@index([isActive])
@@ -402,6 +413,24 @@ model UserGame {
   @@index([gameId])
 }
 
+// Relación M2M entre fiscalizadores y proveedores (ApiSystem).
+// Convención: si un fiscalizador no tiene filas → ve todos los proveedores;
+// si tiene ≥1 → solo esos. Taquilla Online (sin apiSystemId real) se modela
+// con el flag User.fiscalIncludeTaquilla, no con una fila aquí.
+model UserApiSystem {
+  id          String   @id @default(uuid())
+  userId      String
+  apiSystemId String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  apiSystem ApiSystem @relation(fields: [apiSystemId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, apiSystemId])
+  @@index([userId])
+  @@index([apiSystemId])
+}
+
 enum UserRole {
   ADMIN // Acceso completo
   OPERATOR // Gestión de sorteos
@@ -409,6 +438,7 @@ enum UserRole {
   PLAYER // Usuario jugador (taquilla online)
   TAQUILLA_ADMIN // Administrador de taquilla online
   PROVIDER // Usuario del portal de proveedores
+  FISCALIZADOR // Solo ve reporte ventas/premios/utilidad, scope por UserGame + UserApiSystem
 }
 
 // ============================================
@@ -436,6 +466,34 @@ model AuditLog {
 }
 
 // ============================================
+// CHANGELOG — Bitácora de cambios del sistema
+// ============================================
+
+model ChangelogEntry {
+  id          String              @id @default(uuid())
+  title       String
+  description String              @db.Text
+  category    ChangelogCategory   @default(IMPROVEMENT)
+  publishedAt DateTime            @default(now())
+  isPublished Boolean             @default(true)
+  createdById String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  createdBy User? @relation("ChangelogAuthor", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([publishedAt])
+  @@index([isPublished, publishedAt])
+}
+
+enum ChangelogCategory {
+  FEATURE     // Funcionalidad nueva
+  IMPROVEMENT // Mejora a algo existente
+  FIX         // Corrección de bug
+  BREAKING    // Cambio que rompe compatibilidad / requiere atención
+}
+
+// ============================================
 // INTEGRACIÓN CON APIs EXTERNAS
 // ============================================
 
@@ -459,6 +517,7 @@ model ApiSystem {
   webhookLogs          WebhookLog[]
   tickets              Ticket[]
   users                User[]
+  fiscalUsers          UserApiSystem[] // Back-relation para scope de fiscalizadores
   drawFinancials       DrawFinancialProvider[] // Agregado financiero por proveedor (Phase 11)
   commissionConfigs    ProviderCommissionConfig[] // Configs versionados de comisión (Phase 12)
   commissionLedgerRows ProviderCommissionLedger[] // Ledger comisión por sorteo (Phase 12)
