@@ -118,9 +118,17 @@ describe('quota.service — setQuota', () => {
     expect(result.maxAmount).toBe(20000);
   });
 
-  test('rejects non-positive maxAmount', async () => {
-    await expect(setQuota({ drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 0 })).rejects.toThrow(/positive/i);
-    await expect(setQuota({ drawId: 'draw-1', gameItemId: 'item-30', maxAmount: -100 })).rejects.toThrow(/positive/i);
+  test('accepts maxAmount=0 (bloqueo duro) and rejects negative', async () => {
+    // maxAmount=0 ahora se acepta y funciona como bloqueo duro
+    // (cualquier intento de venta > 0 supera el cupo y se rechaza).
+    mockPrisma.drawItemQuota.upsert.mockResolvedValueOnce({
+      drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 0, createdBy: null,
+    });
+    await expect(setQuota({ drawId: 'draw-1', gameItemId: 'item-30', maxAmount: 0 })).resolves.toEqual(
+      expect.objectContaining({ maxAmount: 0 }),
+    );
+    // Negativo sigue siendo inválido.
+    await expect(setQuota({ drawId: 'draw-1', gameItemId: 'item-30', maxAmount: -100 })).rejects.toThrow(/non-negative/i);
   });
 });
 

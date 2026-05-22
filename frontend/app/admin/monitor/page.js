@@ -15,6 +15,7 @@ import numberHistoryApi from '@/lib/api/number-history';
 import axios from '@/lib/api/axios';
 import quotaApi from '@/lib/api/quota';
 import QuotaModal from './QuotaModal';
+import BlockItemModal from './BlockItemModal';
 import TripletaDetailModal from '@/components/shared/TripletaDetailModal';
 import { getTodayVenezuela } from '@/lib/dateUtils';
 
@@ -39,6 +40,7 @@ export default function MonitorPage() {
   const [lastSeenData, setLastSeenData] = useState({});
   const [quotas, setQuotas] = useState([]);
   const [quotaModal, setQuotaModal] = useState({ open: false, item: null });
+  const [blockItemModalOpen, setBlockItemModalOpen] = useState(false);
 
   // Mobile UI state for Números tab
   const [numbersSearch, setNumbersSearch] = useState('');
@@ -444,11 +446,23 @@ export default function MonitorPage() {
                         Total: {formatCurrency(itemStats.totalSales)}
                       </span>
                     </div>
-                    {itemStats.winnerItem && (
-                      <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
-                        Ganador: {itemStats.winnerItem.number} - {itemStats.winnerItem.name}
-                      </div>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {canEditQuota && (
+                        <button
+                          onClick={() => setBlockItemModalOpen(true)}
+                          className="px-3 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-lg hover:bg-red-100 text-sm flex items-center gap-1.5"
+                          title="Bloquear o establecer cupo para cualquier número del juego"
+                        >
+                          <Shield className="w-4 h-4" />
+                          Bloquear número
+                        </button>
+                      )}
+                      {itemStats.winnerItem && (
+                        <div className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm">
+                          Ganador: {itemStats.winnerItem.number} - {itemStats.winnerItem.name}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Alerta de tripletas que se completarían */}
@@ -974,28 +988,48 @@ export default function MonitorPage() {
       {/* Modal de Tickets */}
       {ticketsModal.open && ticketsModal.data && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-2 sm:mx-4 max-h-[80vh] overflow-hidden">
+          <div className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-2 sm:mx-4 max-h-[85vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between p-4 border-b">
-              <h3 className="text-lg font-semibold">
-                {ticketsModal.type === 'banca' 
+              <h3 className="text-base sm:text-lg font-semibold truncate pr-2">
+                {ticketsModal.type === 'banca'
                   ? `Tickets de Banca ${ticketsModal.data.bancaExternalId}`
                   : `Tickets de ${ticketsModal.data.item?.number} - ${ticketsModal.data.item?.name}`
                 }
               </h3>
-              <button onClick={() => setTicketsModal({ open: false, data: null, type: null })} className="text-gray-500 hover:text-gray-700">
+              <button onClick={() => setTicketsModal({ open: false, data: null, type: null })} className="text-gray-500 hover:text-gray-700 flex-shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-4 overflow-y-auto max-h-[60vh]">
-              <div className="mb-4 text-sm text-gray-600">
-                Total: {ticketsModal.data.ticketCount} tickets | {formatCurrency(ticketsModal.data.totalAmount)}
-              </div>
-              <div className="overflow-x-auto">
+
+            {/* Resumen — en mobile más compacto */}
+            <div className="px-4 py-3 border-b bg-gray-50 text-sm">
+              {ticketsModal.type === 'item' ? (
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
+                  <span className="text-gray-600">{ticketsModal.data.ticketCount} ticket(s)</span>
+                  <span className="font-semibold text-gray-900">
+                    Venta al número: <span className="text-green-700">{formatCurrency(ticketsModal.data.totalAmount)}</span>
+                  </span>
+                </div>
+              ) : (
+                <div className="text-gray-600">
+                  Total: {ticketsModal.data.ticketCount} tickets | <span className="font-semibold text-gray-900">{formatCurrency(ticketsModal.data.totalAmount)}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {/* Desktop — tabla */}
+              <div className="hidden md:block">
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 sticky top-0">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Ticket</th>
-                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Monto</th>
+                      {ticketsModal.type === 'item' && (
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Venta al # </th>
+                      )}
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                        {ticketsModal.type === 'item' ? 'Total ticket' : 'Monto'}
+                      </th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Usuario/Taquilla</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Fecha/Hora</th>
                       <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acción</th>
@@ -1009,7 +1043,12 @@ export default function MonitorPage() {
                             {ticket.externalTicketId || ticket.id?.slice(0, 8)}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-right font-bold text-green-600">
+                        {ticketsModal.type === 'item' && (
+                          <td className="px-4 py-3 text-sm text-right font-bold text-green-600">
+                            {formatCurrency(ticket.itemAmount ?? 0)}
+                          </td>
+                        )}
+                        <td className={`px-4 py-3 text-sm text-right ${ticketsModal.type === 'item' ? 'text-gray-500' : 'font-bold text-green-600'}`}>
                           {formatCurrency(ticket.totalAmount)}
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-600">
@@ -1017,11 +1056,8 @@ export default function MonitorPage() {
                         </td>
                         <td className="px-4 py-3 text-sm text-gray-500">
                           {ticket.createdAt ? new Date(ticket.createdAt).toLocaleString('es-VE', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
+                            day: '2-digit', month: '2-digit', year: '2-digit',
+                            hour: '2-digit', minute: '2-digit'
                           }) : '-'}
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -1038,6 +1074,52 @@ export default function MonitorPage() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Mobile — cards */}
+              <ul className="md:hidden divide-y divide-gray-100">
+                {ticketsModal.data.tickets.map((ticket, idx) => (
+                  <li
+                    key={idx}
+                    className="px-4 py-3 active:bg-gray-50 cursor-pointer"
+                    onClick={() => handleViewTicketDetail(ticket)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-mono text-sm font-semibold text-gray-900 truncate">
+                          {ticket.externalTicketId || ticket.id?.slice(0, 8)}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {ticket.taquillaId ? `Taquilla ${ticket.taquillaId}` : ticket.bancaId ? `Banca ${ticket.bancaId}` : '—'}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {ticket.createdAt ? new Date(ticket.createdAt).toLocaleString('es-VE', {
+                            day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                          }) : '-'}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        {ticketsModal.type === 'item' ? (
+                          <>
+                            <p className="text-base font-bold text-green-600 whitespace-nowrap">
+                              {formatCurrency(ticket.itemAmount ?? 0)}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5 whitespace-nowrap">
+                              Total: {formatCurrency(ticket.totalAmount)}
+                            </p>
+                          </>
+                        ) : (
+                          <p className="text-base font-bold text-green-600 whitespace-nowrap">
+                            {formatCurrency(ticket.totalAmount)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+                {ticketsModal.data.tickets.length === 0 && (
+                  <li className="px-4 py-8 text-center text-sm text-gray-400">Sin tickets</li>
+                )}
+              </ul>
             </div>
           </div>
         </div>
@@ -1257,6 +1339,21 @@ export default function MonitorPage() {
           }}
           item={quotaModal.item}
           onClose={() => setQuotaModal({ open: false, item: null })}
+          onSaved={() => fetchData()}
+        />
+      )}
+
+      {/* Modal de Bloqueo de Número (incluye items aún sin jugadas) */}
+      {blockItemModalOpen && currentDraw && (
+        <BlockItemModal
+          draw={{
+            id: currentDraw.id,
+            drawTime: currentDraw.drawTime,
+            game: itemStats?.game || games.find(g => g.id === selectedGame)?.name,
+          }}
+          gameId={selectedGame}
+          quotas={quotas}
+          onClose={() => setBlockItemModalOpen(false)}
           onSaved={() => fetchData()}
         />
       )}

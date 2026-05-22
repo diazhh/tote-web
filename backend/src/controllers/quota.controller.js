@@ -53,8 +53,9 @@ class QuotaController {
       const { drawId, gameItemId } = req.params;
       const { maxAmount } = req.body ?? {};
       const amount = Number(maxAmount);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        return res.status(400).json({ success: false, error: 'maxAmount must be a positive number' });
+      // maxAmount = 0 → bloqueo duro del item para este sorteo.
+      if (!Number.isFinite(amount) || amount < 0) {
+        return res.status(400).json({ success: false, error: 'maxAmount must be a non-negative number' });
       }
       const check = await assertDrawAndItem(drawId, gameItemId, true);
       if (check.error) return res.status(check.error.status).json({ success: false, error: check.error.message });

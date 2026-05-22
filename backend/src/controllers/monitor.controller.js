@@ -319,13 +319,14 @@ class MonitorController {
    */
   async getTicketList(req, res) {
     try {
-      const { dateFrom, dateTo, gameId, source, apiSystemId, page, pageSize } = req.query;
+      const { dateFrom, dateTo, gameId, source, apiSystemId, playerSearch, page, pageSize } = req.query;
       const result = await monitorService.getTicketList({
         dateFrom: dateFrom || null,
         dateTo: dateTo || null,
         gameId: gameId || null,
         source: source || null,
         apiSystemId: apiSystemId || null,
+        playerSearch: playerSearch || null,
         page: parseInt(page) || 1,
         pageSize: parseInt(pageSize) || 50,
       });
@@ -421,13 +422,14 @@ class MonitorController {
    */
   async downloadTicketsExcel(req, res) {
     try {
-      const { dateFrom, dateTo, gameId, source, apiSystemId } = req.query;
+      const { dateFrom, dateTo, gameId, source, apiSystemId, playerSearch } = req.query;
       const buffer = await ticketsExportService.buildTicketsExcel({
         dateFrom,
         dateTo,
         gameId: gameId || null,
         source: source || null,
         apiSystemId: apiSystemId || null,
+        playerSearch: playerSearch || null,
       });
       const filename = `tickets-${dateFrom}-${dateTo}.xlsx`;
       res.setHeader(

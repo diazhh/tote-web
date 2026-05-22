@@ -89,15 +89,16 @@ export const monitorApi = {
   /**
    * Listar tickets con filtros y paginación
    */
-  getTicketList: async ({ dateFrom, dateTo, gameId, source, apiSystemId, page, pageSize } = {}) => {
+  getTicketList: async ({ dateFrom, dateTo, gameId, source, apiSystemId, playerSearch, page, pageSize } = {}) => {
     const params = new URLSearchParams();
-    if (dateFrom)    params.append('dateFrom', dateFrom);
-    if (dateTo)      params.append('dateTo', dateTo);
-    if (gameId)      params.append('gameId', gameId);
-    if (source)      params.append('source', source);
-    if (apiSystemId) params.append('apiSystemId', apiSystemId);
-    if (page)        params.append('page', page);
-    if (pageSize)    params.append('pageSize', pageSize);
+    if (dateFrom)     params.append('dateFrom', dateFrom);
+    if (dateTo)       params.append('dateTo', dateTo);
+    if (gameId)       params.append('gameId', gameId);
+    if (source)       params.append('source', source);
+    if (apiSystemId)  params.append('apiSystemId', apiSystemId);
+    if (playerSearch) params.append('playerSearch', playerSearch);
+    if (page)         params.append('page', page);
+    if (pageSize)     params.append('pageSize', pageSize);
     const response = await axios.get(`/monitor/tickets?${params.toString()}`);
     return response.data;
   },

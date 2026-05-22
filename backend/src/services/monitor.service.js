@@ -1118,23 +1118,31 @@ class MonitorService {
         t.details.some(d => d.gameItemId === itemId)
       );
 
-      const tickets = ticketsWithItem.map(t => ({
-        id: t.id,
-        externalTicketId: t.externalTicketId,
-        source: t.source,
-        comercialId: t.providerData?.comercialID,
-        bancaId: t.providerData?.bancaID,
-        grupoId: t.providerData?.grupoID,
-        taquillaId: t.providerData?.taquillaID,
-        totalAmount: parseFloat(t.totalAmount),
-        details: t.details.map(d => ({
-          amount: parseFloat(d.amount),
-          number: d.gameItem.number,
-          name: d.gameItem.name,
-          status: d.status
-        })),
-        createdAt: t.createdAt
-      }));
+      const tickets = ticketsWithItem.map(t => {
+        // Monto jugado específicamente a este item dentro del ticket.
+        // Un ticket puede tener varios details apuntando al mismo gameItemId
+        // (ej. ticket multi-jugada) — los sumamos todos.
+        const itemDetails = t.details.filter(d => d.gameItemId === itemId);
+        const itemAmount = itemDetails.reduce((s, d) => s + parseFloat(d.amount), 0);
+        return {
+          id: t.id,
+          externalTicketId: t.externalTicketId,
+          source: t.source,
+          comercialId: t.providerData?.comercialID,
+          bancaId: t.providerData?.bancaID,
+          grupoId: t.providerData?.grupoID,
+          taquillaId: t.providerData?.taquillaID,
+          totalAmount: parseFloat(t.totalAmount), // total del ticket completo
+          itemAmount,                              // monto jugado al item seleccionado
+          details: t.details.map(d => ({
+            amount: parseFloat(d.amount),
+            number: d.gameItem.number,
+            name: d.gameItem.name,
+            status: d.status
+          })),
+          createdAt: t.createdAt
+        };
+      });
 
       const gameItem = await prisma.gameItem.findUnique({
         where: { id: itemId }
@@ -1149,10 +1157,8 @@ class MonitorService {
           multiplier: parseFloat(gameItem.multiplier)
         } : null,
         ticketCount: tickets.length,
-        totalAmount: tickets.reduce((sum, t) => {
-          const itemDetails = t.details.filter(d => d.number === gameItem?.number);
-          return sum + itemDetails.reduce((s, d) => s + d.amount, 0);
-        }, 0),
+        // Suma del itemAmount — total vendido específicamente al item.
+        totalAmount: tickets.reduce((sum, t) => sum + t.itemAmount, 0),
         tickets
       };
     } catch (error) {
@@ -1541,6 +1547,7 @@ class MonitorService {
       gameId: filters.gameId || null,
       source: filters.source || null,
       apiSystemId: filters.apiSystemId || null,
+      playerSearch: filters.playerSearch ? String(filters.playerSearch).trim().toLowerCase() : null,
       page: filters.page || 1,
       pageSize: filters.pageSize || 50,
     };
@@ -1549,7 +1556,7 @@ class MonitorService {
     return cacheOrCompute(key, 60, () => this._getTicketListUncached(filters));
   }
 
-  async _getTicketListUncached({ dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, page = 1, pageSize = 50 } = {}) {
+  async _getTicketListUncached({ dateFrom = null, dateTo = null, gameId = null, source = null, apiSystemId = null, playerSearch = null, page = 1, pageSize = 50 } = {}) {
     try {
       const where = { status: { not: 'CANCELLED' } };
 
@@ -1575,6 +1582,17 @@ class MonitorService {
         where.source = source;
       }
 
+      // Búsqueda por jugador: matchea username/email del usuario (online) o
+      // externalTicketId (SRQ/Webhook/Scrape, donde no hay User).
+      const term = playerSearch ? String(playerSearch).trim() : '';
+      if (term) {
+        where.OR = [
+          { user: { username: { contains: term, mode: 'insensitive' } } },
+          { user: { email:    { contains: term, mode: 'insensitive' } } },
+          { externalTicketId: { contains: term, mode: 'insensitive' } },
+        ];
+      }
+
       const [tickets, total] = await Promise.all([
         prisma.ticket.findMany({
           where,
@@ -1582,6 +1600,7 @@ class MonitorService {
             draw: { include: { game: true, winnerItem: true } },
             details: { include: { gameItem: true } },
             apiSystem: { select: { name: true } },
+            user: { select: { username: true, email: true } },
           },
           orderBy: { createdAt: 'desc' },
           skip: (page - 1) * pageSize,
@@ -1597,6 +1616,7 @@ class MonitorService {
           externalTicketId: t.externalTicketId,
           source: t.source,
           provider: t.apiSystem?.name || null,
+          player: t.user ? { username: t.user.username, email: t.user.email } : null,
           totalAmount: parseFloat(t.totalAmount),
           totalPrize: parseFloat(t.totalPrize),
           status: t.status,

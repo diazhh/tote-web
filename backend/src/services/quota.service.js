@@ -76,8 +76,10 @@ export async function getDrawQuotas(drawId) {
  * @param {string} [params.userId]
  */
 export async function setQuota({ drawId, gameItemId, maxAmount, userId }) {
-  if (typeof maxAmount !== 'number' || maxAmount <= 0) {
-    throw new Error('maxAmount must be a positive number');
+  // maxAmount = 0 → bloqueo duro (cualquier intento de venta excede el cupo).
+  // maxAmount > 0 → cupo parcial.
+  if (typeof maxAmount !== 'number' || !Number.isFinite(maxAmount) || maxAmount < 0) {
+    throw new Error('maxAmount must be a non-negative number');
   }
   return prisma.drawItemQuota.upsert({
     where: { drawId_gameItemId: { drawId, gameItemId } },
