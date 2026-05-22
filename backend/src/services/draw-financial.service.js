@@ -64,17 +64,27 @@ function decOrZero(v) {
  */
 export const computeAndUpsertSales = async (drawId, closedAt) => {
   // ----- 1. Whole-draw aggregation via TicketDetail.drawId (F-3 fix) -----
+  //
+  // PNL-AUDIT-2026-05-22 (Hallazgo A): incluir filas con td.drawId NULL cuyo
+  // ticket.drawId coincida con el draw objetivo. Solo el adapter WEBHOOK_PUSH
+  // popula td.drawId de forma sistemática; en las demás fuentes (SRQ legacy,
+  // taquilla) hay filas con drawId NULL que pertenecen al draw padre y deben
+  // entrar al agregado. Mismo patrón que prize-processor.service.js:77-89.
+  const tdWhere = {
+    OR: [
+      { drawId },
+      { drawId: null, ticket: { drawId } },
+    ],
+    ticket: { status: { not: 'CANCELLED' } },
+  };
   const salesAgg = await prisma.ticketDetail.aggregate({
-    where: {
-      drawId,
-      ticket: { status: { not: 'CANCELLED' } },
-    },
+    where: tdWhere,
     _sum: { amount: true },
   });
   const totalSalesSum = decOrZero(salesAgg._sum.amount);
 
   const distinctTickets = await prisma.ticketDetail.findMany({
-    where: { drawId, ticket: { status: { not: 'CANCELLED' } } },
+    where: tdWhere,
     distinct: ['ticketId'],
     select: { ticketId: true },
   });
@@ -88,7 +98,8 @@ export const computeAndUpsertSales = async (drawId, closedAt) => {
            COUNT(DISTINCT td."ticketId")::int       AS "ticketCount"
     FROM   "TicketDetail" td
     JOIN   "Ticket" t ON t.id = td."ticketId"
-    WHERE  td."drawId" = ${drawId}
+    WHERE  (td."drawId" = ${drawId}
+            OR (td."drawId" IS NULL AND t."drawId" = ${drawId}))
       AND  t.status != 'CANCELLED'
     GROUP  BY t."apiSystemId"
   `;
@@ -156,8 +167,18 @@ export const computeAndUpsertPrizes = async (drawId, totalizedAt) => {
   }
 
   // ----- 2. Aggregate sales AND prizes from the same TicketDetail snapshot -----
+  //
+  // PNL-AUDIT-2026-05-22 (Hallazgo A): incluir filas con td.drawId NULL cuyo
+  // ticket.drawId apunte al draw (ver nota en computeAndUpsertSales arriba).
+  const tdWhere = {
+    OR: [
+      { drawId },
+      { drawId: null, ticket: { drawId } },
+    ],
+    ticket: { status: { not: 'CANCELLED' } },
+  };
   const agg = await prisma.ticketDetail.aggregate({
-    where: { drawId, ticket: { status: { not: 'CANCELLED' } } },
+    where: tdWhere,
     _sum: { amount: true, prize: true },
   });
   const totalSales = decOrZero(agg._sum.amount);
@@ -166,7 +187,7 @@ export const computeAndUpsertPrizes = async (drawId, totalizedAt) => {
   // Recompute distinct ticketCount from TicketDetail for symmetry with phase SALES
   // (write-through to DrawFinancial so a PRIZES-only run still has a sensible ticketCount).
   const distinctTickets = await prisma.ticketDetail.findMany({
-    where: { drawId, ticket: { status: { not: 'CANCELLED' } } },
+    where: tdWhere,
     distinct: ['ticketId'],
     select: { ticketId: true },
   });
@@ -189,7 +210,8 @@ export const computeAndUpsertPrizes = async (drawId, totalizedAt) => {
            COUNT(DISTINCT td."ticketId")::int       AS "ticketCount"
     FROM   "TicketDetail" td
     JOIN   "Ticket" t ON t.id = td."ticketId"
-    WHERE  td."drawId" = ${drawId}
+    WHERE  (td."drawId" = ${drawId}
+            OR (td."drawId" IS NULL AND t."drawId" = ${drawId}))
       AND  t.status != 'CANCELLED'
     GROUP  BY t."apiSystemId"
   `;

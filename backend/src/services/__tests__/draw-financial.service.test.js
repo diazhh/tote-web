@@ -70,20 +70,22 @@ describe('draw-financial.service — computeAndUpsertSales (FIN-AGG-01..04)', ()
 
     const result = await computeAndUpsertSales('draw-1', new Date('2026-05-15T18:00:00Z'));
 
-    // Assert CANCELLED filter was used (D-17)
-    const aggCall = mockPrisma.ticketDetail.aggregate.mock.calls[0][0];
-    expect(aggCall.where).toEqual({
-      drawId: 'draw-1',
+    // Assert CANCELLED filter was used (D-17) y que el OR captura td.drawId NULL
+    // cuyo ticket.drawId apunte al draw (PNL-AUDIT-2026-05-22, Hallazgo A).
+    const expectedWhere = {
+      OR: [
+        { drawId: 'draw-1' },
+        { drawId: null, ticket: { drawId: 'draw-1' } },
+      ],
       ticket: { status: { not: 'CANCELLED' } },
-    });
+    };
+    const aggCall = mockPrisma.ticketDetail.aggregate.mock.calls[0][0];
+    expect(aggCall.where).toEqual(expectedWhere);
     expect(aggCall._sum).toEqual({ amount: true });
 
     // Assert the distinct-ticket count query also has the CANCELLED filter (F-3 fix)
     const findCall = mockPrisma.ticketDetail.findMany.mock.calls[0][0];
-    expect(findCall.where).toEqual({
-      drawId: 'draw-1',
-      ticket: { status: { not: 'CANCELLED' } },
-    });
+    expect(findCall.where).toEqual(expectedWhere);
     expect(findCall.distinct).toEqual(['ticketId']);
 
     // Assert upsert wrote the aggregated values
@@ -192,10 +194,11 @@ describe('draw-financial.service — computeAndUpsertSales (FIN-AGG-01..04)', ()
     expect(total).toBe(30);
 
     // Verify each call passed the per-draw drawId (proves we aggregate by TicketDetail.drawId,
-    // not by joining via Ticket.drawId).
+    // not by joining via Ticket.drawId). El where ahora usa OR para cubrir filas con
+    // td.drawId NULL — extraemos el primer brazo del OR.
     const calls = mockPrisma.ticketDetail.aggregate.mock.calls;
-    expect(calls[0][0].where.drawId).toBe('draw-A');
-    expect(calls[1][0].where.drawId).toBe('draw-B');
+    expect(calls[0][0].where.OR[0].drawId).toBe('draw-A');
+    expect(calls[1][0].where.OR[0].drawId).toBe('draw-B');
   });
 });
 
