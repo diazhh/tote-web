@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Calendar, Gamepad2, RefreshCw, ChevronLeft, ChevronRight, X, Eye, FileSpreadsheet
+  Calendar, Gamepad2, RefreshCw, ChevronLeft, ChevronRight, X, Eye, FileSpreadsheet, Search
 } from 'lucide-react';
 import { toast } from 'sonner';
 import monitorApi from '@/lib/api/monitor';
@@ -23,7 +23,11 @@ export default function TicketsReportPage() {
     gameId:      '',
     source:      '',
     apiSystemId: '',
+    playerSearch: '',
   });
+
+  // Input crudo del buscador — se debouncea hacia filters.playerSearch.
+  const [playerInput, setPlayerInput] = useState('');
 
   const [result, setResult]     = useState(null);
   const [games, setGames]       = useState([]);
@@ -32,6 +36,14 @@ export default function TicketsReportPage() {
   const [xlsxLoading, setXlsxLoading] = useState(false);
   const [page, setPage]         = useState(1);
   const [detailModal, setDetailModal] = useState({ open: false, data: null });
+
+  // Debounce 300ms — espera a que el usuario termine de tipear antes de re-fetch.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setFilters(prev => prev.playerSearch === playerInput ? prev : { ...prev, playerSearch: playerInput });
+    }, 300);
+    return () => clearTimeout(id);
+  }, [playerInput]);
 
   // Load filter options
   useEffect(() => {
@@ -56,6 +68,7 @@ export default function TicketsReportPage() {
         gameId:   filters.gameId   || undefined,
         source:   filters.source   || undefined,
         apiSystemId: filters.apiSystemId || undefined,
+        playerSearch: filters.playerSearch || undefined,
         page: p,
         pageSize: 50,
       };
@@ -81,11 +94,12 @@ export default function TicketsReportPage() {
     setXlsxLoading(true);
     const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
     const params = new URLSearchParams();
-    if (filters.dateFrom)    params.append('dateFrom',    filters.dateFrom);
-    if (filters.dateTo)      params.append('dateTo',      filters.dateTo);
-    if (filters.gameId)      params.append('gameId',      filters.gameId);
-    if (filters.source)      params.append('source',      filters.source);
-    if (filters.apiSystemId) params.append('apiSystemId', filters.apiSystemId);
+    if (filters.dateFrom)     params.append('dateFrom',     filters.dateFrom);
+    if (filters.dateTo)       params.append('dateTo',       filters.dateTo);
+    if (filters.gameId)       params.append('gameId',       filters.gameId);
+    if (filters.source)       params.append('source',       filters.source);
+    if (filters.apiSystemId)  params.append('apiSystemId',  filters.apiSystemId);
+    if (filters.playerSearch) params.append('playerSearch', filters.playerSearch);
 
     fetch(`${API_URL}/monitor/tickets/excel?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -176,7 +190,7 @@ export default function TicketsReportPage() {
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 sm:gap-4">
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">
               <Calendar className="w-3.5 h-3.5 inline mr-1" />Desde
@@ -200,6 +214,18 @@ export default function TicketsReportPage() {
               <option value="">Todos los juegos</option>
               {games.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              <Search className="w-3.5 h-3.5 inline mr-1" />Jugador
+            </label>
+            <input
+              type="text"
+              value={playerInput}
+              onChange={e => setPlayerInput(e.target.value)}
+              placeholder="usuario, email o #ticket"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
           </div>
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Fuente / Proveedor</label>
@@ -255,9 +281,12 @@ export default function TicketsReportPage() {
                   {result.tickets.map(ticket => (
                     <tr key={ticket.id} className="hover:bg-gray-50/50 cursor-pointer" onClick={() => setDetailModal({ open: true, data: ticket })}>
                       <td className="px-4 py-2.5">
-                        <span className="font-mono font-semibold text-gray-900">
+                        <div className="font-mono font-semibold text-gray-900">
                           {ticket.externalTicketId || `#${ticket.ticketNumber}`}
-                        </span>
+                        </div>
+                        {ticket.player?.username && (
+                          <div className="text-xs text-gray-500 mt-0.5">{ticket.player.username}</div>
+                        )}
                       </td>
                       <td className="px-4 py-2.5 text-gray-700 whitespace-nowrap">
                         {fmtDate(ticket.draw.drawDate)} {ticket.draw.drawTime}

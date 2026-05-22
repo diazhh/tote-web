@@ -33,7 +33,7 @@ class TicketsExportService {
    *
    * @returns {Promise<Buffer>}
    */
-  async buildTicketsExcel({ dateFrom, dateTo, gameId = null, source = null, apiSystemId = null } = {}) {
+  async buildTicketsExcel({ dateFrom, dateTo, gameId = null, source = null, apiSystemId = null, playerSearch = null } = {}) {
     this._validateInputs({ dateFrom, dateTo });
 
     const where = { status: { not: 'CANCELLED' } };
@@ -59,6 +59,15 @@ class TicketsExportService {
       }
     } else if (source) {
       where.source = source;
+    }
+
+    const term = playerSearch ? String(playerSearch).trim() : '';
+    if (term) {
+      where.OR = [
+        { user: { username: { contains: term, mode: 'insensitive' } } },
+        { user: { email:    { contains: term, mode: 'insensitive' } } },
+        { externalTicketId: { contains: term, mode: 'insensitive' } },
+      ];
     }
 
     const total = await prisma.ticket.count({ where });
