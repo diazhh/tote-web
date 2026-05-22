@@ -44,7 +44,9 @@ async function main() {
   let total = 0;
   total += await updateGame('lotoanimalito',    n => n === '16' ? 50 : 30);
   total += await updateGame('lottopantera',     n => n === '40' ? 100 : 37);
-  total += await updateGame('triple-pantera',   n => parseInt(n, 10) % 100 === 0 ? 1000 : 600);
+  // Triple Pantera: x1000 para números que terminan en 00 (100, 200, …, 900).
+  // El 000 NO aplica la regla — usa el multiplicador base 600.
+  total += await updateGame('triple-pantera',   n => (n !== '000' && parseInt(n, 10) % 100 === 0) ? 1000 : 600);
   total += await updateGame('terminal-pantera', () => 70);
 
   const triple = await prisma.game.findUnique({
