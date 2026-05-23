@@ -107,6 +107,37 @@ Sirve como bitácora de cambios del sistema. Solo los administradores pueden cre
 
 El menú muestra un badge rojo con el número de entradas nuevas desde la última vez que visitaste la página.`,
   },
+  {
+    title: 'Comisiones: fórmula cascada SALES_AND_UTILITY_PCT',
+    category: 'BREAKING',
+    publishedAt: '2026-05-22T20:30:00.000Z',
+    description:
+`Se cambió cómo se calcula la comisión de los proveedores cuyo contrato usa "porcentaje sobre venta + porcentaje sobre ganancia" (SRQ, premier, Maxplay).
+
+Modelo anterior (independiente):
+  comisión = ventas × %venta + (ventas − premios) × %ganancia
+
+Modelo nuevo (cascada):
+  paso 1: comisiónVenta    = ventas × %venta
+  paso 2: baseUtilidad     = ventas − comisiónVenta − premios
+  paso 3: comisiónUtilidad = baseUtilidad × %ganancia
+  total  = comisiónVenta + comisiónUtilidad
+
+Por qué: la "ganancia" sobre la que aplica el % se interpreta correctamente como lo que queda después de pagar la comisión sobre la venta — no la utilidad bruta.
+
+Ejemplo (venta 100, premios 50, 15% venta, 35% ganancia):
+  • Antes:  15 + (50)×35% = 15 + 17.50 = 32.50  → casa neto 17.50
+  • Ahora:  15 + (35)×35% = 15 + 12.25 = 27.25  → casa neto 22.75
+
+Qué cambia visible:
+  • Comisiones mostradas en /admin/reportes y /admin/reportes/pnl-semanal.
+  • Cifras del módulo Comisiones por proveedor.
+  • Ventas y premios de los tickets NO se tocaron — los reportes con proveedores siguen cuadrando exactamente igual.
+
+Histórico: se recalcularon todas las comisiones de abril y mayo (script recalculate-commissions.mjs). Los settlements DRAFT también se reescribieron. Los CONFIRMED/ADJUSTED se respetaron.
+
+Proveedores con UTILITY_PCT puro (virtuales) y SALES_PCT puro no se ven afectados — la cascada solo aplica cuando hay dos porcentajes encadenados.`,
+  },
 ];
 
 async function main() {

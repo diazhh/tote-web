@@ -102,12 +102,24 @@ export function computeCommission(config, providerRow, cumulativeWeeklySales) {
       return sales.times(config.salesRate.toString()).dividedBy(100).toFixed(8);
     case 'UTILITY_PCT':
       return utility.times(config.utilityRate.toString()).dividedBy(100).toFixed(8);
-    case 'SALES_AND_UTILITY_PCT':
-      return sales
-        .times(config.salesRate.toString())
-        .dividedBy(100)
-        .plus(utility.times(config.utilityRate.toString()).dividedBy(100))
-        .toFixed(8);
+    case 'SALES_AND_UTILITY_PCT': {
+      // Modelo cascada (2026-05-22):
+      //   1. comisiónVenta    = ventas × salesRate%
+      //   2. baseUtilidad     = ventas − comisiónVenta − premios
+      //   3. comisiónUtilidad = baseUtilidad × utilityRate%
+      //   total = comisiónVenta + comisiónUtilidad
+      //
+      // Antes se calculaba comisiónUtilidad sobre (ventas − premios), lo cual
+      // no respetaba que la comisión de venta YA salió de las ventas antes de
+      // medir la "ganancia". Diferencia conceptual: ahora el porcentaje sobre
+      // ganancia opera sobre la ganancia *neta de comisión de venta*.
+      const salesCommission = sales.times(config.salesRate.toString()).dividedBy(100);
+      const utilityBaseCascade = sales.minus(salesCommission).minus(prize);
+      const utilityCommission = utilityBaseCascade
+        .times(config.utilityRate.toString())
+        .dividedBy(100);
+      return salesCommission.plus(utilityCommission).toFixed(8);
+    }
     case 'TIERED': {
       const cum = new Decimal((cumulativeWeeklySales ?? 0).toString());
       const bracket = config.tiers.find((t) => {

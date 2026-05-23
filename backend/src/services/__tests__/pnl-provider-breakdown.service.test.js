@@ -85,27 +85,33 @@ describe('getProviderBreakdownForWeek — SALES_AND_UTILITY_PCT', () => {
 
     expect(out.byGame).toHaveLength(2);
 
+    // Cascada (2026-05-22): la comisión sobre utilidad se calcula sobre
+    // (ventas − comisiónVenta − premios), no sobre (ventas − premios).
     const ani = out.byGame.find((r) => r.gameName === 'LOTOANIMALITO');
     expect(ani.sales).toBe('15154.99');
     expect(ani.prizes).toBe('8100.00');
-    expect(ani.gross).toBe('7054.99');
+    expect(ani.gross).toBe('7054.99'); // gross = sales − prizes (sin cambio)
     expect(ani.salesRate).toBe('16.00');
-    expect(ani.salesCommission).toBe('2424.80');
+    expect(ani.salesCommission).toBe('2424.80'); // 15154.99 × 16%
     expect(ani.utilityRate).toBe('30.00');
-    expect(ani.utilityCommission).toBe('2116.50');
-    expect(ani.totalCommission).toBe('4541.30');
-    expect(ani.netToHouse).toBe('2513.69');
+    // utilityBaseCascade = 15154.99 − 2424.7984 − 8100 = 4630.1916
+    // utilityCommission  = 4630.1916 × 30% = 1389.05748
+    expect(ani.utilityCommission).toBe('1389.06');
+    expect(ani.totalCommission).toBe('3813.86');
+    expect(ani.netToHouse).toBe('3241.13');
     expect(ani.configMissing).toBe(false);
 
     const trp = out.byGame.find((r) => r.gameName === 'TRIPLE PANTERA');
-    expect(trp.salesCommission).toBe('11691.25');
-    expect(trp.utilityCommission).toBe('10279.50');
-    expect(trp.totalCommission).toBe('21970.75');
-    expect(trp.netToHouse).toBe('12294.25');
+    expect(trp.salesCommission).toBe('11691.25'); // 46765 × 25%
+    // utilityBaseCascade = 46765 − 11691.25 − 12500 = 22573.75
+    // utilityCommission  = 22573.75 × 30% = 6772.125
+    expect(trp.utilityCommission).toBe('6772.13');
+    expect(trp.totalCommission).toBe('18463.38');
+    expect(trp.netToHouse).toBe('15801.63');
 
     expect(out.totals.sales).toBe('61919.99');
-    expect(out.totals.totalCommission).toBe('26512.05');
-    expect(out.totals.netToHouse).toBe('14807.94');
+    expect(out.totals.totalCommission).toBe('22277.23');
+    expect(out.totals.netToHouse).toBe('19042.76');
     expect(out.warnings).toEqual([]);
   });
 });
@@ -197,9 +203,14 @@ describe('getProviderBreakdownForWeek — warnings', () => {
       apiSystemId: 'p1', isoYear: 2026, isoWeek: 21,
     });
 
+    // Cascada (2026-05-22):
+    //   salesCommission    = 17595 × 26% = 4574.70
+    //   utilityBaseCascade = 17595 − 4574.70 − 30100 = −17079.70
+    //   utilityCommission  = −17079.70 × 35% = −5977.895 (HALF_UP → −5977.90)
+    //   totalCommission    = 4574.70 + (−5977.895) = −1403.195 → −1403.20
     expect(out.byGame[0].gross).toBe('-12505.00');
-    expect(out.byGame[0].utilityCommission).toBe('-4376.75');
-    expect(out.byGame[0].totalCommission).toBe('197.95');
+    expect(out.byGame[0].utilityCommission).toBe('-5977.90');
+    expect(out.byGame[0].totalCommission).toBe('-1403.20');
     expect(out.warnings).toContain(
       'Utilidad negativa en TRIPLE PANTERA: el componente de utilidad redujo la comisión'
     );

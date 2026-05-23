@@ -54,9 +54,18 @@ function computeRowBreakdown(sales, prizes, gross, config, cumulativeWeeklySales
     salesRate = new Decimal(config.salesRate.toString()).toFixed(2);
     salesCommission = sales.times(config.salesRate.toString()).dividedBy(100);
   }
-  if (ft === 'UTILITY_PCT' || ft === 'SALES_AND_UTILITY_PCT') {
+  if (ft === 'UTILITY_PCT') {
     utilityRate = new Decimal(config.utilityRate.toString()).toFixed(2);
     utilityCommission = gross.times(config.utilityRate.toString()).dividedBy(100);
+  } else if (ft === 'SALES_AND_UTILITY_PCT') {
+    // Modelo cascada (2026-05-22): base de la comisión sobre utilidad es
+    // (ventas − comisiónVenta − premios), no (ventas − premios). Ver
+    // commission.service.js:computeCommission para el detalle.
+    utilityRate = new Decimal(config.utilityRate.toString()).toFixed(2);
+    const utilityBaseCascade = sales.minus(salesCommission ?? new Decimal(0)).minus(prizes);
+    utilityCommission = utilityBaseCascade
+      .times(config.utilityRate.toString())
+      .dividedBy(100);
   }
   if (ft === 'TIERED') {
     const cum = new Decimal(cumulativeWeeklySales);

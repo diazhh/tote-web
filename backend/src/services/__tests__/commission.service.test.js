@@ -74,7 +74,12 @@ describe('commission.service — computeCommission (formula evaluators)', () => 
     expect(computeCommission(config, providerRow, '0')).toBe('80.00000000');
   });
 
-  test('SALES_AND_UTILITY_PCT sales=2% util=5% on 1000/200 returns "60.00000000" (20 + 40)', () => {
+  test('SALES_AND_UTILITY_PCT cascada sales=2% util=5% on 1000/200 returns "59.00000000" (20 + 39)', () => {
+    // Modelo cascada (2026-05-22):
+    //   salesCommission    = 1000 × 2% = 20
+    //   utilityBaseCascade = 1000 − 20 − 200 = 780
+    //   utilityCommission  = 780 × 5% = 39
+    //   total              = 20 + 39 = 59
     const config = {
       formulaType: 'SALES_AND_UTILITY_PCT',
       salesRate: '2',
@@ -82,7 +87,24 @@ describe('commission.service — computeCommission (formula evaluators)', () => 
       tiers: [],
     };
     const providerRow = { totalSales: '1000', totalPrize: '200' };
-    expect(computeCommission(config, providerRow, '0')).toBe('60.00000000');
+    expect(computeCommission(config, providerRow, '0')).toBe('59.00000000');
+  });
+
+  test('SALES_AND_UTILITY_PCT cascada — caso de referencia del usuario 100/50 @ 15%/35% = "27.25000000"', () => {
+    // Ejemplo discutido el 2026-05-22:
+    //   salesCommission    = 100 × 15% = 15
+    //   utilityBaseCascade = 100 − 15 − 50 = 35
+    //   utilityCommission  = 35 × 35% = 12.25
+    //   total              = 15 + 12.25 = 27.25
+    //   netoCasa           = (100 − 50) − 27.25 = 22.75
+    const config = {
+      formulaType: 'SALES_AND_UTILITY_PCT',
+      salesRate: '15',
+      utilityRate: '35',
+      tiers: [],
+    };
+    const providerRow = { totalSales: '100', totalPrize: '50' };
+    expect(computeCommission(config, providerRow, '0')).toBe('27.25000000');
   });
 
   test('TIERED — cum=4500 → first bracket (3%) → "30.00000000"', () => {
@@ -295,8 +317,10 @@ describe('commission.service — computeAndUpsertLedgerForDraw', () => {
       utilityRate: '5',
       tiers: [],
     });
-    expect(createCall.data.amount).toBe('60.00000000');
+    // Cascada: 1000×2% + (1000−20−200)×5% = 20 + 39 = 59
+    expect(createCall.data.amount).toBe('59.00000000');
     expect(createCall.data.salesBase).toBe('1000.00000000');
+    // utilityBase histórica = sales − prizes (sin tocar para no romper reportes)
     expect(createCall.data.utilityBase).toBe('800.00000000');
     expect(createCall.data.configId).toBe('cfg-2');
   });
