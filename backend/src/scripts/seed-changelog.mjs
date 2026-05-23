@@ -108,6 +108,17 @@ Sirve como bitácora de cambios del sistema. Solo los administradores pueden cre
 El menú muestra un badge rojo con el número de entradas nuevas desde la última vez que visitaste la página.`,
   },
   {
+    title: 'Reportes: filtro por SRQ ahora muestra solo SRQ',
+    category: 'FIX',
+    publishedAt: '2026-05-22T21:30:00.000Z',
+    description:
+`En /admin/reportes, al filtrar por SRQ, antes se devolvían los sorteos correctamente pero los totales (ventas, premios, comisiones) eran los del sorteo COMPLETO — sumando todas las fuentes — en vez de solo la porción de SRQ.
+
+Causa: el path materializado del reporte tenía un branch que sobrescribía los totales con DrawFinancialProvider solo para proveedores PUSH (premier, virtuales) y SCRAPE (Maxplay), saltándose los PULL (SRQ). Por eso para los otros proveedores el filtro sí funcionaba bien.
+
+Ahora cualquier filtro por apiSystem aplica el slice del proveedor, independientemente del mode.`,
+  },
+  {
     title: 'Comisiones: fórmula cascada SALES_AND_UTILITY_PCT',
     category: 'BREAKING',
     publishedAt: '2026-05-22T20:30:00.000Z',

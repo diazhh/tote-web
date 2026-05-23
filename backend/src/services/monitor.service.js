@@ -831,11 +831,14 @@ class MonitorService {
         ORDER  BY d."drawDate" ASC, d."drawTime" ASC
       `;
 
-      // If a PUSH/SCRAPE apiSystem filter is active, replace the per-draw totals with
-      // the provider-specific aggregate from DrawFinancialProvider + Ledger.
+      // Si hay filtro por apiSystem (cualquier mode — PULL/PUSH/SCRAPE),
+      // reemplazar los totales por sorteo con el slice del proveedor desde
+      // DrawFinancialProvider + ledger. Sin esto, filtrar por SRQ (PULL)
+      // devolvía los totales del sorteo entero (todas las fuentes) en vez
+      // de solo la porción de SRQ — fix 2026-05-22.
       let providerOverride = null;
       let providerCommissionByDraw = null;
-      if (apiSystemId && resolved.pushProviderFilter) {
+      if (apiSystemId) {
         const drawIds = rows.map((r) => r.drawId);
         if (drawIds.length > 0) {
           const providerRows = await prisma.drawFinancialProvider.findMany({
@@ -869,7 +872,8 @@ class MonitorService {
         ? await prisma.drawFinancialProvider.findMany({
             where: {
               drawId: { in: drawIds },
-              ...(apiSystemId && resolved.pushProviderFilter ? { apiSystemId } : {}),
+              // Cualquier mode (incluyendo PULL/SRQ) — antes solo PUSH/SCRAPE.
+              ...(apiSystemId ? { apiSystemId } : {}),
             },
             select: {
               drawId: true, apiSystemId: true, totalSales: true, totalPrize: true, ticketCount: true,
