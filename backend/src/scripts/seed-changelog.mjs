@@ -108,6 +108,17 @@ Sirve como bitácora de cambios del sistema. Solo los administradores pueden cre
 El menú muestra un badge rojo con el número de entradas nuevas desde la última vez que visitaste la página.`,
   },
   {
+    title: 'Maxplay: scrape solo en último ciclo + alerta Telegram',
+    category: 'IMPROVEMENT',
+    publishedAt: '2026-05-23T14:15:00.000Z',
+    description:
+`El scraper de Maxplay corría cada 5 minutos durante 1 hora antes del cierre de cada sorteo — 12 llamadas por sorteo. Ahora corre una sola vez, en los 5 minutos previos al cierre (el "último ciclo"). 83% menos requests al dashboard de Maxplay.
+
+Motivación: desde 2026-05-22 cada login fresh requiere resolver Cloudflare Turnstile vía 2captcha (~$0.003 cada uno). Menos llamadas = menos costo + menos probabilidad de que CF endurezca más la detección.
+
+Como ahora hay una sola oportunidad por sorteo, cualquier fallo es operacionalmente crítico. Por eso si el scrape falla, se envía una alerta inmediata por Telegram a todos los admins del juego con: juego, hora del sorteo, razón del fallo, y dónde revisar (saldo 2captcha, pm2 logs, debug dumps).`,
+  },
+  {
     title: 'Reportes: filtro por SRQ ahora muestra solo SRQ',
     category: 'FIX',
     publishedAt: '2026-05-22T21:30:00.000Z',
