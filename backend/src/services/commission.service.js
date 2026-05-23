@@ -29,11 +29,10 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import Decimal from 'decimal.js';
 import ExcelJS from 'exceljs';
-import { setISOWeekYear, setISOWeek, startOfISOWeek, endOfISOWeek } from 'date-fns';
 import {
   getISOWeekVE,
   startOfISOWeekVE,
-  endOfISOWeekVE,
+  getMondayOfISOWeek,
 } from '../lib/dateUtils.js';
 
 // F-4 — lock ROUND_HALF_UP at module load. All monetary math goes through decimal.js.
@@ -299,15 +298,17 @@ export async function computeAndUpsertLedgerForDraw(drawId) {
  * week helpers for the actual UTC range used by the JOIN to Draw.
  */
 export async function computeSettlementForWeek(apiSystemId, isoYear, isoWeek) {
-  // Anchor: any date inside the target ISO week. date-fns operates on local time;
-  // because we only use it to pick a Monday inside the week, the host TZ is fine —
-  // the VE wrappers below convert to UTC bounds.
-  let anchor = setISOWeekYear(new Date(), isoYear);
-  anchor = setISOWeek(anchor, isoWeek);
-  anchor = startOfISOWeek(anchor); // Monday 00:00 local — passed through VE helpers next.
-
-  const start = startOfISOWeekVE(anchor);
-  const end = endOfISOWeekVE(anchor);
+  // Window: Monday 00:00 VE → Sunday 23:59:59.999 VE of the target ISO week.
+  //
+  // Antes (bug): se construía un anchor con date-fns nativo en TZ del servidor
+  // y luego se pasaba por startOfISOWeekVE → eso saltaba a la semana anterior
+  // cuando el lunes 00:00 CEST aún caía en domingo 18:00 VE.
+  //
+  // Ahora: getMondayOfISOWeek(year, week) devuelve directamente el Monday 00:00
+  // VE → UTC. El final es Monday(week+1) − 1ms.
+  const start = getMondayOfISOWeek(isoYear, isoWeek);
+  const nextMonday = getMondayOfISOWeek(isoYear, isoWeek + 1);
+  const end = new Date(nextMonday.getTime() - 1);
 
   const rows = await prisma.$queryRaw`
     SELECT COALESCE(SUM(cl.amount), 0)::numeric(18,8) AS total,
@@ -338,11 +339,11 @@ export async function getSettlementWithLedger(settlementId) {
   });
   if (!settlement) throw new Error(`Settlement ${settlementId} no encontrado`);
 
-  let anchor = setISOWeekYear(new Date(), settlement.isoYear);
-  anchor = setISOWeek(anchor, settlement.isoWeek);
-  anchor = startOfISOWeek(anchor);
-  const start = startOfISOWeekVE(anchor);
-  const end = endOfISOWeekVE(anchor);
+  // Mismo fix que computeSettlementForWeek: usar getMondayOfISOWeek directo
+  // para evitar el salto VE↔CEST que hacía caer en la semana anterior.
+  const start = getMondayOfISOWeek(settlement.isoYear, settlement.isoWeek);
+  const nextMonday = getMondayOfISOWeek(settlement.isoYear, settlement.isoWeek + 1);
+  const end = new Date(nextMonday.getTime() - 1);
 
   const ledgerRows = await prisma.providerCommissionLedger.findMany({
     where: {
