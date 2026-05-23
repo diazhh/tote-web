@@ -136,7 +136,8 @@ async function main() {
 
       // ─── 1. Importar jugadas faltantes desde Maxplay ──────────────────
       console.log('  1) maxplay import...');
-      const importRes = await maxplayService.importMaxplayTickets(draw.id);
+      // force:true → bypass guard de estado (los draws ya están DRAWN).
+      const importRes = await maxplayService.importMaxplayTickets(draw.id, { force: true });
       if (importRes.ok) {
         console.log(`     ✓ ${importRes.imported} tickets (${importRes.product || '?'}, ${importRes.durationMs}ms)`);
         totalImported += importRes.imported || 0;

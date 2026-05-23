@@ -156,7 +156,7 @@ class MaxplayService {
    * Returns: { ok, imported, deleted, reason, durationMs, totales }
    */
   async importMaxplayTickets(drawId, options = {}) {
-    const { allowClosed = false } = options;
+    const { allowClosed = false, force = false } = options;
     const startedAt = Date.now();
 
     const apiSystem = await this.getApiSystem();
@@ -176,11 +176,14 @@ class MaxplayService {
       return { ok: false, reason: 'draw_not_found', imported: 0, durationMs: Date.now() - startedAt };
     }
 
+    // `force` bypasses el guard de estado — usado SOLO por retotal-maxplay.mjs
+    // para re-importar jugadas en draws ya DRAWN/PUBLISHED cuando el scrape
+    // se perdió durante el ciclo normal. NO usar desde flujos automáticos.
     const isOpen = draw.status === 'SCHEDULED';
     const isRecentlyClosed = draw.status === 'CLOSED'
       && draw.closedAt
       && (Date.now() - draw.closedAt.getTime() < 120_000);
-    if (!isOpen && !(allowClosed && isRecentlyClosed)) {
+    if (!force && !isOpen && !(allowClosed && isRecentlyClosed)) {
       return { ok: true, imported: 0, reason: `draw_frozen_${draw.status}`, durationMs: Date.now() - startedAt };
     }
 
@@ -221,7 +224,7 @@ class MaxplayService {
       const stillRecentlyClosed = fresh.status === 'CLOSED'
         && fresh.closedAt
         && (Date.now() - fresh.closedAt.getTime() < 120_000);
-      if (!stillOpen && !(allowClosed && stillRecentlyClosed)) {
+      if (!force && !stillOpen && !(allowClosed && stillRecentlyClosed)) {
         return { ok: true, imported: 0, reason: `draw_frozen_under_lock_${fresh.status}`, durationMs: Date.now() - startedAt, totales: payload.totales };
       }
 
