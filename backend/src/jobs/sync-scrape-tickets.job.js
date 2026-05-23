@@ -99,27 +99,30 @@ class SyncScrapeTicketsJob {
 
     logger.info('🎫 [sync-scrape-tickets] Sincronizando Maxplay...');
 
-    const { getVenezuelaDateAsUTC, getVenezuelaTimeString } = await import('../lib/dateUtils.js');
+    const { getVenezuelaDateAsUTC, getVenezuelaTimeString, addMinutesToTime } = await import('../lib/dateUtils.js');
     const todayVenezuela = getVenezuelaDateAsUTC();
     const currentTime = getVenezuelaTimeString();
-    const [hours, minutes] = currentTime.split(':');
-    const oneHourLaterHours = parseInt(hours) + 1;
-    const oneHourLaterTime = `${String(oneHourLaterHours).padStart(2, '0')}:${minutes}:00`;
-    const tomorrowVenezuela = new Date(todayVenezuela);
-    tomorrowVenezuela.setDate(tomorrowVenezuela.getDate() + 1);
+
+    // Solo último ciclo antes del cierre — antes era ventana de 1 hora (12 calls
+    // por draw). Ahora ventana de 6 min: el cron corre cada 5 min, así que cada
+    // draw cae en la ventana exactamente UNA vez (T-5..T-0). Justificación:
+    // cada login fresh consume saldo 2captcha y aumenta probabilidad de que
+    // CF endurezca aún más la detección. El close-and-ingest cierra el draw
+    // T-5min así que esta única corrida es justo el último ciclo antes del
+    // cierre. Si falla → alerta Telegram a admins.
+    const windowEnd = addMinutesToTime(currentTime, 6);
 
     for (const game of games) {
+      let draw = null;
       try {
-        const draw = await prisma.draw.findFirst({
+        draw = await prisma.draw.findFirst({
           where: {
             gameId: game.id,
             status: 'SCHEDULED',
-            OR: [
-              { drawDate: todayVenezuela, drawTime: { gte: currentTime, lte: oneHourLaterTime } },
-              { drawDate: tomorrowVenezuela, drawTime: { lte: oneHourLaterTime } },
-            ],
+            drawDate: todayVenezuela,
+            drawTime: { gte: currentTime, lte: windowEnd },
           },
-          orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }],
+          orderBy: { drawTime: 'asc' },
         });
 
         if (!draw) {
@@ -127,6 +130,7 @@ class SyncScrapeTicketsJob {
         }
 
         const [drawHours, drawMinutes] = draw.drawTime.split(':');
+        const [hours, minutes] = currentTime.split(':');
         const minutesUntilDraw =
           (parseInt(drawHours) * 60 + parseInt(drawMinutes)) -
           (parseInt(hours) * 60 + parseInt(minutes));
@@ -143,11 +147,76 @@ class SyncScrapeTicketsJob {
           logger.info(`     ✓ Maxplay: ${result.imported} tickets (${result.product || ''}, ${result.durationMs}ms)`);
         } else {
           logger.warn(`     ✗ Maxplay falló: ${result.reason}`);
+          await this._notifyMaxplayFailure(game, draw, result.reason).catch((e) => {
+            logger.warn(`[sync-scrape-tickets] alerta fallida: ${e.message}`);
+          });
         }
       } catch (error) {
         logger.error(`  ✗ Error en ${game.name}: ${error.message}`);
+        await this._notifyMaxplayFailure(game, draw, `unexpected: ${error.message}`).catch(() => {
+          /* best-effort */
+        });
       }
     }
+  }
+
+  /**
+   * Alerta a admins (Telegram) cuando el scrape de Maxplay falla.
+   *
+   * Con la ventana de 6 min, cada draw se intenta UNA sola vez antes del cierre,
+   * por eso cualquier fallo es operacionalmente crítico (ese sorteo se va a
+   * cerrar sin las ventas de Maxplay si no se resuelve en los próximos minutos).
+   *
+   * Notifica a todos los admins del juego con telegramChatId y notify=true.
+   * Best-effort: errores al enviar se logean y se siguen procesando otros admins.
+   */
+  async _notifyMaxplayFailure(game, draw, reason) {
+    const adminTelegramBotService = (await import('../services/admin-telegram-bot.service.js')).default;
+
+    const admins = await prisma.userGame.findMany({
+      where: {
+        gameId: game.id,
+        notify: true,
+        user: { isActive: true, telegramChatId: { not: null } },
+      },
+      include: { user: { select: { username: true, telegramChatId: true } } },
+    });
+    if (admins.length === 0) return;
+
+    let drawInfo = '';
+    if (draw) {
+      const [h, m] = draw.drawTime.split(':');
+      const hour = parseInt(h);
+      const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
+      const displayHour = hour % 12 || 12;
+      drawInfo = `\n⏰ <b>Sorteo:</b> ${displayHour}:${m} ${ampm}`;
+    }
+
+    const message = [
+      '🚨 <b>MAXPLAY — SCRAPE FALLÓ</b>',
+      '',
+      `🎰 <b>Juego:</b> ${game.name}${drawInfo}`,
+      '',
+      `❌ <b>Razón:</b> <code>${String(reason).slice(0, 250)}</code>`,
+      '',
+      '⚠️ El sorteo va a cerrar sin las ventas de Maxplay si no se resuelve.',
+      '',
+      'Revisar en VPS:',
+      '• Saldo 2captcha',
+      '• <code>pm2 logs tote-scrape</code>',
+      '• <code>/tmp/maxplay-debug-*</code>',
+    ].join('\n');
+
+    let sent = 0;
+    for (const admin of admins) {
+      try {
+        const ok = await adminTelegramBotService.sendMessageDirect(admin.user.telegramChatId, message);
+        if (ok) sent++;
+      } catch (e) {
+        logger.warn(`[sync-scrape-tickets] alerta a ${admin.user.username} falló: ${e.message}`);
+      }
+    }
+    logger.warn(`[sync-scrape-tickets] 📢 alerta Maxplay enviada a ${sent}/${admins.length} admin(s) [${game.name}]`);
   }
 }
 
