@@ -63,7 +63,7 @@ async function main() {
   const draws = await prisma.draw.findMany({
     where: {
       drawnAt: { gte: fromDate, lte: toDate },
-      status: { in: ['DRAWN', 'PUBLISHED'] },
+      status: 'DRAWN',
     },
     select: { id: true, drawnAt: true, gameId: true },
     orderBy: { drawnAt: 'asc' },
