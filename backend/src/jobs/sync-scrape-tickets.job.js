@@ -103,24 +103,32 @@ class SyncScrapeTicketsJob {
     const todayVenezuela = getVenezuelaDateAsUTC();
     const currentTime = getVenezuelaTimeString();
 
-    // Solo último ciclo antes del cierre — antes era ventana de 1 hora (12 calls
-    // por draw). Ahora ventana de 6 min: el cron corre cada 5 min, así que cada
-    // draw cae en la ventana exactamente UNA vez (T-5..T-0). Justificación:
-    // cada login fresh consume saldo 2captcha y aumenta probabilidad de que
-    // CF endurezca aún más la detección. El close-and-ingest cierra el draw
-    // T-5min así que esta única corrida es justo el último ciclo antes del
-    // cierre. Si falla → alerta Telegram a admins.
-    const windowEnd = addMinutesToTime(currentTime, 6);
+    // Dos disparos por sorteo (cron cada 5 min en Venezuela):
+    //   - T-10 antes de la totalización (minuto :50): warm-up. Si la sesión
+    //     del sidecar venció, este intento paga el cold start (~95s) y deja
+    //     la sesión caliente para el siguiente.
+    //   - T-5  antes de la totalización (minuto :55): el importante. Con
+    //     la sesión caliente debería tardar 8-15s.
+    // Cada llamada es idempotente (upsert), así que ejecutar dos veces sólo
+    // refresca las ventas con datos más recientes en el segundo tiro.
+    const t10Start = addMinutesToTime(currentTime, 10);
+    const t10End = addMinutesToTime(currentTime, 11);
+    const t5Start = addMinutesToTime(currentTime, 5);
+    const t5End = addMinutesToTime(currentTime, 6);
 
     for (const game of games) {
       let draw = null;
+      let phase = null;
       try {
         draw = await prisma.draw.findFirst({
           where: {
             gameId: game.id,
             status: 'SCHEDULED',
             drawDate: todayVenezuela,
-            drawTime: { gte: currentTime, lte: windowEnd },
+            OR: [
+              { drawTime: { gte: t10Start, lt: t10End } },
+              { drawTime: { gte: t5Start, lt: t5End } },
+            ],
           },
           orderBy: { drawTime: 'asc' },
         });
@@ -134,38 +142,44 @@ class SyncScrapeTicketsJob {
         const minutesUntilDraw =
           (parseInt(drawHours) * 60 + parseInt(drawMinutes)) -
           (parseInt(hours) * 60 + parseInt(minutes));
-        const minutesUntilClose = minutesUntilDraw - 5;
+        phase = minutesUntilDraw <= 5 ? 'final' : 'warm-up';
         const hour = parseInt(drawHours);
         const ampm = hour >= 12 ? 'p. m.' : 'a. m.';
         const displayHour = hour % 12 || 12;
         const hora = `${displayHour}:${drawMinutes} ${ampm}`;
 
-        logger.info(`  📊 ${game.name} ${hora} (cierra en ${minutesUntilClose} min)`);
+        logger.info(`  📊 ${game.name} ${hora} (totaliza en ${minutesUntilDraw} min, ${phase})`);
 
         const result = await maxplayService.importMaxplayTickets(draw.id);
         if (result.ok) {
-          logger.info(`     ✓ Maxplay: ${result.imported} tickets (${result.product || ''}, ${result.durationMs}ms)`);
+          logger.info(`     ✓ Maxplay [${phase}]: ${result.imported} tickets (${result.product || ''}, ${result.durationMs}ms)`);
         } else {
-          logger.warn(`     ✗ Maxplay falló: ${result.reason}`);
-          await this._notifyMaxplayFailure(game, draw, result.reason).catch((e) => {
-            logger.warn(`[sync-scrape-tickets] alerta fallida: ${e.message}`);
-          });
+          logger.warn(`     ✗ Maxplay [${phase}] falló: ${result.reason}`);
+          // Alertar SOLO en el disparo final (T-5). El warm-up puede fallar
+          // legítimamente por cold start; el T-5 ya debería estar tibio y
+          // un fallo aquí sí amerita atención humana.
+          if (phase === 'final') {
+            await this._notifyMaxplayFailure(game, draw, result.reason).catch((e) => {
+              logger.warn(`[sync-scrape-tickets] alerta fallida: ${e.message}`);
+            });
+          }
         }
       } catch (error) {
         logger.error(`  ✗ Error en ${game.name}: ${error.message}`);
-        await this._notifyMaxplayFailure(game, draw, `unexpected: ${error.message}`).catch(() => {
-          /* best-effort */
-        });
+        if (phase === 'final') {
+          await this._notifyMaxplayFailure(game, draw, `unexpected: ${error.message}`).catch(() => {
+            /* best-effort */
+          });
+        }
       }
     }
   }
 
   /**
-   * Alerta a admins (Telegram) cuando el scrape de Maxplay falla.
-   *
-   * Con la ventana de 6 min, cada draw se intenta UNA sola vez antes del cierre,
-   * por eso cualquier fallo es operacionalmente crítico (ese sorteo se va a
-   * cerrar sin las ventas de Maxplay si no se resuelve en los próximos minutos).
+   * Alerta a admins (Telegram) cuando el scrape de Maxplay falla EN EL
+   * DISPARO FINAL (T-5 antes de la totalización). El warm-up (T-10) puede
+   * fallar legítimamente por cold start del sidecar; sólo si el T-5
+   * también falla se considera operacionalmente crítico.
    *
    * Notifica a todos los admins del juego con telegramChatId y notify=true.
    * Best-effort: errores al enviar se logean y se siguen procesando otros admins.
