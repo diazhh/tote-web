@@ -111,10 +111,15 @@ class SyncScrapeTicketsJob {
     //     la sesión caliente debería tardar 8-15s.
     // Cada llamada es idempotente (upsert), así que ejecutar dos veces sólo
     // refresca las ventas con datos más recientes en el segundo tiro.
-    const t10Start = addMinutesToTime(currentTime, 10);
-    const t10End = addMinutesToTime(currentTime, 11);
-    const t5Start = addMinutesToTime(currentTime, 5);
-    const t5End = addMinutesToTime(currentTime, 6);
+    //
+    // OJO: getVenezuelaTimeString() devuelve "HH:MM:SS" y addMinutesToTime
+    // preserva los segundos. Truncamos a "HH:MM" para que las ventanas
+    // narrow de 1 min no se rompan por el offset de segundos del tick cron.
+    const baseTime = currentTime.slice(0, 5);
+    const t10Start = addMinutesToTime(baseTime, 10);
+    const t10End = addMinutesToTime(baseTime, 11);
+    const t5Start = addMinutesToTime(baseTime, 5);
+    const t5End = addMinutesToTime(baseTime, 6);
 
     for (const game of games) {
       let draw = null;
@@ -150,7 +155,12 @@ class SyncScrapeTicketsJob {
 
         logger.info(`  📊 ${game.name} ${hora} (totaliza en ${minutesUntilDraw} min, ${phase})`);
 
-        const result = await maxplayService.importMaxplayTickets(draw.id);
+        // allowClosed:true es necesario para el disparo final (T-5): el
+        // close-and-ingest también dispara al minuto :55 y cierra el draw
+        // (SCHEDULED → CLOSED) en paralelo. Si gana, sin allowClosed el
+        // service retornaría 'draw_frozen_under_lock_CLOSED' con imported=0.
+        // Para warm-up (T-10) es un no-op porque el draw aún está SCHEDULED.
+        const result = await maxplayService.importMaxplayTickets(draw.id, { allowClosed: true });
         if (result.ok) {
           logger.info(`     ✓ Maxplay [${phase}]: ${result.imported} tickets (${result.product || ''}, ${result.durationMs}ms)`);
         } else {
