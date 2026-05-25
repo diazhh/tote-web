@@ -10,7 +10,7 @@ import { checkTicketQuotas, partitionByQuota } from './quota.service.js';
  * `items[]` + `totalAmount` indicando exactamente qué se vendió.
  * Detalles sin cupo se descartan silenciosamente (no se exponen).
  */
-const PARTIAL_ACCEPTANCE_SLUGS = new Set(['premier2']);
+const PARTIAL_ACCEPTANCE_SLUGS = new Set(['premier2', 'virtuales2']);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

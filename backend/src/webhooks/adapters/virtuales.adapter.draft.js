@@ -149,6 +149,11 @@ export async function normalize(payload) {
       amount: Number(rp.play.amount),
       multiplier: Number(rp.gameItem.multiplier),
       drawId: rp.draw.id,
+      // Echo de identidad del play original para que el service pueda
+      // construir `items[]` en respuestas con aceptación parcial. Campos
+      // extra ignorados por createWebhookTicket.
+      drawSlotId: String(rp.play.drawSlotId),
+      number: String(rp.play.number),
     })),
   };
 }
