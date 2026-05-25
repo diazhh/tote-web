@@ -102,18 +102,35 @@ const portalService = {
     const currentPage = clampPage(page);
     const skip = (currentPage - 1) * take;
 
-    // Find draws that have at least one ticket belonging to this provider.
-    // TicketDetail has no direct Draw relation in Prisma, so we scope via
-    // Draw.tickets (Ticket[]) which carries apiSystemId + source.
+    // Find draws that have at least one TicketDetail from this provider.
+    // Vía dos pasos: (1) resolver drawIds donde el proveedor tiene jugadas
+    // atribuidas (TicketDetail.drawId), (2) restringir Draw.id IN drawIds.
+    // El path anterior usaba `tickets: { some: { apiSystemId } }` que sólo
+    // matchea draws donde Ticket.drawId apunta al draw — pierde tickets
+    // multi-sorteo cuyo ancla es otro draw distinto.
+    const detailRowsForProvider = await prisma.ticketDetail.findMany({
+      where: {
+        ticket: { apiSystemId, source: 'WEBHOOK_PUSH' },
+        OR: [
+          { drawId: { not: null } },
+          { drawId: null }, // legacy fallback resuelto abajo
+        ],
+      },
+      select: { drawId: true, ticket: { select: { drawId: true } } },
+      distinct: ['drawId'],
+    });
+    const candidateDrawIds = Array.from(new Set(
+      detailRowsForProvider
+        .map(r => r.drawId || r.ticket?.drawId)
+        .filter(Boolean)
+    ));
+
     const drawWhere = {
       drawDate: { gte: dateFrom, lte: dateTo },
       ...(filters.gameId && { gameId: filters.gameId }),
-      tickets: {
-        some: {
-          apiSystemId, // FORCED
-          source: 'WEBHOOK_PUSH',
-        },
-      },
+      ...(candidateDrawIds.length > 0
+        ? { id: { in: candidateDrawIds } }
+        : { id: { in: [] } }), // forzar resultado vacío si no hay candidatos
     };
 
     try {
@@ -136,13 +153,23 @@ const portalService = {
         prisma.draw.count({ where: drawWhere }),
       ]);
 
-      // Per-draw count of this provider's tickets
+      // Per-draw count of this provider's tickets — usar TicketDetail.drawId
+      // para incluir tickets multi-sorteo cuya ancla esté en otro draw.
+      // El distinct sobre ticketId garantiza que un ticket con varias jugadas
+      // en el mismo sorteo cuente una vez.
       const rowsWithCount = await Promise.all(
         rows.map(async d => {
-          const ticketCount = await prisma.ticket.count({
-            where: { apiSystemId, source: 'WEBHOOK_PUSH', drawId: d.id },
+          const distinctTickets = await prisma.ticketDetail.findMany({
+            where: {
+              OR: [
+                { drawId: d.id, ticket: { apiSystemId, source: 'WEBHOOK_PUSH' } },
+                { drawId: null, ticket: { apiSystemId, source: 'WEBHOOK_PUSH', drawId: d.id } },
+              ],
+            },
+            distinct: ['ticketId'],
+            select: { ticketId: true },
           });
-          return { ...d, ticketCount };
+          return { ...d, ticketCount: distinctTickets.length };
         }),
       );
 

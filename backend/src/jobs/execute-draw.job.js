@@ -580,49 +580,55 @@ class ExecuteDrawJob {
       const draws = await prisma.draw.findMany({
         where: {
           gameId,
-          drawDate: {
-            gte: startDate,
-            lte: endDate
-          },
+          drawDate: { gte: startDate, lte: endDate },
           status: 'DRAWN'
         },
-        include: {
-          winnerItem: true,
-          tickets: {
-            include: {
-              details: true
-            }
-          }
-        }
+        select: { id: true, winnerItemId: true, winnerItem: { select: { multiplier: true } } }
       });
 
-      let sales = 0;
-      let payouts = 0;
+      if (draws.length === 0) return { sales: 0, payouts: 0, profit: 0 };
 
-      for (const draw of draws) {
-        const tickets = draw.tickets || [];
-        const drawSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
-        sales += drawSales;
+      // Atribución por TicketDetail.drawId — corrige bug multi-sorteo donde
+      // un ticket con apuestas en N sorteos sólo contribuía a `Ticket.drawId`.
+      const drawIds = draws.map(d => d.id);
+      const details = await prisma.ticketDetail.findMany({
+        where: {
+          drawId: { in: drawIds },
+          ticket: { status: { not: 'CANCELLED' } }
+        },
+        select: { drawId: true, gameItemId: true, amount: true }
+      });
 
-        if (draw.winnerItemId && draw.winnerItem) {
-          let winnerSales = 0;
-          tickets.forEach(ticket => {
-            ticket.details.forEach(detail => {
-              if (detail.gameItemId === draw.winnerItemId) {
-                winnerSales += parseFloat(detail.amount);
-              }
-            });
-          });
-          const multiplier = parseFloat(draw.winnerItem.multiplier || 30);
-          payouts += winnerSales * multiplier;
+      // Index: drawId → { sales, winnerSales }
+      const byDraw = new Map();
+      const winnerByDraw = new Map();
+      for (const d of draws) winnerByDraw.set(d.id, d.winnerItemId);
+
+      for (const detail of details) {
+        const amount = parseFloat(detail.amount);
+        let entry = byDraw.get(detail.drawId);
+        if (!entry) {
+          entry = { sales: 0, winnerSales: 0 };
+          byDraw.set(detail.drawId, entry);
+        }
+        entry.sales += amount;
+        if (winnerByDraw.get(detail.drawId) === detail.gameItemId) {
+          entry.winnerSales += amount;
         }
       }
 
-      return {
-        sales,
-        payouts,
-        profit: sales - payouts
-      };
+      let sales = 0;
+      let payouts = 0;
+      for (const draw of draws) {
+        const entry = byDraw.get(draw.id) || { sales: 0, winnerSales: 0 };
+        sales += entry.sales;
+        if (draw.winnerItemId && draw.winnerItem) {
+          const multiplier = parseFloat(draw.winnerItem.multiplier || 30);
+          payouts += entry.winnerSales * multiplier;
+        }
+      }
+
+      return { sales, payouts, profit: sales - payouts };
     } catch (error) {
       logger.error('Error calculando estadísticas del período:', error);
       return { sales: 0, payouts: 0, profit: 0 };

@@ -8,6 +8,7 @@
 
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
+import { loadDrawTicketDetails, sumDetailsAmount } from '../lib/drawDetailsLoader.js';
 
 class DrawAnalysisService {
   /**
@@ -19,23 +20,11 @@ class DrawAnalysisService {
     try {
       logger.info(`📊 Analizando impacto de ganadores para sorteo ${drawId}`);
 
-      // Obtener sorteo con juego y tickets
+      // Obtener sorteo (sin tickets via FK reversa: ese path perdía jugadas
+      // multi-sorteo cuyo Ticket.drawId apuntaba a otro draw).
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          winnerItem: true,
-          preselectedItem: true,
-          tickets: {
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
-        }
+        include: { game: true, winnerItem: true, preselectedItem: true }
       });
 
       if (!draw) {
@@ -48,25 +37,30 @@ class DrawAnalysisService {
         orderBy: { number: 'asc' }
       });
 
+      // Cargar TicketDetails atribuidos a este sorteo (multi-sorteo safe).
+      // Sin filtro de status para preservar el análisis post-mortem
+      // del comportamiento histórico (igual que antes).
+      const details = await prisma.ticketDetail.findMany({
+        where: { drawId },
+        select: { gameItemId: true, amount: true }
+      });
+
       // Calcular ventas totales
-      const tickets = draw.tickets || [];
-      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
+      const totalSales = details.reduce((s, d) => s + parseFloat(d.amount), 0);
 
       // Obtener configuración del juego
       const gameConfig = draw.game.config || {};
       const percentageToDistribute = gameConfig.percentageToDistribute || 70;
       const maxPayout = (totalSales * percentageToDistribute) / 100;
 
-      // Agrupar ventas por item
+      // Agrupar ventas por item a partir de la lista plana de details
       const salesByItem = new Map();
-      for (const ticket of tickets) {
-        for (const detail of ticket.details) {
-          const current = salesByItem.get(detail.gameItemId) || { amount: 0, count: 0 };
-          salesByItem.set(detail.gameItemId, {
-            amount: current.amount + parseFloat(detail.amount),
-            count: current.count + 1
-          });
-        }
+      for (const detail of details) {
+        const current = salesByItem.get(detail.gameItemId) || { amount: 0, count: 0 };
+        salesByItem.set(detail.gameItemId, {
+          amount: current.amount + parseFloat(detail.amount),
+          count: current.count + 1
+        });
       }
 
       // Obtener tripletas activas del juego

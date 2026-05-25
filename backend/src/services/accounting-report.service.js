@@ -93,24 +93,50 @@ class AccountingReportService {
       }
     }
 
-    const ticketsInclude = {
-      where: { status: { not: 'CANCELLED' } },
-      select: { totalAmount: true, totalPrize: true, source: true, providerData: true },
-    };
+    // Filtro Ticket: respeta proveedor/fuente
+    const ticketFilter = { status: { not: 'CANCELLED' } };
     if (pushProviderFilter) {
-      ticketsInclude.where.apiSystemId = apiSystemId;
+      ticketFilter.apiSystemId = apiSystemId;
     } else if (source) {
-      ticketsInclude.where.source = source;
+      ticketFilter.source = source;
     }
 
     const draws = await prisma.draw.findMany({
       where: drawWhere,
-      include: {
-        game: { select: { id: true, name: true } },
-        tickets: ticketsInclude,
-      },
+      include: { game: { select: { id: true, name: true } } },
       orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }],
     });
+
+    // Atribución por TicketDetail.drawId (NO por Ticket.drawId). Esto evita
+    // el bug donde un ticket multi-sorteo (ej. virtuales que apuesta el
+    // mismo número en 5 sorteos consecutivos) atribuía toda su venta y
+    // su premio al sorteo "ancla", distorsionando el P/L por sorteo.
+    const drawIdsAll = draws.map((d) => d.id);
+    const detailsAll = drawIdsAll.length > 0
+      ? await prisma.ticketDetail.findMany({
+          where: { drawId: { in: drawIdsAll }, ticket: ticketFilter },
+          include: {
+            ticket: { select: { id: true, source: true, providerData: true } },
+          },
+        })
+      : [];
+
+    // Index: drawId → { totalSales, ticketIds:Set, regularPrize }
+    const detailsByDraw = new Map();
+    for (const d of detailsAll) {
+      const t = d.ticket;
+      const isExternalTripleta = t.source === 'EXTERNAL_API' && t.providerData?.type === 'TRIPLETA';
+      let entry = detailsByDraw.get(d.drawId);
+      if (!entry) {
+        entry = { totalSales: 0, ticketIds: new Set(), regularPrize: 0 };
+        detailsByDraw.set(d.drawId, entry);
+      }
+      entry.totalSales += parseFloat(d.amount);
+      entry.ticketIds.add(t.id);
+      if (!isExternalTripleta) {
+        entry.regularPrize += parseFloat(d.prize || 0);
+      }
+    }
 
     // Premios de tripletas externas atribuidos por prizeDrawId.
     // Sólo aplican cuando el filtro de fuente las incluye (sin filtro o EXTERNAL_API).
@@ -118,9 +144,8 @@ class AccountingReportService {
     const tripletaPrizeByDraw = {};
     const includesTripletaPrizes = !pushProviderFilter && (!source || source === 'EXTERNAL_API');
     if (includesTripletaPrizes && draws.length > 0) {
-      const drawIds = draws.map((d) => d.id);
       const tripletaWinners = await prisma.ticket.findMany({
-        where: { prizeDrawId: { in: drawIds }, status: 'WON' },
+        where: { prizeDrawId: { in: drawIdsAll }, status: 'WON' },
         select: { prizeDrawId: true, totalPrize: true },
       });
       for (const t of tripletaWinners) {
@@ -133,13 +158,10 @@ class AccountingReportService {
     const byDayGame = new Map();
 
     for (const draw of draws) {
-      const tickets = draw.tickets || [];
-      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
-
-      const regularPrize = tickets
-        .filter((t) => !(t.source === 'EXTERNAL_API' && t.providerData?.type === 'TRIPLETA'))
-        .reduce((sum, t) => sum + parseFloat(t.totalPrize), 0);
-      const totalPrize = regularPrize + (tripletaPrizeByDraw[draw.id] || 0);
+      const entry = detailsByDraw.get(draw.id) || { totalSales: 0, ticketIds: new Set(), regularPrize: 0 };
+      const totalSales = entry.totalSales;
+      const ticketCount = entry.ticketIds.size;
+      const totalPrize = entry.regularPrize + (tripletaPrizeByDraw[draw.id] || 0);
 
       const dateKey = draw.drawDate.toISOString().split('T')[0];
       const key = `${dateKey}|${draw.gameId}`;
@@ -159,7 +181,7 @@ class AccountingReportService {
       row.totalSales += totalSales;
       row.totalPrize += totalPrize;
       row.utility += totalSales - totalPrize;
-      row.ticketCount += tickets.length;
+      row.ticketCount += ticketCount;
     }
 
     const rows = Array.from(byDayGame.values()).sort((a, b) => {

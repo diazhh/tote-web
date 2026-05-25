@@ -2,6 +2,7 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import { startOfDay, endOfDay, differenceInDays, differenceInHours } from 'date-fns';
 import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
+import { loadDrawTicketDetails, sumDetailsAmount } from '../lib/drawDetailsLoader.js';
 
 /**
  * Servicio de Optimización de Pre-Ganadores v2
@@ -179,22 +180,11 @@ class PrewinnerOptimizerService {
    * Cargar todo el contexto necesario para el sorteo
    */
   async loadDrawContext(drawId) {
-    // Cargar sorteo con todas las relaciones necesarias
+    // Cargar sorteo (sin la relación tickets — antes se incluía con detalles
+    // pero perdía jugadas multi-sorteo cuyo Ticket.drawId apuntaba a otro draw).
     const draw = await prisma.draw.findUnique({
       where: { id: drawId },
-      include: {
-        game: true,
-        preselectedItem: true,
-        tickets: {
-          include: {
-            details: {
-              include: {
-                gameItem: true
-              }
-            }
-          }
-        }
-      }
+      include: { game: true, preselectedItem: true }
     });
 
     if (!draw) return { draw: null };
@@ -208,12 +198,16 @@ class PrewinnerOptimizerService {
       orderBy: { number: 'asc' }
     });
 
-    // Calcular ventas totales
-    const tickets = draw.tickets || [];
-    const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
+    // Cargar TicketDetails atribuidos a este sorteo (multi-sorteo safe).
+    const details = await loadDrawTicketDetails(drawId, {
+      ticketSelect: { id: true },
+    });
+
+    // Ventas totales del sorteo = suma de detail.amount
+    const totalSales = sumDetailsAmount(details);
 
     // Agrupar ventas por item
-    const salesByItem = this.groupSalesByItem(tickets);
+    const salesByItem = this.groupSalesByItem(details);
 
     // Cargar tripletas activas (locales + externas de SRQ)
     // Construir fecha/hora completa del sorteo
@@ -353,7 +347,7 @@ class PrewinnerOptimizerService {
       draw,
       game: draw.game,
       gameItems,
-      tickets,
+      details,         // antes era `tickets`; ahora exponemos la lista plana
       totalSales,
       salesByItem,
       activeTripletas,
@@ -389,22 +383,22 @@ class PrewinnerOptimizerService {
             drawDate: draw.drawDate,
             drawTime: draw.drawTime,
             status: 'SCHEDULED'
-          },
-          include: {
-            tickets: { include: { details: { include: { gameItem: true } } } }
           }
         });
 
         if (!terminalDraw) continue;
 
+        // Cargar TicketDetails atribuidos al sorteo Terminal (multi-sorteo safe).
+        // Antes traíamos terminalDraw.tickets vía FK reversa, perdiendo jugadas
+        // multi-sorteo con ancla en otro draw distinto.
+        const terminalDetails = await loadDrawTicketDetails(terminalDraw.id);
+
         // Agrupar ventas por número terminal (2 dígitos)
         const salesByNumber = new Map();
-        for (const ticket of terminalDraw.tickets) {
-          for (const detail of ticket.details) {
-            const num = detail.gameItem.number; // "00"-"99"
-            const existing = salesByNumber.get(num) || 0;
-            salesByNumber.set(num, existing + parseFloat(detail.amount));
-          }
+        for (const detail of terminalDetails) {
+          const num = detail.gameItem.number; // "00"-"99"
+          const existing = salesByNumber.get(num) || 0;
+          salesByNumber.set(num, existing + parseFloat(detail.amount));
         }
 
         // Cargar multiplicador de un item para referencia
@@ -441,26 +435,27 @@ class PrewinnerOptimizerService {
   }
 
   /**
-   * Agrupar ventas por item
+   * Agrupar ventas por item desde lista plana de TicketDetail.
+   * (Antes recibía tickets[] e iteraba ticket.details — incluía jugadas de
+   * OTROS sorteos cuando el ticket era multi-sorteo, sobre-reportando
+   * exposure en el sorteo "ancla".)
    */
-  groupSalesByItem(tickets) {
+  groupSalesByItem(details) {
     const salesByItem = new Map();
-    
-    for (const ticket of tickets) {
-      for (const detail of ticket.details) {
-        const existing = salesByItem.get(detail.gameItemId) || { 
-          amount: 0, 
-          count: 0,
-          tickets: []
-        };
-        existing.amount += parseFloat(detail.amount);
-        existing.count += 1;
-        existing.tickets.push({
-          ticketId: ticket.id,
-          amount: parseFloat(detail.amount)
-        });
-        salesByItem.set(detail.gameItemId, existing);
-      }
+
+    for (const detail of details) {
+      const existing = salesByItem.get(detail.gameItemId) || {
+        amount: 0,
+        count: 0,
+        tickets: []
+      };
+      existing.amount += parseFloat(detail.amount);
+      existing.count += 1;
+      existing.tickets.push({
+        ticketId: detail.ticketId,
+        amount: parseFloat(detail.amount)
+      });
+      salesByItem.set(detail.gameItemId, existing);
     }
 
     return salesByItem;

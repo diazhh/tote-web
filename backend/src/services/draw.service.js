@@ -450,23 +450,8 @@ export class DrawService {
 
       const updatedDraw = await prisma.draw.update({
         where: { id },
-        data: {
-          preselectedItemId: selectedItemId,
-        },
-        include: {
-          game: true,
-          preselectedItem: true,
-          winnerItem: true,
-          tickets: {
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
-        },
+        data: { preselectedItemId: selectedItemId },
+        include: { game: true, preselectedItem: true, winnerItem: true },
       });
 
       logger.info(`Ganador preseleccionado en sorteo ${id}: ${updatedDraw.preselectedItem?.number}`);
@@ -476,9 +461,18 @@ export class DrawService {
       try {
         const adminNotificationService = (await import('./admin-notification.service.js')).default;
 
-        // Calcular ventas totales del sorteo
-        const tickets = updatedDraw.tickets || [];
-        const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
+        // Cargar TicketDetails atribuidos a este sorteo (multi-sorteo safe).
+        // Antes iteraba updatedDraw.tickets (FK reversa), perdiendo jugadas
+        // de tickets multi-sorteo anclados a otros draws.
+        const details = await prisma.ticketDetail.findMany({
+          where: {
+            drawId: id,
+            ticket: { status: { not: 'CANCELLED' } }
+          },
+          include: { gameItem: true }
+        });
+
+        const totalSales = details.reduce((sum, d) => sum + parseFloat(d.amount), 0);
 
         // Obtener configuración del juego
         const gameConfig = updatedDraw.game.config || {};
@@ -493,23 +487,21 @@ export class DrawService {
         }
         maxPayout = Math.min(maxPayout, totalSales);
 
-        // Agrupar ventas por item
+        // Agrupar ventas por item a partir de los details
         const salesByItem = {};
-        for (const ticket of tickets) {
-          for (const detail of ticket.details) {
-            const itemNumber = detail.gameItem?.number || 'N/A';
-            const itemName = detail.gameItem?.name || 'N/A';
-            if (!salesByItem[itemNumber]) {
-              salesByItem[itemNumber] = {
-                number: itemNumber,
-                name: itemName,
-                amount: 0,
-                count: 0
-              };
-            }
-            salesByItem[itemNumber].amount += parseFloat(detail.amount);
-            salesByItem[itemNumber].count += 1;
+        for (const detail of details) {
+          const itemNumber = detail.gameItem?.number || 'N/A';
+          const itemName = detail.gameItem?.name || 'N/A';
+          if (!salesByItem[itemNumber]) {
+            salesByItem[itemNumber] = {
+              number: itemNumber,
+              name: itemName,
+              amount: 0,
+              count: 0
+            };
           }
+          salesByItem[itemNumber].amount += parseFloat(detail.amount);
+          salesByItem[itemNumber].count += 1;
         }
 
         // Calcular pago potencial del item seleccionado

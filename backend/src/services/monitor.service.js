@@ -9,6 +9,7 @@ import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import { startOfDayDate, endOfDayDate, getVenezuelaDateAsUTC } from '../lib/dateUtils.js';
 import { cacheOrCompute } from '../lib/redis.js';
+import { loadDrawTicketDetails, countUniqueTickets } from '../lib/drawDetailsLoader.js';
 
 /**
  * Shared apiSystem PULL-vs-PUSH/SCRAPE resolution helper (Plan 14-02 Task 1, O4).
@@ -60,30 +61,28 @@ class MonitorService {
     try {
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          winnerItem: true,
-          tickets: {
-            where: { source: 'EXTERNAL_API', status: { not: 'CANCELLED' } },
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
-        }
+        include: { game: true, winnerItem: true }
       });
 
       if (!draw) {
         throw new Error('Sorteo no encontrado');
       }
 
-      // Agrupar tickets por banca
-      const bancaMap = new Map();
+      // Cargar TicketDetails atribuidos a este sorteo (NO via Draw.tickets,
+      // que pierde jugadas multi-sorteo cuando Ticket.drawId apunta a otro).
+      const details = await loadDrawTicketDetails(drawId, {
+        ticketWhere: { source: 'EXTERNAL_API', status: { not: 'CANCELLED' } },
+        ticketSelect: { id: true, providerData: true },
+      });
 
-      for (const ticket of draw.tickets) {
+      // Agrupar por banca a partir de los details: las ventas de la banca en
+      // este sorteo son la suma de los detail.amount, NO el Ticket.totalAmount
+      // (que es el total del ticket completo, posiblemente en varios sorteos).
+      const bancaMap = new Map();
+      const ticketIdsByBanca = new Map();
+
+      for (const detail of details) {
+        const ticket = detail.ticket;
         const bancaId = ticket.providerData?.bancaID;
         if (!bancaId) continue;
 
@@ -96,21 +95,23 @@ class MonitorService {
             ticketCount: 0,
             entityId: ticket.providerData?.entityIds?.bancaId || null
           });
+          ticketIdsByBanca.set(bancaId, new Set());
         }
 
         const banca = bancaMap.get(bancaId);
-        banca.totalAmount += parseFloat(ticket.totalAmount);
-        banca.ticketCount += 1;
+        banca.totalAmount += parseFloat(detail.amount);
+        ticketIdsByBanca.get(bancaId).add(ticket.id);
 
-        // Calcular premio si el item ganó
-        if (draw.winnerItemId) {
-          for (const detail of ticket.details) {
-            if (detail.gameItemId === draw.winnerItemId) {
-              const prize = parseFloat(detail.amount) * parseFloat(detail.gameItem.multiplier);
-              banca.totalPrize += prize;
-            }
-          }
+        // Calcular premio si la jugada cayó en el ganador del sorteo
+        if (draw.winnerItemId && detail.gameItemId === draw.winnerItemId) {
+          const prize = parseFloat(detail.amount) * parseFloat(detail.gameItem.multiplier);
+          banca.totalPrize += prize;
         }
+      }
+
+      // ticketCount: tickets ÚNICOS que aportaron al menos una jugada a este sorteo
+      for (const [bancaId, banca] of bancaMap.entries()) {
+        banca.ticketCount = ticketIdsByBanca.get(bancaId).size;
       }
 
       // Obtener nombres de bancas si existen en nuestro sistema
@@ -165,25 +166,19 @@ class MonitorService {
     try {
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          winnerItem: true,
-          tickets: {
-            where: { status: { not: 'CANCELLED' } },
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
-        }
+        include: { game: true, winnerItem: true }
       });
 
       if (!draw) {
         throw new Error('Sorteo no encontrado');
       }
+
+      // Cargar TicketDetails atribuidos a este sorteo (corrige bug multi-sorteo:
+      // Draw.tickets filtra por Ticket.drawId, ocultando jugadas cuyo ticket
+      // tiene como ancla otro sorteo distinto).
+      const details = await loadDrawTicketDetails(drawId, {
+        ticketSelect: { id: true },
+      });
 
       // Obtener todos los items del juego
       const gameItems = await prisma.gameItem.findMany({
@@ -210,17 +205,18 @@ class MonitorService {
         });
       }
 
-      // Calcular ventas totales
+      // Calcular ventas totales — iteración plana sobre los details del sorteo.
+      // Preserva semantic: ticketCount cuenta DETAILS (no tickets únicos) tal
+      // como hacía la versión anterior — un ticket con 3 jugadas al mismo
+      // número suma 3 al ticketCount.
       let totalSales = 0;
-      for (const ticket of draw.tickets) {
-        for (const detail of ticket.details) {
-          const item = itemMap.get(detail.gameItemId);
-          if (item) {
-            const amount = parseFloat(detail.amount);
-            item.totalAmount += amount;
-            item.ticketCount += 1;
-            totalSales += amount;
-          }
+      for (const detail of details) {
+        const item = itemMap.get(detail.gameItemId);
+        if (item) {
+          const amount = parseFloat(detail.amount);
+          item.totalAmount += amount;
+          item.ticketCount += 1;
+          totalSales += amount;
         }
       }
 
@@ -421,19 +417,18 @@ class MonitorService {
 
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          winnerItem: true,
-          tickets: {
-            where: ticketWhere,
-            include: {
-              details: { include: { gameItem: true } }
-            }
-          }
-        }
+        include: { game: true, winnerItem: true }
       });
 
       if (!draw) throw new Error('Sorteo no encontrado');
+
+      // Cargar TicketDetails de este sorteo respetando los filtros de proveedor/fuente
+      // (corrige bug multi-sorteo: Draw.tickets perdía jugadas cuyo Ticket.drawId
+      // apuntaba a otro sorteo).
+      const details = await loadDrawTicketDetails(drawId, {
+        ticketWhere,
+        ticketSelect: { id: true },
+      });
 
       const gameItems = await prisma.gameItem.findMany({
         where: { gameId: draw.gameId, isActive: true },
@@ -455,15 +450,13 @@ class MonitorService {
       }
 
       let totalSales = 0;
-      for (const ticket of draw.tickets) {
-        for (const detail of ticket.details) {
-          const item = itemMap.get(detail.gameItemId);
-          if (item) {
-            const amount = parseFloat(detail.amount);
-            item.totalAmount += amount;
-            item.ticketCount += 1;
-            totalSales += amount;
-          }
+      for (const detail of details) {
+        const item = itemMap.get(detail.gameItemId);
+        if (item) {
+          const amount = parseFloat(detail.amount);
+          item.totalAmount += amount;
+          item.ticketCount += 1;
+          totalSales += amount;
         }
       }
 
@@ -480,7 +473,10 @@ class MonitorService {
         drawDate: draw.drawDate,
         drawTime: draw.drawTime,
         totalSales,
-        ticketCount: draw.tickets.length,
+        // ticketCount cambia semántica: ahora son tickets ÚNICOS que aportaron
+        // al menos una jugada a este sorteo (antes era `draw.tickets.length`,
+        // que ya era tickets únicos pero sólo los anclados al sorteo).
+        ticketCount: countUniqueTickets(details),
         winnerItem: draw.winnerItem ? { number: draw.winnerItem.number, name: draw.winnerItem.name } : null,
         items: Array.from(itemMap.values())
           .filter(i => i.totalAmount > 0)
@@ -596,28 +592,73 @@ class MonitorService {
         }
       }
 
-      // Build tickets include — apply source filter if provided (BACK-02)
-      const ticketsInclude = {
-        where: { status: { not: 'CANCELLED' } }
-      };
+      // Construir filtro Ticket — aplica source filter si fue provisto (BACK-02)
+      const ticketFilter = { status: { not: 'CANCELLED' } };
       if (pushProviderFilter) {
-        ticketsInclude.where.apiSystemId = apiSystemId;
+        ticketFilter.apiSystemId = apiSystemId;
       } else if (source) {
-        ticketsInclude.where.source = source;
+        ticketFilter.source = source;
       }
 
       const draws = await prisma.draw.findMany({
         where,
-        include: {
-          game: true,
-          winnerItem: true,
-          tickets: ticketsInclude
-        },
-        orderBy: [
-          { drawDate: 'asc' },
-          { drawTime: 'asc' }
-        ]
+        include: { game: true, winnerItem: true },
+        orderBy: [{ drawDate: 'asc' }, { drawTime: 'asc' }]
       });
+
+      // Atribución por TicketDetail.drawId (no por Ticket.drawId) — corrige
+      // multi-sorteo. Una sola query devuelve TODOS los details de todos los
+      // sorteos de este reporte; los agrupamos por drawId en memoria.
+      const drawIdsAll = draws.map(d => d.id);
+      const detailsAll = drawIdsAll.length > 0
+        ? await prisma.ticketDetail.findMany({
+            where: { drawId: { in: drawIdsAll }, ticket: ticketFilter },
+            include: {
+              ticket: { select: { id: true, source: true, apiSystemId: true, providerData: true } },
+            },
+          })
+        : [];
+
+      // Index: drawId → { totalSales, ticketIds:Set, prizesNonTripleta }
+      const detailsByDraw = new Map();
+      // bySource bucket alimentado desde details (no desde Ticket.totalAmount)
+      const bySourceMap = {};
+      // Para premios: cada TicketDetail.prize es el premio de esa jugada en su sorteo.
+      // Sumar detail.prize (excluyendo tripletas externas) en lugar de Ticket.totalPrize.
+      for (const detail of detailsAll) {
+        const t = detail.ticket;
+        const isExternalTripleta = t.source === 'EXTERNAL_API' && t.providerData?.type === 'TRIPLETA';
+        let entry = detailsByDraw.get(detail.drawId);
+        if (!entry) {
+          entry = { totalSales: 0, ticketIds: new Set(), regularPrize: 0 };
+          detailsByDraw.set(detail.drawId, entry);
+        }
+        const amount = parseFloat(detail.amount);
+        entry.totalSales += amount;
+        entry.ticketIds.add(t.id);
+        if (!isExternalTripleta) {
+          entry.regularPrize += parseFloat(detail.prize || 0);
+        }
+
+        // bySource aggregation a nivel detail (no ticket completo): así un
+        // ticket multi-sorteo se atribuye proporcionalmente a cada draw del
+        // rango del reporte.
+        const src = t.source;
+        const sysId = t.apiSystemId || null;
+        const key = sysId ? `${src}::${sysId}` : src;
+        if (!bySourceMap[key]) {
+          bySourceMap[key] = {
+            source: src,
+            apiSystemId: sysId,
+            apiSystemName: null,
+            totalSales: 0,
+            ticketCount: 0,
+            ticketIds: new Set(),
+          };
+        }
+        bySourceMap[key].totalSales += amount;
+        bySourceMap[key].ticketIds.add(t.id);
+      }
 
       // Premios de tripletas externas agrupados por el sorteo donde ganaron (prizeDrawId).
       // Solo aplica cuando no hay filtro de fuente o el filtro es EXTERNAL_API.
@@ -636,22 +677,13 @@ class MonitorService {
       }
 
       const report = [];
-
-      // Aggregation buckets (BACK-03)
       const byGameMap   = {};
-      const bySourceMap = {};
 
       for (const draw of draws) {
-        const tickets = draw.tickets || [];
-        const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
-
-        // Premios: sumar ticket.totalPrize de tickets no-tripleta (ya pagados por prize-processor)
-        // más premios de tripletas externas que completaron su condición en este sorteo.
-        const regularPrize = tickets
-          .filter(t => !(t.source === 'EXTERNAL_API' && t.providerData?.type === 'TRIPLETA'))
-          .reduce((sum, t) => sum + parseFloat(t.totalPrize), 0);
-        const totalPrize = regularPrize + (tripletaPrizeByDraw[draw.id] || 0);
-
+        const entry = detailsByDraw.get(draw.id) || { totalSales: 0, ticketIds: new Set(), regularPrize: 0 };
+        const totalSales = entry.totalSales;
+        const ticketCount = entry.ticketIds.size;
+        const totalPrize = entry.regularPrize + (tripletaPrizeByDraw[draw.id] || 0);
         const balance = totalSales - totalPrize;
 
         report.push({
@@ -665,7 +697,7 @@ class MonitorService {
           totalSales,
           totalPrize,
           balance,
-          ticketCount: tickets.length
+          ticketCount,
         });
 
         // byGame aggregation (BACK-03)
@@ -684,27 +716,14 @@ class MonitorService {
         g.totalSales   += totalSales;
         g.totalPrize   += totalPrize;
         g.totalBalance += balance;
-        g.totalTickets += tickets.length;
+        g.totalTickets += ticketCount;
         g.drawCount++;
+      }
 
-        // bySource aggregation (BACK-03) — split por (source, apiSystemId)
-        // para que distintos webhooks/proveedores muestren filas separadas.
-        for (const ticket of tickets) {
-          const src = ticket.source;
-          const sysId = ticket.apiSystemId || null;
-          const key = sysId ? `${src}::${sysId}` : src;
-          if (!bySourceMap[key]) {
-            bySourceMap[key] = {
-              source: src,
-              apiSystemId: sysId,
-              apiSystemName: null,
-              totalSales: 0,
-              ticketCount: 0,
-            };
-          }
-          bySourceMap[key].totalSales  += parseFloat(ticket.totalAmount);
-          bySourceMap[key].ticketCount += 1;
-        }
+      // Colapsar Set→count en bySourceMap antes de devolver
+      for (const bucket of Object.values(bySourceMap)) {
+        bucket.ticketCount = bucket.ticketIds.size;
+        delete bucket.ticketIds;
       }
 
       // Resolve provider names en bulk
@@ -1033,53 +1052,77 @@ class MonitorService {
     try {
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          tickets: {
-            where: {
-              source: 'EXTERNAL_API',
-              status: { not: 'CANCELLED' },
-              providerData: {
-                path: ['bancaID'],
-                equals: parseInt(bancaExternalId)
-              }
-            },
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
-        }
+        include: { game: true }
       });
 
       if (!draw) {
         throw new Error('Sorteo no encontrado');
       }
 
-      const tickets = draw.tickets.map(t => ({
-        id: t.id,
-        externalTicketId: t.externalTicketId,
-        comercialId: t.providerData?.comercialID,
-        bancaId: t.providerData?.bancaID,
-        grupoId: t.providerData?.grupoID,
-        taquillaId: t.providerData?.taquillaID,
-        totalAmount: parseFloat(t.totalAmount),
-        details: t.details.map(d => ({
+      // Cargar details de este sorteo cuya banca matchee — corrige multi-sorteo:
+      // un ticket multi-sorteo puede tener jugadas en este draw aunque
+      // Ticket.drawId apunte a otro. Filtramos por TicketDetail.drawId.
+      const details = await prisma.ticketDetail.findMany({
+        where: {
+          drawId,
+          ticket: {
+            source: 'EXTERNAL_API',
+            status: { not: 'CANCELLED' },
+            providerData: {
+              path: ['bancaID'],
+              equals: parseInt(bancaExternalId)
+            }
+          }
+        },
+        include: {
+          gameItem: true,
+          ticket: {
+            select: {
+              id: true, externalTicketId: true, totalAmount: true,
+              providerData: true, createdAt: true,
+            }
+          }
+        }
+      });
+
+      // Agrupar por ticket: por ticket, listar SOLO los details que cayeron
+      // en este sorteo (no las jugadas del ticket en otros sorteos).
+      const ticketsByTicketId = new Map();
+      for (const d of details) {
+        const t = d.ticket;
+        let entry = ticketsByTicketId.get(t.id);
+        if (!entry) {
+          entry = {
+            id: t.id,
+            externalTicketId: t.externalTicketId,
+            comercialId: t.providerData?.comercialID,
+            bancaId: t.providerData?.bancaID,
+            grupoId: t.providerData?.grupoID,
+            taquillaId: t.providerData?.taquillaID,
+            totalAmount: parseFloat(t.totalAmount), // total del ticket completo
+            drawAmount: 0,                          // total en ESTE sorteo
+            details: [],
+            createdAt: t.createdAt,
+          };
+          ticketsByTicketId.set(t.id, entry);
+        }
+        entry.drawAmount += parseFloat(d.amount);
+        entry.details.push({
           number: d.gameItem.number,
           name: d.gameItem.name,
           amount: parseFloat(d.amount)
-        })),
-        createdAt: t.createdAt
-      }));
+        });
+      }
+
+      const tickets = Array.from(ticketsByTicketId.values());
 
       return {
         drawId,
         bancaExternalId,
         ticketCount: tickets.length,
-        totalAmount: tickets.reduce((sum, t) => sum + t.amount, 0),
+        // Suma de drawAmount: ventas reales de esta banca en este sorteo
+        // (antes sumaba t.amount que no existía → bug latente, NaN).
+        totalAmount: tickets.reduce((sum, t) => sum + t.drawAmount, 0),
         tickets
       };
     } catch (error) {
@@ -1095,39 +1138,59 @@ class MonitorService {
    */
   async getTicketsByItem(drawId, itemId) {
     try {
-      // Two queries: one filtered by item (to find which tickets), one with all details
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          tickets: {
-            where: { status: { not: 'CANCELLED' } },
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
-        }
+        include: { game: true }
       });
 
       if (!draw) {
         throw new Error('Sorteo no encontrado');
       }
 
-      // Filter tickets that have at least one detail matching the requested item
-      const ticketsWithItem = draw.tickets.filter(t =>
-        t.details.some(d => d.gameItemId === itemId)
-      );
+      // Buscar details que cayeron en este sorteo y a este item — fuente de
+      // verdad para multi-sorteo. Antes filtraba por Draw.tickets (Ticket.drawId)
+      // y perdía tickets cuyo ancla era OTRO sorteo distinto.
+      const detailsHere = await prisma.ticketDetail.findMany({
+        where: {
+          drawId,
+          gameItemId: itemId,
+          ticket: { status: { not: 'CANCELLED' } }
+        },
+        select: { ticketId: true, amount: true }
+      });
 
-      const tickets = ticketsWithItem.map(t => {
-        // Monto jugado específicamente a este item dentro del ticket.
-        // Un ticket puede tener varios details apuntando al mismo gameItemId
-        // (ej. ticket multi-jugada) — los sumamos todos.
-        const itemDetails = t.details.filter(d => d.gameItemId === itemId);
-        const itemAmount = itemDetails.reduce((s, d) => s + parseFloat(d.amount), 0);
+      const matchingTicketIds = Array.from(new Set(detailsHere.map(d => d.ticketId)));
+      const gameItem = await prisma.gameItem.findUnique({ where: { id: itemId } });
+
+      if (matchingTicketIds.length === 0) {
+        return {
+          drawId,
+          item: gameItem ? {
+            id: gameItem.id,
+            number: gameItem.number,
+            name: gameItem.name,
+            multiplier: parseFloat(gameItem.multiplier)
+          } : null,
+          ticketCount: 0,
+          totalAmount: 0,
+          tickets: []
+        };
+      }
+
+      // Cargar los tickets matching con TODOS sus details (para mostrar la
+      // jugada completa al admin, incluyendo otros sorteos del mismo ticket
+      // — útil para entender multi-sorteo).
+      const tickets = await prisma.ticket.findMany({
+        where: { id: { in: matchingTicketIds } },
+        include: { details: { include: { gameItem: true } } }
+      });
+
+      const result = tickets.map(t => {
+        // itemAmount: monto apostado a este item EN ESTE SORTEO específicamente
+        // (antes sumaba todos los details con gameItemId=itemId, incluyendo
+        // otros sorteos del ticket → sobre-reporte para multi-sorteo).
+        const itemDetailsHere = t.details.filter(d => d.gameItemId === itemId && d.drawId === drawId);
+        const itemAmount = itemDetailsHere.reduce((s, d) => s + parseFloat(d.amount), 0);
         return {
           id: t.id,
           externalTicketId: t.externalTicketId,
@@ -1136,20 +1199,17 @@ class MonitorService {
           bancaId: t.providerData?.bancaID,
           grupoId: t.providerData?.grupoID,
           taquillaId: t.providerData?.taquillaID,
-          totalAmount: parseFloat(t.totalAmount), // total del ticket completo
-          itemAmount,                              // monto jugado al item seleccionado
+          totalAmount: parseFloat(t.totalAmount), // total del ticket completo (todos sus sorteos)
+          itemAmount,                              // monto a este item EN ESTE sorteo
           details: t.details.map(d => ({
             amount: parseFloat(d.amount),
             number: d.gameItem.number,
             name: d.gameItem.name,
-            status: d.status
+            status: d.status,
+            drawId: d.drawId  // útil para frontend distinguir multi-sorteo
           })),
           createdAt: t.createdAt
         };
-      });
-
-      const gameItem = await prisma.gameItem.findUnique({
-        where: { id: itemId }
       });
 
       return {
@@ -1160,10 +1220,9 @@ class MonitorService {
           name: gameItem.name,
           multiplier: parseFloat(gameItem.multiplier)
         } : null,
-        ticketCount: tickets.length,
-        // Suma del itemAmount — total vendido específicamente al item.
-        totalAmount: tickets.reduce((sum, t) => sum + t.itemAmount, 0),
-        tickets
+        ticketCount: result.length,
+        totalAmount: result.reduce((sum, t) => sum + t.itemAmount, 0),
+        tickets: result
       };
     } catch (error) {
       logger.error('Error obteniendo tickets por item:', error);

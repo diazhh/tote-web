@@ -5,6 +5,7 @@ import { startOfDay, differenceInDays } from 'date-fns';
 import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 import prewinnerOptimizerService from './prewinner-optimizer.service.js';
 import { withDrawLock } from '../lib/drawLock.js';
+import { loadDrawTicketDetails, sumDetailsAmount } from '../lib/drawDetailsLoader.js';
 
 /**
  * Servicio para selección de pre-ganadores
@@ -62,18 +63,7 @@ class PrewinnerSelectionService {
       // Obtener el sorteo para generar reportes
       const draw = await prisma.draw.findUnique({
         where: { id: drawId },
-        include: {
-          game: true,
-          tickets: {
-            include: {
-              details: {
-                include: {
-                  gameItem: true
-                }
-              }
-            }
-          }
-        }
+        include: { game: true }
       });
 
       if (!draw) {
@@ -81,13 +71,19 @@ class PrewinnerSelectionService {
         return null;
       }
 
+      // Cargar TicketDetails atribuidos a este sorteo (multi-sorteo seguro:
+      // antes usaba la relación Draw.tickets que perdía jugadas cuyo
+      // Ticket.drawId apuntaba a otro sorteo distinto).
+      const details = await loadDrawTicketDetails(drawId, {
+        ticketSelect: { id: true },
+      });
+
       // Obtener configuración del juego
       const gameConfig = draw.game.config || {};
       const percentageToDistribute = gameConfig.percentageToDistribute || 70;
 
-      // Calcular ventas totales del sorteo
-      const tickets = draw.tickets || [];
-      const totalSales = tickets.reduce((sum, t) => sum + parseFloat(t.totalAmount), 0);
+      // Ventas totales del sorteo = suma de detail.amount (NO Ticket.totalAmount)
+      const totalSales = sumDetailsAmount(details);
 
       // Calcular monto máximo a pagar
       let maxPayout;
@@ -97,7 +93,7 @@ class PrewinnerSelectionService {
         maxPayout = (totalSales * percentageToDistribute) / 100;
       }
       maxPayout = Math.min(maxPayout, totalSales);
-      
+
       logger.info(`  Ventas totales: $${totalSales.toFixed(2)}, Máximo a pagar: $${maxPayout.toFixed(2)}`);
       logger.info(`  Método de selección: ${result.method}`);
 
@@ -110,8 +106,8 @@ class PrewinnerSelectionService {
         orderBy: { number: 'asc' }
       });
 
-      // Agrupar ventas por item
-      const salesByItem = this.groupSalesByItem(tickets);
+      // Agrupar ventas por item desde la lista plana de details
+      const salesByItem = this.groupSalesByItem(details);
 
       // Calcular datos del item seleccionado
       const selectedSales = salesByItem.get(selectedItem.id) || { amount: 0, count: 0 };
@@ -186,19 +182,19 @@ class PrewinnerSelectionService {
   }
 
   /**
-   * Agrupar ventas por item
+   * Agrupar ventas por item desde lista plana de TicketDetail.
+   * (Antes recibía tickets[] e iteraba ticket.details — eso incluía jugadas
+   * de OTROS sorteos cuando el ticket era multi-sorteo.)
    */
-  groupSalesByItem(tickets) {
+  groupSalesByItem(details) {
     const salesByItem = new Map();
-    
-    for (const ticket of tickets) {
-      for (const detail of ticket.details) {
-        const existing = salesByItem.get(detail.gameItemId) || { amount: 0, count: 0 };
-        salesByItem.set(detail.gameItemId, {
-          amount: existing.amount + parseFloat(detail.amount),
-          count: existing.count + 1
-        });
-      }
+
+    for (const detail of details) {
+      const existing = salesByItem.get(detail.gameItemId) || { amount: 0, count: 0 };
+      salesByItem.set(detail.gameItemId, {
+        amount: existing.amount + parseFloat(detail.amount),
+        count: existing.count + 1
+      });
     }
 
     return salesByItem;

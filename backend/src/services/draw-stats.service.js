@@ -11,47 +11,59 @@ class DrawStatsService {
     const client = tx || prisma;
 
     try {
-      // Obtener el sorteo con sus tickets
+      // Obtener el sorteo
       const draw = await client.draw.findUnique({
         where: { id: drawId },
-        include: {
-          tickets: {
-            where: { status: { not: 'CANCELLED' } },
-            include: {
-              details: true
-            }
-          },
-          game: true,
-          winnerItem: true
-        }
+        include: { game: true, winnerItem: true }
       });
 
       if (!draw) {
         throw new Error(`Sorteo ${drawId} no encontrado`);
       }
 
+      // Atribución por TicketDetail.drawId (NO por Ticket.drawId). Antes
+      // iteraba draw.tickets (FK reversa), perdiendo jugadas multi-sorteo
+      // cuyo ticket apuntaba a otro draw distinto. Ahora un ticket con
+      // 5 jugadas en 5 sorteos aporta su contribución correcta a cada uno.
+      const details = await client.ticketDetail.findMany({
+        where: {
+          drawId,
+          ticket: { status: { not: 'CANCELLED' } }
+        },
+        include: {
+          ticket: { select: { id: true, source: true, status: true, providerData: true } }
+        }
+      });
+
       // Calcular estadísticas de tickets
       let totalSales = 0;
       let totalPrize = 0;
-      let ticketCount = 0;
       let detailCount = 0;
       let winnerCount = 0;
+      const ticketIds = new Set();
+      const ticketsWithWonDetailInDraw = new Set();
 
-      for (const ticket of draw.tickets) {
-        const isExternalTripleta = ticket.source === 'EXTERNAL_API' &&
-          ticket.providerData?.type === 'TRIPLETA';
+      for (const d of details) {
+        const t = d.ticket;
+        const isExternalTripleta = t.source === 'EXTERNAL_API' &&
+          t.providerData?.type === 'TRIPLETA';
 
-        ticketCount++;
-        totalSales += parseFloat(ticket.totalAmount || 0);
-        detailCount += ticket.details.length;
+        detailCount += 1;
+        ticketIds.add(t.id);
+        // Sumar el amount del detalle (no Ticket.totalAmount, que incluye otros sorteos)
+        totalSales += parseFloat(d.amount || 0);
 
-        // Tripletas externas: su premio se atribuye al sorteo donde ganaron (prizeDrawId),
-        // no al sorteo de venta. Se suman abajo con la consulta por prizeDrawId.
+        // Premio: sumar detail.prize (que es lo que ganó ESTA jugada en ESTE
+        // sorteo). Excluir tripletas externas — se suman abajo por prizeDrawId.
         if (!isExternalTripleta) {
-          totalPrize += parseFloat(ticket.totalPrize || 0);
-          if (ticket.status === 'WON') winnerCount++;
+          const prize = parseFloat(d.prize || 0);
+          totalPrize += prize;
+          if (prize > 0) ticketsWithWonDetailInDraw.add(t.id);
         }
       }
+
+      const ticketCount = ticketIds.size;
+      winnerCount = ticketsWithWonDetailInDraw.size;
 
       // Premios de tripletas externas que completaron su condición EN este sorteo
       const tripletaWon = await client.ticket.aggregate({
