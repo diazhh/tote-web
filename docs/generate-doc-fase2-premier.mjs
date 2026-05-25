@@ -166,7 +166,7 @@ const doc = new Document({
         { text: 'CONFIDENCIAL', bold: true, size: 18, color: '991B1B' },
       ], { spacing: { after: 40 } }),
       para([
-        { text: 'Proveedor: Premier  |  Fecha: 14 de abril de 2026  |  Version: 2.0', color: GRAY, size: 20 },
+        { text: 'Proveedor: Premier (canal premier2)  |  Fecha: 25 de mayo de 2026  |  Version: 2.1', color: GRAY, size: 20 },
       ]),
       new Paragraph({
         spacing: { after: 200 },
@@ -185,7 +185,15 @@ const doc = new Document({
       ]),
       successBox([
         { text: 'Cambio principal vs Fase 1: ', bold: true },
-        'Ahora el sistema valida y procesa cada jugada. La respuesta incluye el estado del ticket (ACCEPTED o REJECTED) con el motivo si fue rechazada. El endpoint y token siguen siendo los mismos.',
+        'Ahora el sistema valida y procesa cada jugada. La respuesta incluye el estado del ticket (ACCEPTED o REJECTED) y, cuando es ACCEPTED, un arreglo items con el desglose exacto de lo que se vendio (numero y monto). El endpoint y token siguen siendo los mismos.',
+      ]),
+      infoBox([
+        { text: 'Nuevo en v2.1 — Aceptacion parcial: ', bold: true },
+        'Si un ticket trae varias jugadas y alguna no tiene cupo o esta bloqueada, ya no se rechaza el ticket completo. Se crea el ticket solo con las jugadas disponibles y el arreglo items refleja unicamente lo aceptado. Si una jugada no aparece en items, significa que no se vendio — comparen contra el payload enviado para identificar cuales no entraron. Si ninguna jugada tiene cupo, el ticket se rechaza con status REJECTED.',
+      ]),
+      warnBox([
+        { text: 'Canal de pruebas dedicado (slug premier2): ', bold: true },
+        'Para que ustedes puedan probar el nuevo comportamiento sin afectar el flujo en produccion, habilitamos un endpoint paralelo con slug "premier2" y token nuevo. El canal "premier" original sigue funcionando con el comportamiento de v2.0 (todo o nada). Cuando confirmen que sus pruebas pasaron, migramos el comportamiento al canal "premier" y desactivamos "premier2".',
       ]),
 
       // ── 2. Datos de Conexion ──
@@ -193,18 +201,18 @@ const doc = new Document({
       simpleTable(
         ['Parametro', 'Valor'],
         [
-          ['URL del Endpoint', { text: 'https://toteback.atilax.io/api/webhooks/premier', mono: true }],
+          ['URL del Endpoint', { text: 'https://toteback.atilax.io/api/webhooks/premier2', mono: true }],
           ['Metodo HTTP', { text: 'POST', mono: true }],
           ['Header de Autenticacion', { text: 'X-Webhook-Token', mono: true }],
-          ['Token', { text: '7ec15f3c38754e38075330940ab9c65aa1a223bee356e627a51b23ce297d3c34', mono: true }],
+          ['Token', { text: '7c6ccaca3d60380ffd20df635702d21502254e4e6d59c12552d92423bd93cce3', mono: true }],
           ['Content-Type', { text: 'application/json', mono: true }],
           ['Limite de payload', '1 MB'],
         ],
         [25, 75],
       ),
-      infoBox([
-        { text: 'Sin cambios: ', bold: true },
-        'El endpoint, token y metodo de autenticacion son identicos a la Fase 1. No necesitan modificar su configuracion de conexion.',
+      warnBox([
+        { text: 'Importante — URL y Token NUEVOS: ', bold: true },
+        'Para esta fase de pruebas deben usar el endpoint /premier2 (no /premier) y el token nuevo que aparece en la tabla. El endpoint y token del canal "premier" original NO sirven para probar la aceptacion parcial. Cuando terminen las pruebas y migremos el comportamiento al canal "premier", podran volver a la URL/token original.',
       ]),
 
       // ── 3. Formato del Payload ──
@@ -265,7 +273,7 @@ const doc = new Document({
       // ── 4. Respuestas del Servidor ──
       heading('4. Respuestas del Servidor'),
 
-      para([{ text: 'Jugada aceptada (ticket creado exitosamente):', bold: true }], { spacing: { before: 80 } }),
+      para([{ text: 'Jugada aceptada (todas las jugadas vendidas):', bold: true }], { spacing: { before: 80 } }),
       ...codeBlock([
         'HTTP 200',
         '{',
@@ -273,7 +281,12 @@ const doc = new Document({
         '  "logId": "83ddf68c-a1b2-4c3d-8e5f-6789abcdef01",',
         '  "ticket": {',
         '    "id": 106504,',
-        '    "status": "ACCEPTED"',
+        '    "status": "ACCEPTED",',
+        '    "totalAmount": 3500,',
+        '    "items": [',
+        '      { "drawSlotId": "5",  "number": "05", "amount": 1500 },',
+        '      { "drawSlotId": "18", "number": "12", "amount": 2000 }',
+        '    ]',
         '  }',
         '}',
       ]),
@@ -281,8 +294,33 @@ const doc = new Document({
         { text: 'ticket.id: ', bold: true },
         'Es un numero entero unico y secuencial que identifica el ticket en nuestro sistema. Ustedes envian su ticketId (string) y nosotros retornamos nuestro id numerico. Guardenlo para referencia cruzada.',
       ]),
+      infoBox([
+        { text: 'ticket.items: ', bold: true },
+        'Contiene unicamente las jugadas que fueron vendidas. El totalAmount corresponde a la suma de los amount del arreglo items, no al total del payload enviado. Para identificar jugadas no vendidas, comparen items con el array plays original.',
+      ]),
 
-      para([{ text: '\nJugada rechazada (con motivo):', bold: true }], { spacing: { before: 160 } }),
+      para([{ text: '\nAceptacion parcial (algunas jugadas sin cupo):', bold: true }], { spacing: { before: 160 } }),
+      ...codeBlock([
+        'HTTP 200',
+        '{',
+        '  "received": true,',
+        '  "logId": "83ddf68c-a1b2-4c3d-8e5f-6789abcdef01",',
+        '  "ticket": {',
+        '    "id": 106505,',
+        '    "status": "ACCEPTED",',
+        '    "totalAmount": 1500,',
+        '    "items": [',
+        '      { "drawSlotId": "5", "number": "05", "amount": 1500 }',
+        '    ]',
+        '  }',
+        '}',
+      ]),
+      infoBox([
+        { text: 'Ejemplo: ', bold: true },
+        'El payload original envio dos jugadas (slot 5 numero "05" por 1500 y slot 18 numero "12" por 2000). El sistema acepto la primera y descarto la segunda por falta de cupo. Solo aparece en items la jugada vendida; el totalAmount refleja solo esa venta.',
+      ]),
+
+      para([{ text: '\nJugada rechazada (ninguna jugada vendible):', bold: true }], { spacing: { before: 160 } }),
       ...codeBlock([
         'HTTP 200',
         '{',
@@ -310,21 +348,34 @@ const doc = new Document({
 
       // ── 5. Motivos de Rechazo ──
       heading('5. Motivos de Rechazo'),
-      para(['Las jugadas pueden ser rechazadas por las siguientes razones:']),
+      para(['Hay dos tipos de problemas que pueden afectar una jugada: errores estructurales (rechazan el ticket completo) y falta de disponibilidad (descarta solo esa jugada).']),
+
+      para([{ text: 'Errores estructurales (rechazan todo el ticket):', bold: true }], { spacing: { before: 160 } }),
       simpleTable(
         ['Motivo', 'Descripcion', 'Como corregir'],
         [
-          ['Sorteo cerrado/sorteado', 'El sorteo ya paso o esta en proceso de sorteo (estado DRAWN, CANCELLED o CLOSED)', 'Verificar que el drawSlotId corresponda a un sorteo que aun no ha cerrado'],
           ['drawSlotId invalido', 'El ID de slot no esta en el rango 1-48 o no es un numero valido', 'Usar solo IDs del 1 al 48 segun el catalogo de sorteos'],
           ['Numero no encontrado', 'El numero apostado no existe en el juego correspondiente al slot', 'Verificar que el numero sea valido para el juego (ej: "00"-"36" para Lotoanimalito)'],
           ['Ticket duplicado', 'Ya existe un ticket con el mismo ticketId para el mismo sorteo', 'Usar un ticketId unico por cada solicitud'],
+          ['Payload mal formado', 'JSON invalido, campos requeridos faltantes o array plays vacio', 'Revisar la estructura segun la seccion 3'],
         ],
         [22, 43, 35],
       ),
 
-      warnBox([
-        { text: 'Todo o nada: ', bold: true },
-        'Si un payload contiene multiples jugadas (plays) y alguna de ellas es invalida, el ticket completo es rechazado. Todas las jugadas deben ser validas para que el ticket sea aceptado. Corrija la jugada invalida y reenvie el payload completo.',
+      para([{ text: '\nNo disponibilidad (la jugada queda fuera de items):', bold: true }], { spacing: { before: 160 } }),
+      simpleTable(
+        ['Motivo', 'Descripcion', 'Como interpretarlo'],
+        [
+          ['Sin cupo', 'El numero ya alcanzo el limite de venta configurado para ese sorteo', 'La jugada no aparece en items. El resto del ticket sigue vendiendose.'],
+          ['Numero bloqueado', 'El administrador bloqueo ese numero para ese sorteo', 'La jugada no aparece en items. El resto del ticket sigue vendiendose.'],
+          ['Sorteo cerrado/sorteado', 'El sorteo ya paso o esta en proceso (DRAWN, CANCELLED, CLOSED)', 'Si TODAS las jugadas apuntan a sorteos cerrados, el ticket completo se rechaza con REJECTED.'],
+        ],
+        [22, 43, 35],
+      ),
+
+      successBox([
+        { text: 'Aceptacion parcial: ', bold: true },
+        'Cuando una o varias jugadas no estan disponibles por cupo o bloqueo, el sistema crea el ticket con las jugadas que si tienen cupo y las omite del arreglo items. No se devuelve detalle de las descartadas — para saber cuales no entraron, comparen el array plays enviado contra el items de la respuesta.',
       ]),
 
       // ── 6. Ejemplos Completos ──
@@ -332,9 +383,9 @@ const doc = new Document({
 
       para([{ text: 'Ejemplo: Jugada simple (una apuesta):', bold: true }], { spacing: { before: 80 } }),
       ...codeBlock([
-        'curl -X POST https://toteback.atilax.io/api/webhooks/premier \\',
+        'curl -X POST https://toteback.atilax.io/api/webhooks/premier2 \\',
         '  -H "Content-Type: application/json" \\',
-        '  -H "X-Webhook-Token: 7ec15f3c38754e38075330940ab9c65aa1a223bee356e627a51b23ce297d3c34" \\',
+        '  -H "X-Webhook-Token: 7c6ccaca3d60380ffd20df635702d21502254e4e6d59c12552d92423bd93cce3" \\',
         '  -d \'{',
         '    "ticketId": "PRM-20260414-001",',
         '    "game": "lotoanimalito",',
@@ -352,9 +403,9 @@ const doc = new Document({
 
       para([{ text: '\nEjemplo: Multiples jugadas en un ticket:', bold: true }], { spacing: { before: 200 } }),
       ...codeBlock([
-        'curl -X POST https://toteback.atilax.io/api/webhooks/premier \\',
+        'curl -X POST https://toteback.atilax.io/api/webhooks/premier2 \\',
         '  -H "Content-Type: application/json" \\',
-        '  -H "X-Webhook-Token: 7ec15f3c38754e38075330940ab9c65aa1a223bee356e627a51b23ce297d3c34" \\',
+        '  -H "X-Webhook-Token: 7c6ccaca3d60380ffd20df635702d21502254e4e6d59c12552d92423bd93cce3" \\',
         '  -d \'{',
         '    "ticketId": "PRM-20260414-002",',
         '    "game": "mixto",',
@@ -397,14 +448,16 @@ const doc = new Document({
       ...step('2', 'Jugada rechazada por sorteo cerrado',
         'Envie una jugada apuntando a un sorteo que ya paso (ej: slot de las 08:00 enviado a las 15:00). Verifique que recibe status: "REJECTED" con el motivo.'),
       ...step('3', 'Multiples jugadas',
-        'Envie un payload con 2-3 jugadas en el array plays. Verifique que todas se procesan y recibe un solo ticket.'),
-      ...step('4', 'Deteccion de duplicados',
+        'Envie un payload con 2-3 jugadas en el array plays. Verifique que todas se procesan, recibe un solo ticket y todas aparecen en items.'),
+      ...step('4', 'Aceptacion parcial por cupo',
+        'Envie un payload con 2 jugadas donde una de ellas apunte a un numero que ya alcanzo su cupo (o este bloqueado). Verifique que el ticket es ACCEPTED, items contiene solo la jugada disponible y totalAmount refleja solo esa venta.'),
+      ...step('5', 'Deteccion de duplicados',
         'Envie el mismo ticketId dos veces. La segunda vez debe recibir una respuesta indicando duplicado.'),
 
       // ── 9. Contacto ──
       heading('9. Contacto'),
       para([
-        'Para cualquier duda sobre la integracion, pueden comunicarse con nuestro equipo tecnico. Si experimentan rechazos inesperados, verifiquen: (1) que el drawSlotId corresponda a un sorteo abierto, (2) que el numero sea valido para el juego, y (3) que el ticketId sea unico.',
+        'Para cualquier duda sobre la integracion, pueden comunicarse con nuestro equipo tecnico. Si experimentan jugadas que no entran en items, revisen: (1) si el numero ya alcanzo su cupo o esta bloqueado, (2) si el sorteo aun esta abierto, (3) si el numero existe para el juego del slot. Si todo el ticket es REJECTED, revisen estructura del payload y unicidad del ticketId.',
       ]),
 
       // ── Footer ──

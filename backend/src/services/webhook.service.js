@@ -2,7 +2,15 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
-import { checkTicketQuotas } from './quota.service.js';
+import { checkTicketQuotas, partitionByQuota } from './quota.service.js';
+
+/**
+ * Slugs de proveedores que usan el flujo de aceptación parcial:
+ * el ticket se crea con los detalles que tienen cupo y se devuelve
+ * `items[]` + `totalAmount` indicando exactamente qué se vendió.
+ * Detalles sin cupo se descartan silenciosamente (no se exponen).
+ */
+const PARTIAL_ACCEPTANCE_SLUGS = new Set(['premier2']);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -227,11 +235,45 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
     // Wrap quota check + ticket creation in one transaction so the
     // SELECT ... FOR UPDATE lock inside checkTicketQuotas stays held
     // until the ticket insert commits.
+    const partialAcceptance = PARTIAL_ACCEPTANCE_SLUGS.has(slug);
     const txResult = await prisma.$transaction(async (tx) => {
       const drawCheck = await checkDrawIsOpen(normalized.drawId, tx);
       if (!drawCheck.ok) {
         return { rejected: true, reason: drawCheck.reason };
       }
+
+      if (partialAcceptance) {
+        const { accepted, rejected } = await partitionByQuota(normalized.details, tx);
+        if (accepted.length === 0) {
+          return {
+            rejected: true,
+            reason: 'Ninguna jugada disponible (todas sin cupo o bloqueadas)',
+          };
+        }
+        // Reconstruir normalized con solo los accepted + recalc totalAmount.
+        // Guardar rejected en providerData para auditoría interna (no se expone).
+        const partialNormalized = {
+          ...normalized,
+          details: accepted,
+          totalAmount: accepted.reduce((s, d) => s + Number(d.amount), 0),
+          providerData: {
+            ...(normalized.providerData ?? {}),
+            _partialAcceptance: {
+              acceptedCount: accepted.length,
+              rejectedCount: rejected.length,
+              rejected: rejected.map((r) => ({
+                drawSlotId: r.play.drawSlotId,
+                number: r.play.number,
+                amount: r.play.amount,
+                reason: r.reason,
+              })),
+            },
+          },
+        };
+        const ticket = await createWebhookTicket(partialNormalized, log.id, apiSystem.id, tx);
+        return { rejected: false, ticket, acceptedDetails: accepted, totalAmount: partialNormalized.totalAmount };
+      }
+
       const quotaCheck = await checkTicketQuotas(normalized.details, tx);
       if (!quotaCheck.ok) {
         return { rejected: true, reason: quotaCheck.reason };
@@ -262,7 +304,20 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
       data: { status: 'PROCESSED' },
     });
 
-    return { status: 'processed', logId: log.id, ticketId: ticket.id, ticketNumber: ticket.ticketNumber };
+    const result = { status: 'processed', logId: log.id, ticketId: ticket.id, ticketNumber: ticket.ticketNumber };
+
+    // Aceptación parcial: agregar items[] + totalAmount para que el controller
+    // pueda devolver el desglose al proveedor.
+    if (partialAcceptance && txResult.acceptedDetails) {
+      result.totalAmount = txResult.totalAmount;
+      result.items = txResult.acceptedDetails.map((d) => ({
+        drawSlotId: d.drawSlotId,
+        number: d.number,
+        amount: d.amount,
+      }));
+    }
+
+    return result;
   } catch (err) {
     const errorMessage = err.message ?? String(err);
     await prisma.webhookLog.update({

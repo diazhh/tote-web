@@ -15,6 +15,13 @@ export async function receive(req, res) {
 
     if (result.status === 'processed') {
       response.ticket = { id: result.ticketNumber, status: 'ACCEPTED' };
+      // Proveedores con aceptación parcial (premier2) reciben el desglose
+      // de lo vendido. Detalles sin cupo se omiten — para identificarlos
+      // el proveedor compara su payload original contra `items`.
+      if (result.items) {
+        response.ticket.totalAmount = result.totalAmount;
+        response.ticket.items = result.items;
+      }
     } else if (result.status === 'duplicate') {
       response.ticket = { id: result.ticketNumber, status: 'DUPLICATE' };
     } else if (result.status === 'annulled') {

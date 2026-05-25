@@ -199,3 +199,113 @@ export async function checkTicketQuotas(plays, tx) {
 
   return { ok: true };
 }
+
+/**
+ * Variante de `checkTicketQuotas` para flujo de aceptación parcial.
+ *
+ * En vez de rechazar el ticket entero al primer (drawId, gameItemId) sin
+ * cupo, particiona los plays en `accepted` (entran al ticket) y `rejected`
+ * (se descartan silenciosamente). La granularidad es por combinación
+ * (drawId, gameItemId): si la suma intentada para esa combo excede el cupo
+ * o el item está bloqueado (maxAmount = 0), TODOS los plays que apunten a
+ * esa combo se descartan — no se hace split de monto.
+ *
+ * Debe correr dentro de una transacción (mismo SELECT ... FOR UPDATE).
+ *
+ * @param {Array} plays - cada play: { drawId, gameItemId, amount, ... }
+ * @param {import('@prisma/client').Prisma.TransactionClient} tx
+ * @returns {Promise<{accepted: Array, rejected: Array<{play, reason}>}>}
+ */
+export async function partitionByQuota(plays, tx) {
+  if (!tx) throw new Error('tx is required');
+  if (!Array.isArray(plays) || plays.length === 0) {
+    return { accepted: [], rejected: [] };
+  }
+
+  // 1. Agregar intentado por combo (drawId, gameItemId).
+  const attempted = new Map();
+  for (const p of plays) {
+    const key = `${p.drawId}|${p.gameItemId}`;
+    const prev = attempted.get(key);
+    if (prev) {
+      prev.amount += Number(p.amount);
+    } else {
+      attempted.set(key, { drawId: p.drawId, gameItemId: p.gameItemId, amount: Number(p.amount) });
+    }
+  }
+  const combos = Array.from(attempted.values());
+
+  // 2. Lock + fetch quotas para los combos atacados.
+  const drawIds = [...new Set(combos.map((c) => c.drawId))];
+  const itemIds = [...new Set(combos.map((c) => c.gameItemId))];
+  const quotaRows = await tx.$queryRaw`
+    SELECT "drawId", "gameItemId", "maxAmount"
+    FROM "DrawItemQuota"
+    WHERE "drawId" = ANY(${drawIds}::text[])
+      AND "gameItemId" = ANY(${itemIds}::text[])
+    FOR UPDATE
+  `;
+
+  const quotaByKey = new Map();
+  for (const q of quotaRows) {
+    const key = `${q.drawId}|${q.gameItemId}`;
+    if (attempted.has(key)) quotaByKey.set(key, Number(q.maxAmount));
+  }
+
+  // Sin cupos configurados → todo pasa.
+  if (quotaByKey.size === 0) {
+    return { accepted: plays.slice(), rejected: [] };
+  }
+
+  // 3. Fetch sold totals para los combos con cupo.
+  const cappedCombos = combos.filter((c) => quotaByKey.has(`${c.drawId}|${c.gameItemId}`));
+  const soldRows = await tx.ticketDetail.groupBy({
+    by: ['drawId', 'gameItemId'],
+    where: {
+      OR: cappedCombos.map((c) => ({ drawId: c.drawId, gameItemId: c.gameItemId })),
+      status: 'ACTIVE',
+      ticket: { status: 'ACTIVE' },
+    },
+    _sum: { amount: true },
+  });
+
+  const soldByKey = new Map();
+  for (const s of soldRows) {
+    soldByKey.set(`${s.drawId}|${s.gameItemId}`, Number(s._sum.amount ?? 0));
+  }
+
+  // 4. Marcar combos rechazados (no cabe la suma intentada).
+  const rejectedKeys = new Map(); // key → reason
+  for (const combo of cappedCombos) {
+    const key = `${combo.drawId}|${combo.gameItemId}`;
+    const max = quotaByKey.get(key);
+    const sold = soldByKey.get(key) ?? 0;
+    if (sold + combo.amount > max) {
+      const remaining = Math.max(0, max - sold);
+      rejectedKeys.set(
+        key,
+        remaining <= 0
+          ? `Item bloqueado o cupo agotado (max=${max}, vendido=${sold})`
+          : `Cupo insuficiente (max=${max}, vendido=${sold}, intento=${combo.amount}, disponible=${remaining})`
+      );
+    }
+  }
+
+  // 5. Particionar el array original.
+  const accepted = [];
+  const rejected = [];
+  for (const p of plays) {
+    const key = `${p.drawId}|${p.gameItemId}`;
+    if (rejectedKeys.has(key)) {
+      rejected.push({ play: p, reason: rejectedKeys.get(key) });
+    } else {
+      accepted.push(p);
+    }
+  }
+
+  if (rejected.length > 0) {
+    logger.info(`[quota] partitionByQuota: ${accepted.length} accepted, ${rejected.length} rejected`);
+  }
+
+  return { accepted, rejected };
+}
