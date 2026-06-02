@@ -78,7 +78,7 @@ export default function VisorPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Reporte de Ventas</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Ventas del rango y juegos seleccionados.</p>
+        <p className="text-sm text-gray-500 mt-0.5">Ventas, premios, utilidad y tickets del rango y juegos seleccionados.</p>
       </div>
 
       {/* Filtros */}
@@ -156,6 +156,9 @@ export default function VisorPage() {
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Fecha</th>
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500">Juego</th>
                   <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Ventas</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Premios</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Utilidad</th>
+                  <th className="px-4 py-2.5 text-right text-xs font-medium text-gray-500">Tickets</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
@@ -164,6 +167,11 @@ export default function VisorPage() {
                     <td className="px-4 py-2.5 whitespace-nowrap">{formatCaracasDate(r.date)}</td>
                     <td className="px-4 py-2.5 font-medium text-gray-800">{r.game}</td>
                     <td className="px-4 py-2.5 text-right text-green-700 font-medium">{fmt(r.totalSales)}</td>
+                    <td className="px-4 py-2.5 text-right text-red-700">{fmt(r.totalPrize)}</td>
+                    <td className={`px-4 py-2.5 text-right font-bold ${r.utility >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                      {fmt(r.utility)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-gray-700">{(r.ticketCount ?? 0).toLocaleString('es-VE')}</td>
                   </tr>
                 ))}
               </tbody>
@@ -171,6 +179,11 @@ export default function VisorPage() {
                 <tr>
                   <td className="px-4 py-3" colSpan={2}>TOTAL</td>
                   <td className="px-4 py-3 text-right text-green-700">{fmt(report.totals.totalSales)}</td>
+                  <td className="px-4 py-3 text-right text-red-700">{fmt(report.totals.totalPrize)}</td>
+                  <td className={`px-4 py-3 text-right ${report.totals.utility >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
+                    {fmt(report.totals.utility)}
+                  </td>
+                  <td className="px-4 py-3 text-right text-gray-700">{(report.totals.ticketCount ?? 0).toLocaleString('es-VE')}</td>
                 </tr>
               </tfoot>
             </table>

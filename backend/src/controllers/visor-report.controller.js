@@ -5,10 +5,10 @@ import logger from '../lib/logger.js';
  * Controlador del rol VIEWER (visor).
  *
  * Reutiliza el mismo motor de cálculo del fiscalizador
- * (fiscalReportService) pero expone SOLO el reporte de ventas: no devuelve
- * premios ni utilidad, ni al cliente ni en el payload. El visor filtra por
- * fecha y por juego; el alcance de proveedores se aplica automáticamente desde
- * su scope (UserApiSystem) en el backend.
+ * (fiscalReportService). El visor ve: ventas, premios, utilidad y número de
+ * tickets vendidos (solo tickets NO anulados — el service filtra
+ * status != CANCELLED). El visor filtra por fecha y por juego; el alcance de
+ * proveedores se aplica automáticamente desde su scope (UserApiSystem).
  */
 class VisorReportController {
   /**
@@ -31,16 +31,20 @@ class VisorReportController {
         scope: req.fiscalScope,
       });
 
-      // Recortar a SOLO ventas (sin premios ni utilidad).
+      // Ventas, premios, utilidad y nº de tickets (solo no anulados).
       const rows = full.rows.map((r) => ({
         date: r.date,
         gameId: r.gameId,
         game: r.game,
         totalSales: r.totalSales,
+        totalPrize: r.totalPrize,
+        utility: r.utility,
         ticketCount: r.ticketCount,
       }));
       const totals = {
         totalSales: full.totals.totalSales,
+        totalPrize: full.totals.totalPrize,
+        utility: full.totals.utility,
         ticketCount: full.totals.ticketCount,
       };
 
