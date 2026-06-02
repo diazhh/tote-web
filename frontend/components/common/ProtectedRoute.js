@@ -24,6 +24,10 @@ export default function ProtectedRoute({ children, allowedRoles = [] }) {
             router.push('/dashboard');
           } else if (user.role === 'ADMIN' || user.role === 'OPERATOR') {
             router.push('/admin');
+          } else if (user.role === 'VIEWER') {
+            router.push('/visor');
+          } else if (user.role === 'FISCALIZADOR') {
+            router.push('/fiscalizar');
           } else {
             router.push('/login');
           }

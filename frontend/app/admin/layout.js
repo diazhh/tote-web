@@ -60,6 +60,8 @@ export default function AdminLayout({ children }) {
           router.push('/dashboard');
         } else if (userObj.role === 'FISCALIZADOR') {
           router.push('/fiscalizar');
+        } else if (userObj.role === 'VIEWER') {
+          router.push('/visor');
         }
       }
     };

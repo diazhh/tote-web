@@ -215,6 +215,7 @@ import commissionRoutes from './routes/commission.routes.js';
 import contabilidadRoutes from './routes/contabilidad.routes.js';
 import pnlReportRoutes from './routes/pnl-report.routes.js';
 import fiscalReportRoutes from './routes/fiscal-report.routes.js';
+import visorReportRoutes from './routes/visor-report.routes.js';
 import changelogRoutes from './routes/changelog.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import cacheAdminRoutes from './routes/cache-admin.routes.js';
@@ -279,6 +280,7 @@ app.use('/api/password-reset', passwordResetRoutes);
 app.use('/api/monitor', monitorRoutes);
 app.use('/api/reportes', pnlReportRoutes); // Phase 14 — Weekly P&L (admin-gated)
 app.use('/api/fiscal', fiscalReportRoutes); // Rol FISCALIZADOR — reporte scoped
+app.use('/api/visor', visorReportRoutes); // Rol VIEWER (visor) — reporte de ventas scoped
 app.use('/api/changelog', changelogRoutes); // Bitácora de cambios del sistema
 app.use('/health', healthRoutes);
 app.use('/api/analysis', drawAnalysisRoutes);

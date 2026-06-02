@@ -181,7 +181,7 @@ export default function UsuariosPage() {
         email: formData.email || undefined,
         role: formData.role,
         isActive: formData.isActive,
-        fiscalIncludeTaquilla: formData.role === 'FISCALIZADOR' ? !!formData.fiscalIncludeTaquilla : undefined,
+        fiscalIncludeTaquilla: (formData.role === 'FISCALIZADOR' || formData.role === 'VIEWER') ? !!formData.fiscalIncludeTaquilla : undefined,
       };
       if (formData.password) updates.password = formData.password;
       const response = await authAPI.updateUser(selectedUser.id, updates);
@@ -349,7 +349,7 @@ export default function UsuariosPage() {
                       >
                         <Gamepad2 className="w-4 h-4" />
                       </button>
-                      {u.role === 'FISCALIZADOR' && (
+                      {(u.role === 'FISCALIZADOR' || u.role === 'VIEWER') && (
                         <button
                           onClick={() => {
                             setSelectedUser(u);
@@ -461,10 +461,10 @@ export default function UsuariosPage() {
                   <option value="FISCALIZADOR">Fiscalizador</option>
                 </select>
               </div>
-              {formData.role === 'FISCALIZADOR' && (
+              {(formData.role === 'FISCALIZADOR' || formData.role === 'VIEWER') && (
                 <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 space-y-2">
                   <p className="text-xs text-amber-900">
-                    Configura el alcance del fiscalizador con los botones <Gamepad2 className="inline w-3 h-3 mx-0.5" /> y <Building2 className="inline w-3 h-3 mx-0.5" /> en la lista.
+                    Configura el alcance {formData.role === 'VIEWER' ? 'del visor' : 'del fiscalizador'} con los botones <Gamepad2 className="inline w-3 h-3 mx-0.5" /> (juegos) y <Building2 className="inline w-3 h-3 mx-0.5" /> (proveedores) en la lista de usuarios.
                     Si no asignas nada, verá <strong>todo</strong>.
                   </p>
                   <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">

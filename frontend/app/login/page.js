@@ -36,6 +36,8 @@ export default function LoginPage() {
         router.push('/proveedor');
       } else if (user.role === 'FISCALIZADOR') {
         router.push('/fiscalizar');
+      } else if (user.role === 'VIEWER') {
+        router.push('/visor');
       } else if (user.role === 'PLAYER') {
         router.push('/dashboard');
       }
@@ -72,6 +74,8 @@ export default function LoginPage() {
         router.push('/proveedor');
       } else if (user.role === 'FISCALIZADOR') {
         router.push('/fiscalizar');
+      } else if (user.role === 'VIEWER') {
+        router.push('/visor');
       } else if (user.role === 'PLAYER') {
         router.push('/dashboard');
       }

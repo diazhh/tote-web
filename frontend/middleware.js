@@ -47,6 +47,13 @@ export function middleware(request) {
           if (user && user.role === 'TAQUILLA_ADMIN') {
             return NextResponse.redirect(new URL('/admin/depositos', request.url));
           }
+          // Roles con home propio: evitar el ping-pong /admin ↔ /dashboard
+          if (user && user.role === 'VIEWER') {
+            return NextResponse.redirect(new URL('/visor', request.url));
+          }
+          if (user && user.role === 'FISCALIZADOR') {
+            return NextResponse.redirect(new URL('/fiscalizar', request.url));
+          }
           return NextResponse.redirect(new URL('/dashboard', request.url));
         }
       }
@@ -75,6 +82,9 @@ export function middleware(request) {
       
       // Solo PLAYER puede acceder a estas rutas
       if (!user || user.role !== 'PLAYER') {
+        if (user && user.role === 'VIEWER') {
+          return NextResponse.redirect(new URL('/visor', request.url));
+        }
         return NextResponse.redirect(new URL('/admin', request.url));
       }
     } catch (error) {
