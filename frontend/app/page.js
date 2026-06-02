@@ -42,7 +42,9 @@ function NavigationHeader({ onOpenMobileMenu }) {
           <nav className="hidden md:flex items-center gap-6">
             <a href="#inicio" className="text-sm font-medium text-gray-700 hover:text-blue-600 transition">Inicio</a>
             <a href="#juegos" className="text-sm font-medium text-gray-700 hover:text-blue-600 transition">Juegos</a>
+            {/* Servicio de juego deshabilitado temporalmente — restaurar enlace cuando se reactive
             <a href="#como-jugar" className="text-sm font-medium text-gray-700 hover:text-blue-600 transition">Cómo Jugar</a>
+            */}
             <a href="#horarios" className="text-sm font-medium text-gray-700 hover:text-blue-600 transition">Horarios</a>
             <a href="#resultados" className="text-sm font-medium text-gray-700 hover:text-blue-600 transition">Resultados</a>
           </nav>
@@ -51,9 +53,11 @@ function NavigationHeader({ onOpenMobileMenu }) {
             <Link href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-blue-600 transition">
               Iniciar Sesión
             </Link>
+            {/* Registro deshabilitado temporalmente — no se ofrece el servicio por ahora
             <Link href="/login" className="px-5 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-medium rounded-lg hover:shadow-lg transition">
               Registrarse
             </Link>
+            */}
           </div>
 
           <button onClick={onOpenMobileMenu} className="md:hidden p-2">
@@ -81,16 +85,20 @@ function MobileMenu({ isOpen, onClose }) {
         <nav className="p-4 space-y-4">
           <a href="#inicio" onClick={onClose} className="block py-2 text-gray-700 hover:text-blue-600 transition">Inicio</a>
           <a href="#juegos" onClick={onClose} className="block py-2 text-gray-700 hover:text-blue-600 transition">Juegos</a>
+          {/* Servicio de juego deshabilitado temporalmente — restaurar enlace cuando se reactive
           <a href="#como-jugar" onClick={onClose} className="block py-2 text-gray-700 hover:text-blue-600 transition">Cómo Jugar</a>
+          */}
           <a href="#horarios" onClick={onClose} className="block py-2 text-gray-700 hover:text-blue-600 transition">Horarios</a>
           <a href="#resultados" onClick={onClose} className="block py-2 text-gray-700 hover:text-blue-600 transition">Resultados</a>
           <div className="pt-4 border-t space-y-2">
             <Link href="/login" className="block w-full px-4 py-2 text-center text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
               Iniciar Sesión
             </Link>
+            {/* Registro deshabilitado temporalmente — no se ofrece el servicio por ahora
             <Link href="/login" className="block w-full px-4 py-2 text-center bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:shadow-lg transition">
               Registrarse
             </Link>
+            */}
           </div>
         </nav>
       </div>
@@ -123,6 +131,7 @@ function HeroSection({ nextDraws, games }) {
             Triple Pantera, Animalitos y más. Resultados en tiempo real, sorteos cada hora, premios garantizados.
           </p>
 
+          {/* CTAs de juego deshabilitados temporalmente — no se ofrece el servicio por ahora
           <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
             <Link href="/login" className="px-8 py-4 bg-white text-blue-600 font-bold rounded-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-2">
               <Play className="h-5 w-5" />
@@ -133,6 +142,7 @@ function HeroSection({ nextDraws, games }) {
               <ChevronRight className="h-5 w-5" />
             </a>
           </div>
+          */}
 
           {nextDraw && (
             <div className="inline-block bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
@@ -246,11 +256,13 @@ function GamesSection({ games }) {
                 </div>
                 <div className="p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-2">{game.name}</h3>
-                  <p className="text-gray-600 text-sm mb-4">{info.description}</p>
+                  <p className="text-gray-600 text-sm">{info.description}</p>
+                  {/* CTA de juego deshabilitado temporalmente — no se ofrece el servicio por ahora
                   <Link href="/login" className="inline-flex items-center gap-2 text-blue-600 font-medium hover:gap-3 transition-all">
                     Jugar Ahora
                     <ArrowRight className="h-4 w-4" />
                   </Link>
+                  */}
                 </div>
               </div>
             );
@@ -419,7 +431,8 @@ export default function HomePage() {
       <HeroSection nextDraws={nextDraws} games={games} />
       <FeaturesSection />
       <GamesSection games={games} />
-      <HowToPlaySection />
+      {/* Sección "¿Cómo Jugar?" oculta temporalmente — describe registro/recarga/apuestas (servicio no ofrecido por ahora) */}
+      {/* <HowToPlaySection /> */}
       <ScheduleSection games={games} />
 
       <section id="resultados" className="py-20 bg-white">
@@ -617,7 +630,9 @@ export default function HomePage() {
               <h4 className="font-bold mb-4">Enlaces Rápidos</h4>
               <ul className="space-y-2 text-sm text-gray-400">
                 <li><a href="#juegos" className="hover:text-white transition">Juegos</a></li>
+                {/* Servicio de juego deshabilitado temporalmente — restaurar enlace cuando se reactive
                 <li><a href="#como-jugar" className="hover:text-white transition">Cómo Jugar</a></li>
+                */}
                 <li><a href="#horarios" className="hover:text-white transition">Horarios</a></li>
                 <li><a href="#resultados" className="hover:text-white transition">Resultados</a></li>
                 <li><Link href="/login" className="hover:text-white transition">Iniciar Sesión</Link></li>
