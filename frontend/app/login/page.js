@@ -165,6 +165,7 @@ export default function LoginPage() {
                 <span>Iniciar Sesión</span>
               </div>
             </button>
+            {/* Registro deshabilitado temporalmente — no se ofrece el servicio por ahora
             <button
               onClick={() => setActiveTab('register')}
               className={`flex-1 py-4 px-6 text-center font-medium transition-all ${
@@ -178,6 +179,7 @@ export default function LoginPage() {
                 <span>Registrarse</span>
               </div>
             </button>
+            */}
           </div>
 
           <div className="p-8">
