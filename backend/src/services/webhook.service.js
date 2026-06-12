@@ -1,5 +1,6 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { access } from 'node:fs/promises';
 import { prisma } from '../lib/prisma.js';
 import logger from '../lib/logger.js';
 import { checkTicketQuotas, partitionByQuota } from './quota.service.js';
@@ -10,7 +11,79 @@ import { checkTicketQuotas, partitionByQuota } from './quota.service.js';
  * `items[]` + `totalAmount` indicando exactamente qué se vendió.
  * Detalles sin cupo se descartan silenciosamente (no se exponen).
  */
-const PARTIAL_ACCEPTANCE_SLUGS = new Set(['premier2', 'virtuales2']);
+// LEGACY (fallback): el modo de aceptación parcial ahora vive en la columna
+// ApiSystem.partialMode. Estos Sets se conservan como red de seguridad para
+// proveedores aún sin backfill — resolvePartialMode() usa la columna primero y
+// cae a estos Sets solo si la columna es NONE/ausente.
+const PARTIAL_ACCEPTANCE_SLUGS = new Set(['premier', 'premier2', 'virtuales2', 'paganarplay', 'winbigvzla']);
+const SPLIT_PARTIAL_SLUGS = new Set(['premier', 'premier2', 'winbigvzla']);
+
+/**
+ * Resuelve el modo de aceptación parcial de un proveedor.
+ * Precedencia: columna ApiSystem.partialMode → Sets legacy → 'NONE'.
+ * @param {object} apiSystem
+ * @returns {'NONE'|'DROP'|'SPLIT'}
+ */
+function resolvePartialMode(apiSystem) {
+  const col = apiSystem.partialMode;
+  if (col === 'DROP' || col === 'SPLIT') return col;
+  // Fallback legacy para proveedores sin backfill de la columna.
+  if (SPLIT_PARTIAL_SLUGS.has(apiSystem.slug)) return 'SPLIT';
+  if (PARTIAL_ACCEPTANCE_SLUGS.has(apiSystem.slug)) return 'DROP';
+  return 'NONE';
+}
+
+/**
+ * Carga el adapter de un proveedor.
+ * Precedencia: adapter custom `{slug}.adapter.js` → conector genérico
+ * (si useGenericAdapter) → discovery (sin adapter).
+ *
+ * @param {string} slug
+ * @param {object} apiSystem
+ * @param {string} adaptersDir - ruta absoluta de la carpeta de adapters
+ * @returns {Promise<{module?: object, source?: string, discovery?: boolean, error?: string}>}
+ */
+async function fileExists(p) {
+  try {
+    await access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function loadAdapter(slug, apiSystem, adaptersDir) {
+  // Sandbox: el path del adapter custom nunca puede salir de adaptersDir.
+  const customPath = path.resolve(adaptersDir, `${slug}.adapter.js`);
+  if (!customPath.startsWith(adaptersDir + path.sep)) {
+    return { error: 'Adapter path escape attempted' };
+  }
+
+  // 1. Adapter custom — siempre gana (preserva casos especiales como premier).
+  // Chequear existencia con fs.access antes de importar: determinista en Node y
+  // bajo el VM de Jest (donde import() de un módulo ausente no da ERR_MODULE_NOT_FOUND).
+  if (await fileExists(customPath)) {
+    try {
+      const module = await import(customPath);
+      return { module, source: 'custom' };
+    } catch (err) {
+      return { error: err.message ?? String(err) };
+    }
+  }
+
+  // 2. Conector genérico — opt-in por proveedor (useGenericAdapter).
+  if (apiSystem.useGenericAdapter) {
+    try {
+      const module = await import(path.resolve(adaptersDir, 'generic.adapter.js'));
+      return { module, source: 'generic' };
+    } catch (err) {
+      return { error: `generic adapter load failed: ${err.message ?? String(err)}` };
+    }
+  }
+
+  // 3. Sin adapter → discovery (solo se loguea el payload).
+  return { discovery: true };
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -178,38 +251,27 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
     },
   });
 
-  // Step 2: attempt to load the provider adapter
-  // Sandbox: build the path with path.join and verify it stays inside the
-  // adapters directory. Defense-in-depth on top of the slug regex applied
-  // by createSystem/updateSystem and webhookAuth.
+  // Step 2: resolve the provider adapter.
+  // Precedencia: custom `{slug}.adapter.js` → conector genérico (opt-in) →
+  // discovery. El sandbox de path vive dentro de loadAdapter.
   const adaptersDir = path.resolve(__dirname, '../webhooks/adapters');
-  const adapterPath = path.resolve(adaptersDir, `${slug}.adapter.js`);
-  if (!adapterPath.startsWith(adaptersDir + path.sep)) {
-    await prisma.webhookLog.update({
-      where: { id: log.id },
-      data: { status: 'FAILED', errorMessage: 'Adapter path escape attempted' },
-    });
-    logger.error(`[webhook] Adapter path escape blocked for slug "${slug}"`);
-    return { status: 'failed', logId: log.id, error: 'invalid slug' };
+  const resolved = await loadAdapter(slug, apiSystem, adaptersDir);
+
+  if (resolved.discovery) {
+    logger.info(`[webhook] Discovery mode — no adapter for provider "${slug}" (logId=${log.id})`);
+    return { status: 'discovery', logId: log.id };
   }
-
-  let adapterModule;
-  try {
-    adapterModule = await import(adapterPath);
-  } catch (importErr) {
-    if (importErr.code === 'ERR_MODULE_NOT_FOUND') {
-      logger.info(`[webhook] Discovery mode — no adapter for provider "${slug}" (logId=${log.id})`);
-      return { status: 'discovery', logId: log.id };
-    }
-
-    // Unexpected import error
-    const errorMessage = importErr.message ?? String(importErr);
+  if (resolved.error) {
     await prisma.webhookLog.update({
       where: { id: log.id },
-      data: { status: 'FAILED', errorMessage },
+      data: { status: 'FAILED', errorMessage: resolved.error },
     });
-    logger.error(`[webhook] Failed to load adapter for "${slug}":`, importErr);
-    return { status: 'failed', logId: log.id, error: errorMessage };
+    logger.error(`[webhook] Failed to load adapter for "${slug}": ${resolved.error}`);
+    return { status: 'failed', logId: log.id, error: resolved.error };
+  }
+  const adapterModule = resolved.module;
+  if (resolved.source === 'generic') {
+    logger.info(`[webhook] Using generic adapter for provider "${slug}" (logId=${log.id})`);
   }
 
   // Step 3: normalize and create ticket
@@ -235,7 +297,8 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
     // Wrap quota check + ticket creation in one transaction so the
     // SELECT ... FOR UPDATE lock inside checkTicketQuotas stays held
     // until the ticket insert commits.
-    const partialAcceptance = PARTIAL_ACCEPTANCE_SLUGS.has(slug);
+    const partialMode = resolvePartialMode(apiSystem); // 'NONE' | 'DROP' | 'SPLIT'
+    const partialAcceptance = partialMode === 'DROP' || partialMode === 'SPLIT';
     const txResult = await prisma.$transaction(async (tx) => {
       const drawCheck = await checkDrawIsOpen(normalized.drawId, tx);
       if (!drawCheck.ok) {
@@ -243,7 +306,9 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
       }
 
       if (partialAcceptance) {
-        const { accepted, rejected } = await partitionByQuota(normalized.details, tx);
+        const { accepted, rejected, capped } = await partitionByQuota(normalized.details, tx, {
+          split: partialMode === 'SPLIT',
+        });
         if (accepted.length === 0) {
           return {
             rejected: true,
@@ -251,7 +316,9 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
           };
         }
         // Reconstruir normalized con solo los accepted + recalc totalAmount.
-        // Guardar rejected en providerData para auditoría interna (no se expone).
+        // Los accepted ya traen el amount topeado al diferencial (modo split),
+        // así que el ticket y el echo al proveedor reflejan lo realmente vendido.
+        // Guardar rejected + capped en providerData para auditoría interna (no se expone).
         const partialNormalized = {
           ...normalized,
           details: accepted,
@@ -261,11 +328,20 @@ export async function dispatchWebhook(apiSystem, rawBody, headers) {
             _partialAcceptance: {
               acceptedCount: accepted.length,
               rejectedCount: rejected.length,
+              cappedCount: (capped ?? []).length,
               rejected: rejected.map((r) => ({
                 drawSlotId: r.play.drawSlotId,
                 number: r.play.number,
                 amount: r.play.amount,
                 reason: r.reason,
+              })),
+              capped: (capped ?? []).map((c) => ({
+                drawSlotId: c.play.drawSlotId,
+                number: c.play.number,
+                requested: c.requested,
+                accepted: c.accepted,
+                dropped: c.dropped,
+                reason: c.reason,
               })),
             },
           },

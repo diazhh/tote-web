@@ -508,6 +508,12 @@ model ApiSystem {
   // romper proveedores existentes que solo envían el token.
   requireSignature Boolean       @default(false)
   mode             ApiSystemMode @default(PULL)
+  // Conector genérico: si true y NO existe un adapter custom ({slug}.adapter.js),
+  // el webhook usa generic.adapter.js (contrato estándar plays[]+drawSlotId).
+  // Permite dar de alta proveedores PUSH desde el front sin escribir código.
+  useGenericAdapter Boolean      @default(false)
+  // Modo de aceptación parcial por cupo (reemplaza los Sets hardcodeados).
+  partialMode      WebhookPartialMode @default(NONE)
   isActive         Boolean       @default(true)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -532,6 +538,17 @@ enum ApiSystemMode {
   PULL // Provider polled by our system (SRQ pattern)
   PUSH // Provider sends webhooks to our endpoint
   SCRAPE // Authenticated dashboard scraped via headless browser (Maxplay pattern)
+}
+
+// Modo de aceptación parcial por cupo para proveedores PUSH (reemplaza los
+// Sets hardcodeados PARTIAL_ACCEPTANCE_SLUGS / SPLIT_PARTIAL_SLUGS).
+//   NONE  → todo-o-nada: si cualquier número excede cupo, se rechaza el ticket.
+//   DROP  → descarta la jugada sin cupo, el resto del ticket entra.
+//   SPLIT → vende el diferencial disponible y descarta el excedente.
+enum WebhookPartialMode {
+  NONE
+  DROP
+  SPLIT
 }
 
 // ============================================
@@ -577,6 +594,32 @@ model WebhookLog {
   @@index([status])
   @@index([createdAt])
   @@index([apiSystemId, createdAt])
+}
+
+// Registra cada intento de webhook RECHAZADO por autenticación (401) en el
+// middleware webhook-auth, ANTES de que se cree un WebhookLog. Sirve para
+// diagnosticar proveedores que envían token incorrecto / faltante / firma
+// inválida (caso premier2 2026-06): captura exactamente qué llegó.
+//
+// Sin relación FK dura: el slug puede no corresponder a ningún ApiSystem
+// (slug inexistente). `slug` siempre presente; `apiSystemId` se rellena solo
+// cuando el slug resolvió a un proveedor PUSH.
+model WebhookAuthFailure {
+  id            String   @id @default(uuid())
+  slug          String // providerSlug tomado de la URL
+  apiSystemId   String? // resuelto si el slug matcheó un proveedor PUSH; null si no
+  reason        String // motivo del rechazo (mensaje del 401)
+  statusCode    Int      @default(401)
+  incomingToken String? // valor de X-Webhook-Token recibido (null si faltaba)
+  rawBody       String? // cuerpo de la request como string (capado a 10k)
+  headers       Json? // headers de la request (incluye el token recibido)
+  ipAddress     String? // IP del cliente (best-effort: x-forwarded-for / socket)
+  createdAt     DateTime @default(now())
+
+  @@index([slug])
+  @@index([apiSystemId])
+  @@index([createdAt])
+  @@index([slug, createdAt])
 }
 
 model ApiConfiguration {

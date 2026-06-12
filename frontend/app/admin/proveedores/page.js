@@ -286,6 +286,12 @@ export default function ProveedoresPage() {
           >
             Logs de Webhook
           </Link>
+          <Link
+            href="/admin/proveedores/auth-failures"
+            className="py-4 px-1 border-b-2 font-medium text-sm border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          >
+            Auth Fallidos (401)
+          </Link>
         </nav>
       </div>
 
@@ -740,6 +746,10 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
     slug: system?.slug || '',
     mode: system?.mode || 'PULL',
     isActive: system?.isActive !== undefined ? system.isActive : true,
+    // Conector genérico: nuevos proveedores PUSH lo usan por defecto (sin código).
+    useGenericAdapter: system?.useGenericAdapter !== undefined ? system.useGenericAdapter : true,
+    // Modo de venta parcial: por defecto SPLIT (patrón de los proveedores recientes).
+    partialMode: system?.partialMode || 'SPLIT',
     _slugManuallyEdited: !!system?.slug,
   });
   const [tokenJustGenerated, setTokenJustGenerated] = useState(null);
@@ -856,6 +866,45 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
               <option value="PUSH">PUSH — El proveedor envia webhooks</option>
             </select>
           </div>
+
+          {/* Conector + venta parcial — solo PUSH */}
+          {formData.mode === 'PUSH' && (
+            <div className="border-t pt-4 space-y-4">
+              <h3 className="text-sm font-semibold text-gray-900">Conector webhook</h3>
+
+              {/* Conector */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Conector</label>
+                <select
+                  value={formData.useGenericAdapter ? 'GENERIC' : 'DISCOVERY'}
+                  onChange={(e) =>
+                    setFormData({ ...formData, useGenericAdapter: e.target.value === 'GENERIC' })
+                  }
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="GENERIC">Genérico — procesa ventas con el contrato estándar</option>
+                  <option value="DISCOVERY">Discovery — solo registra el payload (sin crear tickets)</option>
+                </select>
+                <p className="text-xs text-gray-400 mt-1">
+                  Si existe un adapter custom (<span className="font-mono">{formData.slug || 'slug'}.adapter.js</span>) siempre tiene prioridad sobre el genérico.
+                </p>
+              </div>
+
+              {/* Venta parcial */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Venta parcial (cupo)</label>
+                <select
+                  value={formData.partialMode}
+                  onChange={(e) => setFormData({ ...formData, partialMode: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="SPLIT">SPLIT — vende el diferencial disponible (recomendado)</option>
+                  <option value="DROP">DROP — descarta la jugada sin cupo, el resto entra</option>
+                  <option value="NONE">NONE — todo-o-nada: rechaza el ticket si algo excede cupo</option>
+                </select>
+              </div>
+            </div>
+          )}
 
           {/* isActive toggle — only on edit */}
           {system && (

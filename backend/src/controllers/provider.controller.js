@@ -12,6 +12,9 @@ const __dirname = path.dirname(__filename);
 // Restringe slugs a caracteres seguros para uso en filesystem (path traversal) y URLs.
 const SLUG_REGEX = /^[a-z0-9_-]{1,64}$/;
 
+// Valores válidos para ApiSystem.partialMode (enum WebhookPartialMode).
+const PARTIAL_MODES = ['NONE', 'DROP', 'SPLIT'];
+
 /**
  * Validates that a URL points to a public host (not loopback/private/link-local).
  * Used to prevent SSRF in testConfiguration where the user controls baseUrl.
@@ -56,6 +59,8 @@ class ProviderController {
           slug: true,
           mode: true,
           isActive: true,
+          partialMode: true,
+          useGenericAdapter: true,
           createdAt: true,
           updatedAt: true,
           configurations: {
@@ -86,6 +91,8 @@ class ProviderController {
           slug: true,
           mode: true,
           isActive: true,
+          partialMode: true,
+          useGenericAdapter: true,
           createdAt: true,
           updatedAt: true,
           configurations: {
@@ -107,7 +114,7 @@ class ProviderController {
 
   async createSystem(req, res) {
     try {
-      const { name, description, slug, mode, isActive } = req.body;
+      const { name, description, slug, mode, isActive, partialMode, useGenericAdapter } = req.body;
 
       if (!name || !slug) {
         return res.status(400).json({ error: 'El nombre y el slug son requeridos' });
@@ -117,13 +124,19 @@ class ProviderController {
         return res.status(400).json({ error: 'Slug inválido. Solo a-z, 0-9, _ y - (máx 64)' });
       }
 
+      if (partialMode !== undefined && !PARTIAL_MODES.includes(partialMode)) {
+        return res.status(400).json({ error: 'partialMode inválido. Use NONE, DROP o SPLIT' });
+      }
+
       const system = await prisma.apiSystem.create({
         data: {
           name,
           description,
           slug,
           mode: mode || 'PULL',
-          isActive: isActive !== undefined ? isActive : true
+          isActive: isActive !== undefined ? isActive : true,
+          partialMode: partialMode || 'NONE',
+          useGenericAdapter: useGenericAdapter !== undefined ? !!useGenericAdapter : false
         }
       });
 
@@ -141,7 +154,7 @@ class ProviderController {
   async updateSystem(req, res) {
     try {
       const { id } = req.params;
-      const { name, description, slug, mode, isActive } = req.body;
+      const { name, description, slug, mode, isActive, partialMode, useGenericAdapter } = req.body;
 
       const data = {};
       if (name !== undefined) data.name = name;
@@ -154,6 +167,13 @@ class ProviderController {
       }
       if (mode !== undefined) data.mode = mode;
       if (isActive !== undefined) data.isActive = isActive;
+      if (partialMode !== undefined) {
+        if (!PARTIAL_MODES.includes(partialMode)) {
+          return res.status(400).json({ error: 'partialMode inválido. Use NONE, DROP o SPLIT' });
+        }
+        data.partialMode = partialMode;
+      }
+      if (useGenericAdapter !== undefined) data.useGenericAdapter = !!useGenericAdapter;
 
       const system = await prisma.apiSystem.update({ where: { id }, data });
 
@@ -192,14 +212,17 @@ class ProviderController {
         return res.status(404).json({ error: 'Sistema no encontrado' });
       }
       const adapterPath = path.join(__dirname, '../webhooks/adapters', `${system.slug}.adapter.js`);
-      let adapterReady = false;
+      let hasCustomFile = false;
       try {
         await access(adapterPath);
-        adapterReady = true;
+        hasCustomFile = true;
       } catch {
-        adapterReady = false;
+        hasCustomFile = false;
       }
-      res.json({ adapterReady, slug: system.slug, mode: system.mode });
+      // El conector genérico también deja el proveedor "listo" sin archivo custom.
+      const source = hasCustomFile ? 'custom' : (system.useGenericAdapter ? 'generic' : 'none');
+      const adapterReady = source !== 'none';
+      res.json({ adapterReady, source, slug: system.slug, mode: system.mode });
     } catch (error) {
       logger.error('Error verificando adapter status:', error);
       res.status(500).json({ error: 'Error al verificar adapter' });
@@ -575,6 +598,46 @@ class ProviderController {
     } catch (error) {
       logger.error('Error obteniendo webhook logs:', error);
       res.status(500).json({ error: 'Error al obtener logs' });
+    }
+  }
+
+  // Intentos de webhook rechazados por auth (401) — registrados por
+  // webhook-auth.middleware ANTES de crear un WebhookLog. Para diagnosticar
+  // proveedores que mandan token incorrecto / faltante / firma inválida.
+  async getWebhookAuthFailures(req, res) {
+    try {
+      const { slug, page = '1', limit = '50' } = req.query;
+      const pageNum = parseInt(page, 10);
+      const limitNum = parseInt(limit, 10);
+      const skip = (pageNum - 1) * limitNum;
+
+      const where = {};
+      if (slug) where.slug = slug;
+
+      const [failures, total] = await Promise.all([
+        prisma.webhookAuthFailure.findMany({
+          where,
+          skip,
+          take: limitNum,
+          orderBy: { createdAt: 'desc' },
+        }),
+        prisma.webhookAuthFailure.count({ where }),
+      ]);
+
+      res.json({
+        data: failures,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+          hasNext: skip + failures.length < total,
+          hasPrev: pageNum > 1,
+        },
+      });
+    } catch (error) {
+      logger.error('Error obteniendo webhook auth failures:', error);
+      res.status(500).json({ error: 'Error al obtener intentos de auth fallidos' });
     }
   }
 

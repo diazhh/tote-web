@@ -41,6 +41,7 @@ jest.unstable_mockModule('../lib/dateUtils.js', () => ({
 // Always returns ok:true so the success-path test (Test 2) reaches ticket.create.
 jest.unstable_mockModule('../services/quota.service.js', () => ({
   checkTicketQuotas: jest.fn().mockResolvedValue({ ok: true }),
+  partitionByQuota: jest.fn().mockResolvedValue({ accepted: [], rejected: [], capped: [] }),
 }));
 
 // ── Shared test data ───────────────────────────────────────────────

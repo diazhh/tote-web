@@ -17,7 +17,10 @@ const mockPrisma = {
   $transaction: jest.fn((fn) => fn(mockTx)),
 };
 
-const mockQuota = { checkTicketQuotas: jest.fn().mockResolvedValue({ ok: true }) };
+const mockQuota = {
+  checkTicketQuotas: jest.fn().mockResolvedValue({ ok: true }),
+  partitionByQuota: jest.fn().mockResolvedValue({ accepted: [], rejected: [], capped: [] }),
+};
 
 jest.unstable_mockModule('../lib/prisma.js', () => ({ prisma: mockPrisma }));
 jest.unstable_mockModule('../lib/logger.js', () => ({
