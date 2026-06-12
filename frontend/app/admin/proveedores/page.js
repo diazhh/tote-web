@@ -754,10 +754,13 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
   });
   const [tokenJustGenerated, setTokenJustGenerated] = useState(null);
   const [generatingToken, setGeneratingToken] = useState(false);
+  const [generatingDoc, setGeneratingDoc] = useState(false);
+  const [docCreds, setDocCreds] = useState(null);
 
   // Reset token when modal switches to a different system
   useEffect(() => {
     setTokenJustGenerated(null);
+    setDocCreds(null);
   }, [system]);
 
   const handleNameChange = (e) => {
@@ -791,6 +794,48 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
       console.error('Error generando token:', err);
     } finally {
       setGeneratingToken(false);
+    }
+  };
+
+  const handleGenerateDoc = async () => {
+    if (!system?.id) return;
+    setGeneratingDoc(true);
+    try {
+      const token = localStorage.getItem('accessToken');
+      const res = await fetch(`${apiUrl}/providers/systems/${system.id}/integration-doc`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Error generando el documento');
+        return;
+      }
+      // Descargar el .docx desde base64
+      const bin = atob(data.docBase64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i += 1) bytes[i] = bin.charCodeAt(i);
+      const blob = new Blob([bytes], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename || 'Webhook-Integracion.docx';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      // Mostrar credenciales recién creadas (una sola vez)
+      if (data.generated && (data.generated.tokenCreated || data.generated.portalCreated)) {
+        setDocCreds(data.generated);
+        if (data.generated.tokenCreated && onTokenGenerated) onTokenGenerated(system.id);
+      }
+    } catch (err) {
+      console.error('Error generando documento:', err);
+      alert('Error generando el documento');
+    } finally {
+      setGeneratingDoc(false);
     }
   };
 
@@ -1015,6 +1060,44 @@ function SystemModal({ system, onClose, onSave, apiUrl, hasToken, onTokenGenerat
                     El proveedor debe enviar las jugadas como JSON en el body del POST.
                     Sin adapter configurado, el payload se guardara en el log para inspeccion.
                   </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Documento de integración — credenciales + .docx descargable (PUSH existente) */}
+          {system?.id && formData.mode === 'PUSH' && (
+            <div className="border-t pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-gray-900 mb-1">Documento de integración</h3>
+              <p className="text-xs text-gray-500 mb-3">
+                Genera (si faltan) el token y el usuario del portal, y descarga la guía .docx con esas
+                credenciales y el contrato de payload para entregar al proveedor.
+              </p>
+              <button
+                type="button"
+                onClick={handleGenerateDoc}
+                disabled={generatingDoc}
+                className="px-3 py-2 text-sm bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {generatingDoc ? 'Generando...' : 'Credenciales + documento (.docx)'}
+              </button>
+
+              {docCreds && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mt-3">
+                  <p className="text-xs text-yellow-800 font-medium mb-2">
+                    Credenciales creadas — cópialas ahora, no se mostrarán de nuevo
+                  </p>
+                  <div className="space-y-1 text-xs font-mono break-all text-yellow-900">
+                    {docCreds.token && (
+                      <div><span className="text-yellow-700">Token:</span> {docCreds.token}</div>
+                    )}
+                    {docCreds.portalUser && (
+                      <div><span className="text-yellow-700">Portal usuario:</span> {docCreds.portalUser}</div>
+                    )}
+                    {docCreds.portalPass && (
+                      <div><span className="text-yellow-700">Portal contraseña:</span> {docCreds.portalPass}</div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

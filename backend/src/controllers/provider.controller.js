@@ -5,6 +5,11 @@ import { access } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import bcrypt from 'bcrypt';
+import { buildIntegrationDoc } from '../services/provider-doc.service.js';
+
+// Bases públicas para la doc de integración (override por env).
+const WEBHOOK_PUBLIC_BASE = process.env.WEBHOOK_PUBLIC_BASE || 'https://toteback.atilax.io/api/webhooks';
+const PORTAL_LOGIN_URL = process.env.PORTAL_LOGIN_URL || 'https://tote.atilax.io/login';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -201,6 +206,98 @@ class ProviderController {
     } catch (error) {
       logger.error('Error generando token webhook:', error);
       res.status(500).json({ error: 'Error al generar token' });
+    }
+  }
+
+  /**
+   * Asegura credenciales (token webhook + usuario portal) y genera la guía de
+   * integración (.docx) con esas credenciales embebidas.
+   *
+   * Idempotente: si ya hay token/usuario, los reutiliza (la contraseña del
+   * portal NO se puede recuperar — solo se incluye en el doc cuando se acaba de
+   * crear el usuario en esta llamada). Devuelve el doc en base64 + lo generado.
+   */
+  async generateIntegrationDoc(req, res) {
+    try {
+      const { id } = req.params;
+
+      const system = await prisma.apiSystem.findUnique({ where: { id } });
+      if (!system) return res.status(404).json({ error: 'Proveedor no encontrado' });
+      if (system.mode !== 'PUSH') {
+        return res.status(400).json({ error: 'Solo proveedores PUSH tienen documento de integración' });
+      }
+
+      const generated = { tokenCreated: false, portalCreated: false };
+
+      // 1. Asegurar token webhook.
+      let token = system.webhookToken;
+      if (!token) {
+        token = crypto.randomBytes(32).toString('hex');
+        await prisma.apiSystem.update({ where: { id }, data: { webhookToken: token } });
+        generated.tokenCreated = true;
+        generated.token = token; // se devuelve una sola vez
+        logger.info(`Token webhook generado (via doc) para ${system.slug} (${id})`);
+      }
+
+      // 2. Asegurar usuario portal.
+      let portalUser = null;
+      let portalPass = null;
+      const existingPortal = await prisma.user.findFirst({
+        where: { apiSystemId: id, role: 'PROVIDER' },
+        select: { username: true },
+      });
+      if (existingPortal) {
+        portalUser = existingPortal.username; // contraseña desconocida (bcrypt)
+      } else {
+        // Username: slug; si está tomado, slug-portal, slug-portal-2, ...
+        let base = system.slug.length >= 3 ? system.slug : `${system.slug}-portal`;
+        let candidate = base;
+        let n = 1;
+        // eslint-disable-next-line no-await-in-loop
+        while (await prisma.user.findUnique({ where: { username: candidate }, select: { id: true } })) {
+          n += 1;
+          candidate = `${base}-${n}`;
+        }
+        portalUser = candidate;
+        portalPass = `${system.slug.slice(0, 3).toUpperCase()}-${crypto.randomBytes(9).toString('base64').replace(/[+/=]/g, '').slice(0, 12)}`;
+        const hashed = await bcrypt.hash(portalPass, 10);
+        await prisma.user.create({
+          data: {
+            username: portalUser,
+            email: `portal-${system.slug}@internal.tote`,
+            password: hashed,
+            role: 'PROVIDER',
+            apiSystemId: id,
+            isActive: true,
+          },
+        });
+        generated.portalCreated = true;
+        generated.portalUser = portalUser;
+        generated.portalPass = portalPass;
+        logger.info(`Usuario portal creado (via doc) para ${system.slug} (${id}): ${portalUser}`);
+      }
+
+      // 3. Construir el documento.
+      const buffer = await buildIntegrationDoc({
+        providerName: system.name,
+        slug: system.slug,
+        endpoint: `${WEBHOOK_PUBLIC_BASE}/${system.slug}`,
+        token,
+        portalUrl: PORTAL_LOGIN_URL,
+        portalUser,
+        portalPass, // solo presente si se creó en esta llamada
+        partialMode: system.partialMode || 'NONE',
+      });
+
+      const filename = `Webhook-Integracion-${system.name.replace(/[^A-Za-z0-9]+/g, '-')}.docx`;
+      return res.json({
+        filename,
+        docBase64: buffer.toString('base64'),
+        generated,
+      });
+    } catch (error) {
+      logger.error('Error generando documento de integración:', error);
+      return res.status(500).json({ error: 'Error al generar el documento' });
     }
   }
 

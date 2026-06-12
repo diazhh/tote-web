@@ -29,6 +29,9 @@ router.get('/configurations/:id/stats', providerController.getConfigurationStats
 router.post('/systems/:id/generate-token', providerController.generateToken.bind(providerController));
 router.get('/systems/:id/adapter-status', providerController.getAdapterStatus.bind(providerController));
 
+// Asegura credenciales (token + portal) y genera la guía de integración (.docx)
+router.post('/systems/:id/integration-doc', providerController.generateIntegrationDoc.bind(providerController));
+
 // Portal user management (ADMIN only — guard ya aplicado al router)
 router.get('/systems/:id/portal-user', providerController.getPortalUser.bind(providerController));
 router.post('/systems/:id/portal-user', providerController.createPortalUser.bind(providerController));
@@ -36,5 +39,8 @@ router.put('/systems/:id/portal-user/password', providerController.resetPortalUs
 
 // Logs de webhook
 router.get('/webhook-logs', providerController.getWebhookLogs.bind(providerController));
+
+// Intentos de auth rechazados (401) — diagnóstico de tokens incorrectos
+router.get('/webhook-auth-failures', providerController.getWebhookAuthFailures.bind(providerController));
 
 export default router;
