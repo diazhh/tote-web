@@ -5,6 +5,7 @@
 import monitorService from '../services/monitor.service.js';
 import accountingReportService from '../services/accounting-report.service.js';
 import ticketsExportService from '../services/tickets-export.service.js';
+import caidaService from '../services/caida.service.js';
 import logger from '../lib/logger.js';
 
 class MonitorController {
@@ -265,6 +266,21 @@ class MonitorController {
       res.json({ success: true, data: stats });
     } catch (error) {
       logger.error('Error en getItemStatsFiltered:', error);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+
+  /**
+   * GET /api/monitor/caidas/:drawId
+   * Obtener las caídas de animalitos del sorteo anterior al drawId dado
+   */
+  async getCaidas(req, res) {
+    try {
+      const { drawId } = req.params;
+      const data = await caidaService.getCaidasForDraw(drawId);
+      res.json({ success: true, data });
+    } catch (error) {
+      logger.error('Error en getCaidas:', error);
       res.status(500).json({ success: false, error: error.message });
     }
   }

@@ -19,6 +19,9 @@ router.get('/bancas/:drawId', monitorController.getBancaStats);
 router.get('/items/:drawId/filtered', monitorController.getItemStatsFiltered);
 router.get('/items/:drawId', monitorController.getItemStats);
 
+// Caídas del ganador del sorteo anterior (marca en la tabla de números)
+router.get('/caidas/:drawId', monitorController.getCaidas);
+
 // Lista de tickets con filtros (Excel ANTES de JSON para evitar conflicto)
 router.get('/tickets/excel', monitorController.downloadTicketsExcel);
 router.get('/tickets', monitorController.getTicketList);
