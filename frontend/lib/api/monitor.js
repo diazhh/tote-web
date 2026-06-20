@@ -104,6 +104,14 @@ export const monitorApi = {
   },
 
   /**
+   * Caídas del ganador del sorteo anterior (para marcar la tabla de números)
+   */
+  getCaidas: async (drawId) => {
+    const response = await axios.get(`/monitor/caidas/${drawId}`);
+    return response.data;
+  },
+
+  /**
    * Reporte contable agregado por (fecha, juego).
    * @param {Object} params
    * @param {string} params.dateFrom - YYYY-MM-DD (requerido)

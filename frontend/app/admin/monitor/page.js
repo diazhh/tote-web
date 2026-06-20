@@ -38,6 +38,7 @@ export default function MonitorPage() {
   const [tripletaDetailModal, setTripletaDetailModal] = useState({ open: false, data: null });
   const [numberHistoryModal, setNumberHistoryModal] = useState({ open: false, number: null, history: null, loading: false });
   const [lastSeenData, setLastSeenData] = useState({});
+  const [caidaInfo, setCaidaInfo] = useState(null);
   const [quotas, setQuotas] = useState([]);
   const [quotaModal, setQuotaModal] = useState({ open: false, item: null });
   const [blockItemModalOpen, setBlockItemModalOpen] = useState(false);
@@ -131,6 +132,7 @@ export default function MonitorPage() {
         const result = await monitorApi.getBancaStats(selectedDraw);
         setBancaStats(result.data);
       } else if (activeTab === 'numeros') {
+        setCaidaInfo(null);
         const [statsResult, quotasResult] = await Promise.all([
           monitorApi.getItemStats(selectedDraw),
           quotaApi.getDrawQuotas(selectedDraw).catch(() => ({ data: [] })),
@@ -146,6 +148,13 @@ export default function MonitorPage() {
           } catch (error) {
             console.error('Error loading last seen data:', error);
           }
+        }
+
+        try {
+          const caidaRes = await monitorApi.getCaidas(selectedDraw);
+          setCaidaInfo(caidaRes?.data || null);
+        } catch {
+          setCaidaInfo(null);
         }
       } else if (activeTab === 'reporte') {
         const result = await monitorApi.getDailyReport(selectedDate, selectedGame || null);
@@ -247,6 +256,12 @@ export default function MonitorPage() {
 
   const currentDraw = draws.find((d) => d.id === selectedDraw);
   const canEditQuota = currentDraw && (currentDraw.status === 'SCHEDULED' || currentDraw.status === 'CLOSED');
+
+  const caidaByNumber = useMemo(() => {
+    const m = new Map();
+    if (caidaInfo?.caidas) for (const c of caidaInfo.caidas) m.set(c.number, c);
+    return m;
+  }, [caidaInfo]);
 
   // Filtered + sorted items for the mobile Números view
   const filteredSortedItems = useMemo(() => {
@@ -465,6 +480,13 @@ export default function MonitorPage() {
                     </div>
                   </div>
 
+                  {caidaInfo?.previousDraw?.winner && (
+                    <div className="mb-4 text-sm text-purple-700 bg-purple-50 border border-purple-200 rounded-lg px-3 py-2">
+                      🔮 Caídas de <b>{caidaInfo.previousDraw.winner.name} ({caidaInfo.previousDraw.winner.number})</b> — marcadas en la tabla
+                      {caidaInfo.preselectedEnCaidas && <span className="ml-2 text-green-700">✅ el ganador/preseleccionado coincide</span>}
+                    </div>
+                  )}
+
                   {/* Alerta de tripletas que se completarían */}
                   {itemStats.items.some(i => i.tripletaCount > 0 && i.wouldCompleteTripletaCount > 0) && (
                     <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
@@ -627,6 +649,7 @@ export default function MonitorPage() {
                           const expanded = expandedItemId === item.itemId;
                           const lastSeen = lastSeenData[item.number];
                           const isWinner = itemStats.winnerItem?.number === item.number;
+                          const caida = caidaByNumber.get(item.number);
                           return (
                             <li
                               key={item.itemId}
@@ -651,6 +674,14 @@ export default function MonitorPage() {
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-sm font-semibold text-gray-800 truncate">{item.name}</span>
                                     {isWinner && <Trophy className="w-3.5 h-3.5 text-green-600 shrink-0" />}
+                                    {caida && (
+                                      <span
+                                        title={`Caída de ${caidaInfo?.previousDraw?.winner?.name} · ${caida.reason} · riesgo ${caida.riesgo}`}
+                                        className="text-[11px] shrink-0"
+                                      >
+                                        🔮{caida.riesgo === 'ALTO' ? '🔴' : caida.riesgo === 'MEDIO' ? '🟡' : '🟢'}
+                                      </span>
+                                    )}
                                     {exceeded && (
                                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-600 text-white shrink-0 font-semibold">EXC</span>
                                     )}
@@ -734,6 +765,14 @@ export default function MonitorPage() {
                                         </div>
                                       </>
                                     )}
+                                    {caida && (
+                                      <div className="flex justify-between gap-2 col-span-2">
+                                        <span className="text-gray-500">Caída</span>
+                                        <span className="font-medium text-purple-700">
+                                          {caida.reason} · {caida.sorteosSinSalir == null ? 's/registro' : `${caida.sorteosSinSalir} sorteos`} · {caida.riesgo}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
 
                                   <div className="flex items-center gap-1.5 pt-2 border-t border-gray-100">
@@ -791,16 +830,32 @@ export default function MonitorPage() {
                     rowClassName={(item) => {
                       const q = getQuota(item.itemId);
                       if (q?.exceeded) return 'bg-red-50';
-                      return item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'bg-red-50' : '';
+                      if (item.totalPotentialPrize > itemStats.totalSales * 0.7) return 'bg-red-50';
+                      if (caidaByNumber.has(item.number)) return 'bg-purple-50';
+                      return '';
                     }}
                     cardClassName={(item) => {
                       const q = getQuota(item.itemId);
                       if (q?.exceeded) return 'border-red-300 bg-red-50';
-                      return item.totalPotentialPrize > itemStats.totalSales * 0.7 ? 'border-red-300 bg-red-50' : '';
+                      if (item.totalPotentialPrize > itemStats.totalSales * 0.7) return 'border-red-300 bg-red-50';
+                      if (caidaByNumber.has(item.number)) return 'border-purple-300 bg-purple-50';
+                      return '';
                     }}
                     columns={[
                       { key: 'number', label: '#', primary: true, render: (i) => <span className="font-bold">{i.number}</span> },
-                      { key: 'name', label: 'Nombre' },
+                      { key: 'name', label: 'Nombre', render: (i) => {
+                        const caida = caidaByNumber.get(i.number);
+                        return (
+                          <span className="inline-flex items-center gap-1">
+                            {i.name}
+                            {caida && (
+                              <span title={`Caída de ${caidaInfo?.previousDraw?.winner?.name} · ${caida.reason} · riesgo ${caida.riesgo}`}>
+                                🔮{caida.riesgo === 'ALTO' ? '🔴' : caida.riesgo === 'MEDIO' ? '🟡' : '🟢'}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      } },
                       { key: 'totalAmount', label: 'Apostado', align: 'right', render: (i) => formatCurrency(i.totalAmount) },
                       { key: 'ticketCount', label: 'Tickets', align: 'right' },
                       { key: 'potentialPrize', label: 'Premio Pot.', align: 'right', render: (i) => <span className="text-blue-600">{formatCurrency(i.potentialPrize)}</span> },
