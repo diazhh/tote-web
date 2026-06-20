@@ -80,6 +80,7 @@ async function getCaidasForDraw(drawId) {
         ],
       },
       orderBy: [{ drawDate: 'desc' }, { drawTime: 'desc' }],
+      take: 600, // ventana reciente: acota el escaneo en el path con lock; no-encontrado => sorteosSinSalir null
       select: { winnerItemId: true, drawDate: true },
     });
 
@@ -106,6 +107,8 @@ async function getCaidasForDraw(drawId) {
         number: def.number,
         name: def.name,
         reason: def.reason,
+        itemId: item ? item.id : null,
+        multiplier,
         sorteosSinSalir,
         diasSinSalir,
         ventaActual,

@@ -77,6 +77,8 @@ test('builds enriched caidas from previous winner (MONO 13) and flags preselecte
   expect(lapa.utilidadSobreVenta).toBeCloseTo((110 - 3000) / 110 * 100, 2);
   // totalSales = 110, maxPayout = 77 -> premio 3000 >= maxPayout -> ALTO
   expect(lapa.riesgo).toBe('ALTO');
+  expect(lapa.itemId).toBe('it31');
+  expect(lapa.multiplier).toBe(30);
   const oso = res.caidas.find((c) => c.number === '16');
   expect(oso.sorteosSinSalir).toBeNull(); // never won in the executed list
   expect(oso.riesgo).toBe('ALTO');        // OSO premio 300 >= maxPayout 77

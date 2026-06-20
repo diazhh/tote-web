@@ -263,10 +263,35 @@ export default function MonitorPage() {
     return m;
   }, [caidaInfo]);
 
+  // Lista de items a mostrar = ventas reales + filas sintéticas (en cero) para
+  // las caídas sin apuestas, para que TODAS las caídas se vean en la tabla.
+  const displayItems = useMemo(() => {
+    const base = itemStats?.items || [];
+    if (!caidaInfo?.caidas?.length) return base;
+    const present = new Set(base.map((i) => i.number));
+    const extra = caidaInfo.caidas
+      .filter((c) => !present.has(c.number))
+      .map((c) => ({
+        itemId: c.itemId || `caida-${c.number}`,
+        number: c.number,
+        name: c.name,
+        multiplier: c.multiplier ?? 0,
+        totalAmount: 0,
+        ticketCount: 0,
+        potentialPrize: 0,
+        totalPotentialPrize: 0,
+        percentageOfSales: 0,
+        tripletaCount: 0,
+        tripletaPrize: 0,
+        wouldCompleteTripletaCount: 0,
+      }));
+    return extra.length ? [...base, ...extra] : base;
+  }, [itemStats, caidaInfo]);
+
   // Filtered + sorted items for the mobile Números view
   const filteredSortedItems = useMemo(() => {
-    if (!itemStats?.items) return [];
-    let arr = itemStats.items;
+    if (!displayItems.length) return [];
+    let arr = displayItems;
     const totalSales = itemStats.totalSales || 0;
     const dangerThreshold = totalSales * 0.7;
 
@@ -312,7 +337,7 @@ export default function MonitorPage() {
       }
     });
     return sorted;
-  }, [itemStats, numbersSearch, numbersFilter, numbersSortBy, numbersSortDir, lastSeenData, quotaByItem]);
+  }, [displayItems, itemStats, numbersSearch, numbersFilter, numbersSortBy, numbersSortDir, lastSeenData, quotaByItem]);
 
   const toggleNumberSort = (field) => {
     if (numbersSortBy === field) {
@@ -826,7 +851,7 @@ export default function MonitorPage() {
                   {/* Desktop UI: original ResponsiveTable */}
                   <div className="hidden md:block">
                   <ResponsiveTable
-                    data={[...itemStats.items].sort((a, b) => parseInt(a.number) - parseInt(b.number))}
+                    data={[...displayItems].sort((a, b) => parseInt(a.number) - parseInt(b.number))}
                     rowClassName={(item) => {
                       const q = getQuota(item.itemId);
                       if (q?.exceeded) return 'bg-red-50';
