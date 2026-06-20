@@ -39,6 +39,7 @@ export default function MonitorPage() {
   const [numberHistoryModal, setNumberHistoryModal] = useState({ open: false, number: null, history: null, loading: false });
   const [lastSeenData, setLastSeenData] = useState({});
   const [caidaInfo, setCaidaInfo] = useState(null);
+  const [showAllNumbers, setShowAllNumbers] = useState(null); // null = auto (ON salvo juegos enormes)
   const [quotas, setQuotas] = useState([]);
   const [quotaModal, setQuotaModal] = useState({ open: false, item: null });
   const [blockItemModalOpen, setBlockItemModalOpen] = useState(false);
@@ -133,6 +134,7 @@ export default function MonitorPage() {
         setBancaStats(result.data);
       } else if (activeTab === 'numeros') {
         setCaidaInfo(null);
+        setShowAllNumbers(null); // re-aplica el default por tamaño al cambiar de sorteo
         const [statsResult, quotasResult] = await Promise.all([
           monitorApi.getItemStats(selectedDraw),
           quotaApi.getDrawQuotas(selectedDraw).catch(() => ({ data: [] })),
@@ -263,30 +265,40 @@ export default function MonitorPage() {
     return m;
   }, [caidaInfo]);
 
-  // Lista de items a mostrar = ventas reales + filas sintéticas (en cero) para
-  // las caídas sin apuestas, para que TODAS las caídas se vean en la tabla.
+  // Universo de números del juego (quotas trae TODOS los items activos).
+  // showAllNumbers: null = auto → ON salvo juegos enormes (ej. TRIPLE = 1000).
+  const itemUniverseCount = quotas.length || (itemStats?.items?.length || 0);
+  const effectiveShowAll = showAllNumbers ?? (itemUniverseCount > 0 && itemUniverseCount <= 150);
+
+  // Lista de items a mostrar = ventas reales + filas sintéticas (en cero).
+  // Si effectiveShowAll → todos los números del juego; si no → solo las caídas
+  // (para que TODAS las caídas se vean aunque no tengan ventas).
   const displayItems = useMemo(() => {
     const base = itemStats?.items || [];
-    if (!caidaInfo?.caidas?.length) return base;
     const present = new Set(base.map((i) => i.number));
-    const extra = caidaInfo.caidas
-      .filter((c) => !present.has(c.number))
-      .map((c) => ({
-        itemId: c.itemId || `caida-${c.number}`,
-        number: c.number,
-        name: c.name,
-        multiplier: c.multiplier ?? 0,
-        totalAmount: 0,
-        ticketCount: 0,
-        potentialPrize: 0,
-        totalPotentialPrize: 0,
-        percentageOfSales: 0,
-        tripletaCount: 0,
-        tripletaPrize: 0,
-        wouldCompleteTripletaCount: 0,
-      }));
+    const caidaNums = new Set((caidaInfo?.caidas || []).map((c) => c.number));
+    const zeroRow = (itemId, number, name, multiplier = 0) => ({
+      itemId, number, name, multiplier,
+      totalAmount: 0, ticketCount: 0, potentialPrize: 0, totalPotentialPrize: 0,
+      percentageOfSales: 0, tripletaCount: 0, tripletaPrize: 0, wouldCompleteTripletaCount: 0,
+    });
+    const extra = [];
+    const added = new Set();
+    // 1) universo completo (quotas): todos los números si showAll, si no solo caídas
+    for (const q of quotas) {
+      if (present.has(q.number) || added.has(q.number)) continue;
+      if (!effectiveShowAll && !caidaNums.has(q.number)) continue;
+      extra.push(zeroRow(q.gameItemId, q.number, q.name));
+      added.add(q.number);
+    }
+    // 2) fallback: caídas que no estén en quotas (raro), para no perder ninguna
+    for (const c of caidaInfo?.caidas || []) {
+      if (present.has(c.number) || added.has(c.number)) continue;
+      extra.push(zeroRow(c.itemId || `caida-${c.number}`, c.number, c.name, c.multiplier ?? 0));
+      added.add(c.number);
+    }
     return extra.length ? [...base, ...extra] : base;
-  }, [itemStats, caidaInfo]);
+  }, [itemStats, caidaInfo, quotas, effectiveShowAll]);
 
   // Filtered + sorted items for the mobile Números view
   const filteredSortedItems = useMemo(() => {
@@ -487,6 +499,13 @@ export default function MonitorPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setShowAllNumbers(!effectiveShowAll)}
+                        className="px-3 py-1.5 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg hover:bg-gray-100 text-sm flex items-center gap-1.5"
+                        title="Mostrar todos los números del juego, incluso los que no tienen ventas"
+                      >
+                        {effectiveShowAll ? 'Solo con ventas' : `Ver todos (${itemUniverseCount})`}
+                      </button>
                       {canEditQuota && (
                         <button
                           onClick={() => setBlockItemModalOpen(true)}
@@ -648,7 +667,7 @@ export default function MonitorPage() {
 
                     {/* Count summary */}
                     <div className="text-xs text-gray-500 px-1">
-                      {filteredSortedItems.length} de {itemStats.items.length} números
+                      {filteredSortedItems.length} de {displayItems.length} números
                       {(numbersSearch || numbersFilter !== 'all') && (
                         <button
                           type="button"
