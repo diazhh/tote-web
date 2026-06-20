@@ -6,6 +6,7 @@ import { startOfDayInCaracas, endOfDayInCaracas } from '../lib/dateUtils.js';
 import prewinnerOptimizerService from './prewinner-optimizer.service.js';
 import { withDrawLock } from '../lib/drawLock.js';
 import { loadDrawTicketDetails, sumDetailsAmount } from '../lib/drawDetailsLoader.js';
+import { getCaidasForDraw } from './caida.service.js';
 
 /**
  * Servicio para selección de pre-ganadores
@@ -152,6 +153,14 @@ class PrewinnerSelectionService {
 
       const analysisData = result.analysis || {};
 
+      // Caídas del ganador del sorteo anterior del día (folklore + exposición)
+      let caidas = null;
+      try {
+        caidas = await getCaidasForDraw(drawId);
+      } catch (caidaError) {
+        logger.warn(`No se pudieron calcular caídas para ${drawId}: ${caidaError.message}`);
+      }
+
       // Enviar notificación a administradores (solo mensaje de texto;
       // se eliminó el PDF adjunto para liberar el lock más rápido — ver
       // spec 2026-05-11-eliminar-pdf-cierre-sorteo-design.md)
@@ -168,7 +177,8 @@ class PrewinnerSelectionService {
           salesByItem: salesByItemForNotification,
           tripletaRiskTop5,
           optimizerMethod: result.method,
-          optimizerAnalysis: analysisData
+          optimizerAnalysis: analysisData,
+          caidas,
         });
       } catch (notifyError) {
         logger.error(`Error enviando notificación: ${notifyError.message}`);

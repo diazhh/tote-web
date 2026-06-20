@@ -64,7 +64,8 @@ class AdminNotificationService {
       tripletaRiskTop5,
       isTerminal,
       terminalTickets,
-      sourceStatus
+      sourceStatus,
+      caidas,
     } = data;
 
     try {
@@ -73,7 +74,7 @@ class AdminNotificationService {
         ? this.formatTerminalCloseMessage({ game, drawDate, drawTime, terminalTickets, sourceStatus })
         : this.formatPrewinnerMessage({
             game, drawDate, drawTime, prewinnerItem, totalSales,
-            maxPayout, potentialPayout, salesByItem, tripletaRiskTop5, sourceStatus
+            maxPayout, potentialPayout, salesByItem, tripletaRiskTop5, sourceStatus, caidas,
           });
 
       // Enviar solo mensaje de texto al admin (el PDF adjunto se eliminó —
@@ -87,6 +88,31 @@ class AdminNotificationService {
       logger.error('Error en notifyPrewinnerSelected:', error);
       throw error;
     }
+  }
+
+  /**
+   * Bloque "Caídas del anterior" — caídas del ganador del sorteo previo del día,
+   * con métricas de la venta actual. `caidaResult` = salida de caida.service o null.
+   */
+  formatCaidasBlock(caidaResult) {
+    if (!caidaResult || !caidaResult.caidas?.length) return '';
+    const prev = caidaResult.previousDraw.winner;
+    const riskEmoji = { ALTO: '🔴', MEDIO: '🟡', BAJO: '🟢' };
+    const fmtMoney = (n) => `$${Number(n).toFixed(2)}`;
+
+    let block = `\n🔮 <b>Caídas del anterior — ${prev.name} (${prev.number}):</b>\n`;
+    if (caidaResult.preselectedEnCaidas) {
+      block += `   ✅ <i>El preseleccionado está entre las caídas</i>\n`;
+    }
+    for (const c of caidaResult.caidas) {
+      const tiempo = c.sorteosSinSalir == null
+        ? 'sin registro'
+        : `${c.sorteosSinSalir} sorteos / ${c.diasSinSalir}d sin salir`;
+      block += `▫️ ${c.number} ${c.name} · ${tiempo} · jugado ${fmtMoney(c.ventaActual)} · `
+        + `premio ${fmtMoney(c.premioPotencial)} · util ${c.utilidadSobreVenta.toFixed(0)}% · `
+        + `${riskEmoji[c.riesgo] ?? '❓'} ${c.riesgo}\n`;
+    }
+    return block;
   }
 
   /**
@@ -138,7 +164,8 @@ class AdminNotificationService {
       potentialPayout,
       salesByItem,
       tripletaRiskTop5,
-      sourceStatus
+      sourceStatus,
+      caidas,
     } = data;
 
     const dateStr = format(new Date(drawDate), "EEEE d 'de' MMMM, yyyy", { locale: es });
@@ -195,7 +222,7 @@ class AdminNotificationService {
 • Máximo a pagar (${game.config?.percentageToDistribute || 70}%): <b>$${maxPayout.toFixed(2)}</b>
 • Pago potencial: <b>$${potentialPayout.toFixed(2)}</b>
 • Multiplicador: <b>x${prewinnerItem.multiplier}</b>
-${topItemsStr}${tripletaRiskStr}${this.formatSourceStatusBlock(sourceStatus)}
+${topItemsStr}${tripletaRiskStr}${this.formatCaidasBlock(caidas)}${this.formatSourceStatusBlock(sourceStatus)}
 ━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ <i>Este es un número pre-seleccionado. El resultado final puede cambiar.</i>
