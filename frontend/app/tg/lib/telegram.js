@@ -14,10 +14,12 @@ export function haptic(type = 'success') {
   const w = getWebApp();
   try { w && w.HapticFeedback && w.HapticFeedback.notificationOccurred(type); } catch { /* noop */ }
 }
+let _backHandler = null;
 export function setBackButton(onClick) {
   const w = getWebApp();
   if (!w || !w.BackButton) return;
-  if (onClick) { w.BackButton.show(); w.BackButton.onClick(onClick); }
+  if (_backHandler) { try { w.BackButton.offClick(_backHandler); } catch { /* noop */ } _backHandler = null; }
+  if (onClick) { _backHandler = onClick; w.BackButton.show(); w.BackButton.onClick(onClick); }
   else { w.BackButton.hide(); }
 }
 export function getStartParam() {
