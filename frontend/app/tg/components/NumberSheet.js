@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import api from '@/lib/api/axios';
+import quotaApi from '@/lib/api/quota';
 import { showConfirm, haptic } from '../lib/telegram';
 
 export default function NumberSheet({ item, draw, game, editable, role, onClose, onChanged }) {
@@ -33,6 +34,38 @@ export default function NumberSheet({ item, draw, game, editable, role, onClose,
     });
   }
 
+  const itemId = item.gameItemId || item.itemId;
+
+  async function setQuota() {
+    const raw = window.prompt('Cupo máximo en Bs (vacío para cancelar):', item.maxAmount ?? '');
+    if (raw === null || raw === '') return;
+    const amount = Number(raw);
+    if (Number.isNaN(amount) || amount < 0) return;
+    await runAction(async () => {
+      await quotaApi.setQuota(draw.id, itemId, amount);
+      haptic('success');
+      onChanged();
+    });
+  }
+
+  async function block() {
+    const ok = await showConfirm(`Bloquear ${item.number}${item.name ? ' · ' + item.name : ''}? No se permitirán más ventas.`);
+    if (!ok) return;
+    await runAction(async () => {
+      await quotaApi.setQuota(draw.id, itemId, 0);
+      haptic('warning');
+      onChanged();
+    });
+  }
+
+  async function release() {
+    await runAction(async () => {
+      await quotaApi.removeQuota(draw.id, itemId);
+      haptic('success');
+      onChanged();
+    });
+  }
+
   return (
     <div onClick={(e) => e.target === e.currentTarget && onClose()}
       style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'flex-end', zIndex: 40 }}>
@@ -47,8 +80,11 @@ export default function NumberSheet({ item, draw, game, editable, role, onClose,
         ) : (
           <>
             <button onClick={preselect} disabled={busy} style={btn}>⭐ Preseleccionar este número</button>
-            {/* Cupo/bloqueo: Task 7 (solo ADMIN) */}
-            {isAdmin && <div id="quota-actions" />}
+            {isAdmin && <>
+              <button onClick={setQuota} disabled={busy} style={btn}>🛡️ Fijar cupo</button>
+              <button onClick={block} disabled={busy} style={{ ...btn, color: '#ff5c5c' }}>⛔ Bloquear número</button>
+              <button onClick={release} disabled={busy} style={btn}>♻️ Liberar (quitar cupo)</button>
+            </>}
           </>
         )}
       </div>
