@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sketch — Mini App Admin (Monitor en Telegram)</title>
+<style>
+  :root{
+    --tg-bg:#17212b; --tg-sec:#232e3c; --tg-card:#1d2733; --tg-accent:#2ea6ff;
+    --tg-text:#ffffff; --tg-hint:#7d8b99; --tg-sep:#101921;
+    --danger:#ff5c5c; --warn:#ffb020; --ok:#4dd07a; --caida:#b388ff; --star:#ffd24d;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  body{margin:0;background:#0b0f14;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       color:var(--tg-text);display:flex;flex-wrap:wrap;gap:28px;justify-content:center;padding:28px 14px 60px}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .cap{color:#9fb0c0;font-size:13px;max-width:390px;text-align:center;line-height:1.4}
+  .cap b{color:#fff}
+  /* phone frame */
+  .phone{width:390px;height:780px;background:var(--tg-bg);border-radius:34px;overflow:hidden;
+         box-shadow:0 0 0 10px #2a3441,0 18px 50px rgba(0,0,0,.6);display:flex;flex-direction:column;position:relative}
+  .tgbar{height:52px;background:var(--tg-sec);display:flex;align-items:center;gap:10px;padding:0 12px;
+         border-bottom:1px solid var(--tg-sep);flex:none}
+  .tgbar .back{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;
+         color:var(--tg-accent);font-size:22px;cursor:pointer;opacity:0}
+  .tgbar .back.on{opacity:1}
+  .tgbar .ttl{font-size:15px;font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tgbar .ttl small{display:block;color:var(--tg-hint);font-weight:400;font-size:11px}
+  .tgbar .dots{color:var(--tg-hint);font-size:20px;letter-spacing:1px}
+  .body{flex:1;overflow-y:auto;overflow-x:hidden}
+  .body::-webkit-scrollbar{width:0}
+  .screen{display:none;padding:14px}
+  .screen.on{display:block;animation:f .18s ease}
+  @keyframes f{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  h2.sec{font-size:13px;color:var(--tg-hint);text-transform:uppercase;letter-spacing:.6px;margin:4px 2px 10px;font-weight:600}
+  /* game/draw buttons */
+  .gbtn{width:100%;background:var(--tg-card);border:1px solid #2b3947;border-radius:14px;padding:16px 14px;margin-bottom:10px;
+        display:flex;align-items:center;gap:14px;cursor:pointer;transition:.12s;color:#fff;text-align:left}
+  .gbtn:active{transform:scale(.985);background:#222e3b}
+  .gbtn .ico{width:42px;height:42px;border-radius:12px;background:#2b3947;display:flex;align-items:center;justify-content:center;font-size:22px;flex:none}
+  .gbtn .gt{flex:1}
+  .gbtn .gt b{font-size:16px}
+  .gbtn .gt span{display:block;color:var(--tg-hint);font-size:12px;margin-top:2px}
+  .gbtn .chev{color:var(--tg-hint);font-size:20px}
+  .gbtn .gt b.mut,.time.mut{color:#7d8b99}
+  .gbtn.nextdraw{border-color:var(--tg-accent);background:#1b2c3d;box-shadow:0 0 0 1px var(--tg-accent) inset}
+  .gbtn.nextdraw .time{color:var(--tg-accent)}
+  .gbtn.ro{opacity:.82}
+  .divider{color:#7d8b99;font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin:16px 4px 9px;font-weight:600;
+           display:flex;align-items:center;gap:9px}
+  .divider:before,.divider:after{content:'';flex:1;height:1px;background:#2b3947}
+  .robanner{background:#33271a;border:1px solid #5a4423;color:#ffce85;border-radius:11px;padding:10px 12px;
+            font-size:13px;margin-bottom:12px;text-align:center}
+  .dbtn{display:flex;align-items:center;gap:12px}
+  .dbtn .time{font-size:18px;font-weight:700;min-width:64px}
+  .pill{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600}
+  .pill.sch{background:#26405c;color:#7fc0ff}
+  .pill.clo{background:#4a3a16;color:#ffcf6e}
+  .pill.dr{background:#1d3b2a;color:#5fe39a}
+  /* monitor header */
+  .mhead{background:var(--tg-card);border:1px solid #2b3947;border-radius:14px;padding:12px 14px;margin-bottom:12px}
+  .mhead .row{display:flex;justify-content:space-between;align-items:center}
+  .mhead .pre{display:flex;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid #2b3947}
+  .mhead .pre .star{font-size:20px}
+  .mhead .pre .num{font-size:22px;font-weight:800;color:var(--star)}
+  .mhead .pre .nm{font-size:13px;color:var(--tg-hint)}
+  .kpi{font-size:12px;color:var(--tg-hint)}
+  .kpi b{color:#fff;font-size:15px;display:block}
+  /* caidas */
+  .caidas{display:flex;gap:8px;overflow-x:auto;padding:2px 0 8px;margin-bottom:6px}
+  .caidas::-webkit-scrollbar{height:0}
+  .cchip{flex:none;background:#241b3a;border:1px solid #3a2d5c;border-radius:10px;padding:7px 10px;min-width:92px}
+  .cchip .cn{font-weight:700;color:var(--caida)}
+  .cchip .cm{font-size:10px;color:#9c8fc4;margin-top:2px}
+  .cchip .rk{font-size:10px;font-weight:700;margin-top:3px}
+  .rk.alto{color:var(--danger)} .rk.medio{color:var(--warn)} .rk.bajo{color:var(--ok)}
+  /* search + filters */
+  .search{display:flex;align-items:center;gap:8px;background:var(--tg-sec);border-radius:10px;padding:9px 12px;margin-bottom:10px}
+  .search input{flex:1;background:none;border:0;color:#fff;font-size:15px;outline:none}
+  .search input::placeholder{color:var(--tg-hint)}
+  .fbar{display:flex;gap:7px;margin-bottom:10px;overflow-x:auto}
+  .fbar::-webkit-scrollbar{height:0}
+  .chip{flex:none;font-size:12px;padding:6px 12px;border-radius:20px;background:var(--tg-sec);color:var(--tg-hint);cursor:pointer}
+  .chip.on{background:var(--tg-accent);color:#fff}
+  /* number rows */
+  .nrow{background:var(--tg-card);border:1px solid #2b3947;border-left:3px solid #2b3947;border-radius:12px;
+        padding:11px 12px;margin-bottom:8px;display:flex;align-items:center;gap:12px;cursor:pointer;transition:.12s}
+  .nrow:active{background:#222e3b}
+  .nrow.caida{border-left-color:var(--caida)}
+  .nrow.hot{border-left-color:var(--danger)}
+  .nrow.pre{box-shadow:0 0 0 1px var(--star) inset}
+  .nrow .nbox{min-width:46px;text-align:center}
+  .nrow .nbox .nn{font-size:20px;font-weight:800;line-height:1}
+  .nrow .nbox .nl{font-size:10px;color:var(--tg-hint);margin-top:3px;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nrow .mid{flex:1;min-width:0}
+  .nrow .mid .l1{display:flex;gap:8px;align-items:baseline}
+  .nrow .mid .amt{font-size:15px;font-weight:700}
+  .nrow .mid .pp{font-size:11px;color:var(--tg-hint)}
+  .nrow .mid .l2{display:flex;gap:7px;margin-top:5px;flex-wrap:wrap}
+  .tag{font-size:10px;padding:2px 7px;border-radius:6px;background:#2b3947;color:#b7c6d4;font-weight:600}
+  .tag.dias{background:#1c2c3a;color:#86a7c4}
+  .tag.trip{background:#3a2d16;color:#ffce75}
+  .tag.cupo{background:#23323f;color:#8fb6d6}
+  .tag.over{background:#3d1e22;color:#ff8b8b}
+  .nrow .right{text-align:right;min-width:54px}
+  .nrow .right .pct{font-size:16px;font-weight:800}
+  .pct.red{color:var(--danger)} .pct.amber{color:var(--warn)} .pct.green{color:var(--ok)}
+  .nrow .right .star{font-size:14px;color:var(--star)}
+  /* MainButton */
+  .mainbtn{flex:none;padding:10px 14px;background:var(--tg-bg)}
+  .mainbtn button{width:100%;border:0;border-radius:12px;background:var(--tg-accent);color:#fff;font-size:16px;
+        font-weight:600;padding:15px;cursor:pointer;opacity:.35;pointer-events:none;transition:.15s}
+  .mainbtn button.on{opacity:1;pointer-events:auto}
+  .mainbtn button.warn{background:#e8543f}
+  /* action sheet */
+  .scrim{position:absolute;inset:0;background:rgba(0,0,0,.55);display:none;align-items:flex-end;z-index:9}
+  .scrim.on{display:flex;animation:f .15s}
+  .sheet{width:100%;background:var(--tg-sec);border-radius:18px 18px 0 0;padding:8px 14px 20px;animation:up .2s ease}
+  @keyframes up{from{transform:translateY(100%)}to{transform:none}}
+  .sheet .grip{width:40px;height:4px;background:#3f4d5b;border-radius:3px;margin:6px auto 12px}
+  .sheet .shead{display:flex;align-items:center;gap:12px;padding:6px 4px 14px;border-bottom:1px solid var(--tg-sep)}
+  .sheet .shead .bn{font-size:26px;font-weight:800}
+  .sheet .shead .bm{font-size:13px;color:var(--tg-hint)}
+  .act{display:flex;align-items:center;gap:14px;padding:15px 6px;border-bottom:1px solid var(--tg-sep);cursor:pointer;font-size:16px}
+  .act:active{background:#1b2530}
+  .act .ai{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;background:#2b3947;font-size:17px}
+  .act.danger{color:var(--danger)} .act small{display:block;color:var(--tg-hint);font-size:12px}
+  /* confirm (telegram native style) */
+  .confirm{position:absolute;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:20;padding:30px}
+  .confirm.on{display:flex;animation:f .15s}
+  .cbox{background:#1f2a36;border-radius:14px;width:100%;max-width:300px;overflow:hidden}
+  .cbox .ct{padding:18px 18px 6px;font-weight:700;font-size:16px}
+  .cbox .cd{padding:0 18px 16px;color:#c4d0db;font-size:14px;line-height:1.4}
+  .cbox .cbtns{display:flex;border-top:1px solid #0f161e}
+  .cbox .cbtns button{flex:1;background:none;border:0;color:var(--tg-accent);padding:13px;font-size:15px;cursor:pointer}
+  .cbox .cbtns button.b:first-child{border-right:1px solid #0f161e;color:#9fb0c0}
+  .cbox .cbtns button.dz{color:var(--danger);font-weight:700}
+  /* toast */
+  .toast{position:absolute;left:14px;right:14px;bottom:84px;background:#223a2c;border:1px solid #2f5a40;color:#bff0cf;
+         padding:12px 14px;border-radius:11px;font-size:14px;display:none;z-index:30;align-items:center;gap:8px}
+  .toast.on{display:flex;animation:f .2s}
+  .home{position:absolute;right:12px;top:60px;background:var(--tg-sec);border:1px solid #2b3947;color:#9fb0c0;
+        border-radius:20px;padding:6px 12px;font-size:12px;cursor:pointer;z-index:5;display:none}
+  .home.on{display:block}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="phone" id="phone">
+    <div class="tgbar">
+      <div class="back" id="back" onclick="goBack()">‹</div>
+      <div class="ttl" id="title">Monitor<small id="subtitle">Selecciona un juego</small></div>
+      <div class="dots">⋮</div>
+    </div>
+
+    <div class="home" id="homeBtn" onclick="go('games')">⌂ Inicio</div>
+
+    <div class="body" id="bodyScroll">
+
+      <!-- SCREEN 1: GAMES -->
+      <div class="screen on" id="s-games">
+        <h2 class="sec">Tus juegos</h2>
+        <div id="gameList"></div>
+      </div>
+
+      <!-- SCREEN 2: DRAWS -->
+      <div class="screen" id="s-draws">
+        <h2 class="sec" id="drawsHdr">Sorteos de hoy</h2>
+        <div id="drawList"></div>
+      </div>
+
+      <!-- SCREEN 3: MONITOR -->
+      <div class="screen" id="s-monitor">
+        <div class="robanner" id="roBanner">👁️ Sorteo ya sorteado — solo lectura (sin cambios)</div>
+        <div class="mhead">
+          <div class="row">
+            <div class="kpi">Total vendido <b id="mSales">Bs 48.250</b></div>
+            <div class="kpi" style="text-align:right">Tickets <b id="mTk">1.204</b></div>
+          </div>
+          <div class="pre">
+            <span class="star">⭐</span>
+            <div><span class="num" id="preNum">17</span></div>
+            <div class="nm">Pre-seleccionado actual<br><b id="preNm" style="color:#cfd9e2">PAVO · multiplicador x30</b></div>
+          </div>
+        </div>
+
+        <h2 class="sec">🔮 Caídas de IGUANA (24)</h2>
+        <div class="caidas" id="caidas"></div>
+
+        <div class="search">
+          <span style="color:#7d8b99">🔍</span>
+          <input id="q" placeholder="Buscar número o nombre…" oninput="renderNums()">
+        </div>
+        <div class="fbar">
+          <div class="chip on" data-f="all" onclick="setF(this)">Todos</div>
+          <div class="chip" data-f="tk" onclick="setF(this)">Con ventas</div>
+          <div class="chip" data-f="risk" onclick="setF(this)">Riesgo alto</div>
+          <div class="chip" data-f="caida" onclick="setF(this)">Caídas</div>
+          <div class="chip" data-f="dias" onclick="setF(this)">↘ Orden por días</div>
+        </div>
+
+        <div id="numList"></div>
+        <div style="height:8px"></div>
+      </div>
+
+    </div><!-- /body -->
+
+    <div class="mainbtn">
+      <button id="mainBtn" onclick="mainAction()">Selecciona un juego</button>
+    </div>
+
+    <!-- action sheet -->
+    <div class="scrim" id="scrim" onclick="if(event.target===this)closeSheet()">
+      <div class="sheet">
+        <div class="grip"></div>
+        <div class="shead">
+          <div><div class="bn" id="shNum">17</div></div>
+          <div><div style="font-weight:700" id="shNm">PAVO</div><div class="bm" id="shMeta">Apostado Bs 6.400 · 28% de la venta · hace 9 días</div></div>
+        </div>
+        <div id="sheetActions">
+          <div class="act" onclick="doPreselect()">
+            <div class="ai">⭐</div>
+            <div>Preseleccionar este número<small>Lo marca como pre-ganador del sorteo</small></div>
+          </div>
+          <div class="act" onclick="doQuota()">
+            <div class="ai">🛡️</div>
+            <div>Fijar cupo<small id="qMeta">Cupo actual: Bs 8.000 · disponible 1.600</small></div>
+          </div>
+          <div class="act danger" onclick="doBlock()">
+            <div class="ai">⛔</div>
+            <div>Bloquear número<small>Impide más ventas para este número</small></div>
+          </div>
+        </div>
+        <div id="sheetRO" style="display:none;padding:18px 6px;color:#9fb0c0;font-size:14px;text-align:center">
+          👁️ Sorteo ya sorteado — solo lectura.<br>No se puede cambiar ganador, cupo ni bloquear.
+        </div>
+      </div>
+    </div>
+
+    <!-- confirm -->
+    <div class="confirm" id="confirm">
+      <div class="cbox">
+        <div class="ct" id="cfTitle">Confirmar</div>
+        <div class="cd" id="cfBody">¿Seguro?</div>
+        <div class="cbtns">
+          <button class="b" onclick="closeConfirm()">Cancelar</button>
+          <button id="cfOk" onclick="confirmOk()">Sí</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast">✅ <span id="toastMsg">Listo</span></div>
+  </div>
+  <div class="cap"><b>Sketch interactivo</b> — datos de ejemplo. Haz clic: juego → sorteo → monitor. Toca un número para ver la hoja de acciones (preseleccionar / cupo / bloquear). El botón azul de abajo es el <b>MainButton</b> de Telegram; arriba a la izquierda, el <b>volver</b> nativo.</div>
+</div>
+
+<script>
+const fmt = n => 'Bs ' + n.toLocaleString('es-VE');
+const games = [
+  {slug:'lotoanimalito', name:'LOTOANIMALITO', icon:'🐾', sub:'38 animalitos · cada hora'},
+  {slug:'lottopantera', name:'LOTTOPANTERA', icon:'🐆', sub:'00–99 · números'},
+  {slug:'triple-pantera', name:'TRIPLE PANTERA', icon:'🎯', sub:'000–999 · 1000 ítems'},
+  {slug:'terminal-pantera', name:'TERMINAL PANTERA', icon:'🔢', sub:'00–99 · terminales'},
+];
+const drawTimes = ['09:00','11:00','13:00','16:00','19:00','21:00'];
+const animals = ['Delfín','Ballena','Carnero','Toro','Ciempiés','Alacrán','León','Rana','Perico','Ratón','Águila','Tigre','Gato','Caballo','Mono','Paloma','Zorro','Oso','Pavo','Burro','Chivo','Cochino','Gallo','Camello','Cebra','Iguana','Gallina','Caimán','Elefante','Culebra','Lagarto','Avispa','Lapa','Ardilla','Pescado','Venado','Jirafa','Pereza'];
+const caidas = [
+  {n:'08', nm:'RATÓN', m:'Pata de IGUANA', rk:'alto', d:14},
+  {n:'31', nm:'LAPA', m:'Espejo 24↔31', rk:'medio', d:6},
+  {n:'00', nm:'BALLENA', m:'Sigue a IGUANA', rk:'bajo', d:3},
+];
+
+let state={game:null, draw:null, sel:null, filter:'all', pre:'17'};
+
+// build number dataset for current game
+function buildNums(){
+  const g=state.game;
+  let items=[];
+  if(g.slug==='lotoanimalito'){ items=animals.map((nm,i)=>({num:String(i).padStart(2,'0'),nm:nm.toUpperCase()})); }
+  else if(g.slug==='triple-pantera'){ for(let i=0;i<1000;i++) items.push({num:String(i).padStart(3,'0'),nm:''}); }
+  else { for(let i=0;i<100;i++) items.push({num:String(i).padStart(2,'0'),nm:''}); }
+  // deterministic-ish pseudo values
+  return items.map((it,i)=>{
+    const seed=(i*37+13)%100;
+    const amt = seed>62 ? Math.round((seed*seed)/3)*10 : (seed>30? seed*30 : (i%7===0?seed*12:0));
+    const mult = g.slug==='lotoanimalito'?30:(g.slug==='triple-pantera'?900:30);
+    const pp = amt*mult;
+    const pct = Math.min(99, Math.round(pp/ 250000 *100));
+    const dias = (i*13+5)%60;
+    const cupo = (i%5===0)?8000:null;
+    const disp = cupo? Math.max(-1200, cupo-amt):null;
+    const trip = g.slug==='triple-pantera' && i%9===0 ? (i%4+1):0;
+    const caida = ['08','31','00'].includes(it.num);
+    return {...it, amt, pp, pct, dias, cupo, disp, trip, caida, mult};
+  });
+}
+let NUMS=[];
+
+function go(s){
+  document.querySelectorAll('.screen').forEach(e=>e.classList.remove('on'));
+  document.getElementById('s-'+s).classList.add('on');
+  document.getElementById('bodyScroll').scrollTop=0;
+  state.view=s;
+  const back=document.getElementById('back'), home=document.getElementById('homeBtn');
+  back.classList.toggle('on', s!=='games');
+  home.classList.toggle('on', s==='monitor');
+  if(s==='games'){ setTitle('Monitor','Selecciona un juego'); setMain('Selecciona un juego',false); }
+  if(s==='draws'){ setTitle(state.game.name,'Selecciona un sorteo'); setMain('Selecciona un sorteo',false); }
+  if(s==='monitor'){ setTitle(state.game.name, state.draw+' · hoy'); /* MainButton lo fija renderMonitor según editable */ }
+}
+function setTitle(t,s){ document.getElementById('title').firstChild.textContent=t; document.getElementById('subtitle').textContent=s; }
+function setMain(txt,on,warn){ const b=document.getElementById('mainBtn'); b.textContent=txt; b.classList.toggle('on',!!on); b.classList.toggle('warn',!!warn); }
+function goBack(){ if(state.view==='monitor') go('draws'); else if(state.view==='draws') go('games'); }
+
+function renderGames(){
+  document.getElementById('gameList').innerHTML = games.map((g,i)=>`
+    <div class="gbtn" onclick="pickGame(${i})">
+      <div class="ico">${g.icon}</div>
+      <div class="gt"><b>${g.name}</b><span>${g.sub}</span></div>
+      <div class="chev">›</div>
+    </div>`).join('');
+}
+function pickGame(i){ state.game=games[i]; NUMS=buildNums(); renderDraws(); go('draws'); }
+
+function renderDraws(){
+  const now=14; // supongamos 14:xx
+  document.getElementById('drawsHdr').textContent='Sorteos · '+state.game.name;
+  const ds=drawTimes.map(t=>({t,h:parseInt(t),drawn:parseInt(t)<now}));
+  const upcoming=ds.filter(d=>!d.drawn);          // ascendente: el próximo primero
+  const past=ds.filter(d=>d.drawn).reverse();     // el más reciente primero
+  let html='';
+  upcoming.forEach((d,idx)=>{
+    const next=idx===0;
+    html += `<div class="gbtn dbtn ${next?'nextdraw':''}" onclick="pickDraw('${d.t}',true)">
+        <div class="time">${d.t}</div>
+        <div class="gt" style="flex:1"><b>${next?'Próximo sorteo':'Programado'}</b><span>Abierto · cambiar pre-ganador, cupo, bloquear</span></div>
+        <span class="pill ${next?'clo':'sch'}">${next?'PRÓXIMO':'PROGRAMADO'}</span></div>`;
+  });
+  if(past.length){
+    html += `<div class="divider">Anteriores · solo lectura</div>`;
+    past.forEach(d=>{
+      const w=['LEÓN','MONO','IGUANA','ZORRO'][d.h%4];
+      html += `<div class="gbtn dbtn ro" onclick="pickDraw('${d.t}',false)">
+        <div class="time mut">${d.t}</div>
+        <div class="gt" style="flex:1"><b class="mut">Sorteado</b><span>Resultado publicado · 👁️ solo ver</span></div>
+        <span class="pill dr">✓ ${w}</span></div>`;
+    });
+  }
+  document.getElementById('drawList').innerHTML=html;
+}
+function pickDraw(t,editable){ state.draw=t; state.editable=editable; renderMonitor(); go('monitor'); }
+
+function renderMonitor(){
+  document.getElementById('caidas').innerHTML = caidas.map(c=>`
+    <div class="cchip"><div class="cn">${c.n} ${c.nm}</div><div class="cm">${c.m} · ${c.d}d</div>
+      <div class="rk ${c.rk}">${c.rk.toUpperCase()}</div></div>`).join('');
+  document.getElementById('preNum').textContent=state.pre;
+  const pi=NUMS.find(n=>n.num===state.pre);
+  document.getElementById('preNm').textContent=(pi&&pi.nm?pi.nm:'Número '+state.pre)+' · multiplicador x'+(pi?pi.mult:30);
+  document.getElementById('roBanner').style.display = state.editable?'none':'block';
+  setMain(state.editable?'Toca un número para actuar':'Solo lectura · sorteo cerrado', false);
+  renderNums();
+}
+function setF(el){ document.querySelectorAll('.fbar .chip').forEach(c=>c.classList.remove('on')); el.classList.add('on'); state.filter=el.dataset.f; renderNums(); }
+
+function renderNums(){
+  const q=(document.getElementById('q').value||'').toLowerCase().trim();
+  let list=NUMS.filter(n=>{
+    if(q && !(n.num.includes(q) || n.nm.toLowerCase().includes(q))) return false;
+    if(state.filter==='tk') return n.amt>0;
+    if(state.filter==='risk') return n.pct>=70 || (n.disp!==null && n.disp<0);
+    if(state.filter==='caida') return n.caida;
+    return true;
+  });
+  if(state.filter==='dias') list=[...list].sort((a,b)=>b.dias-a.dias);
+  else list=[...list].sort((a,b)=>b.amt-a.amt);
+  list=list.slice(0,60);
+  document.getElementById('numList').innerHTML = list.map(n=>{
+    const hot=n.pct>=70||(n.disp!==null&&n.disp<0);
+    const pc=n.pct>=70?'red':(n.pct>=40?'amber':'green');
+    const cls=['nrow', n.caida?'caida':'', hot?'hot':'', n.num===state.pre?'pre':''].join(' ');
+    const cupoTag = n.cupo!==null ? (n.disp<0?`<span class="tag over">cupo excedido ${fmt(Math.abs(n.disp))}</span>`:`<span class="tag cupo">cupo ${fmt(n.cupo)} · libre ${fmt(n.disp)}</span>`) : '';
+    return `<div class="${cls}" onclick="openSheet('${n.num}')">
+      <div class="nbox"><div class="nn">${n.num}</div>${n.nm?`<div class="nl">${n.nm}</div>`:''}</div>
+      <div class="mid">
+        <div class="l1"><span class="amt">${n.amt?fmt(n.amt):'—'}</span><span class="pp">${n.amt?'premio '+fmt(n.pp):'sin ventas'}</span></div>
+        <div class="l2">
+          <span class="tag dias">↘ hace ${n.dias} d</span>
+          ${n.trip?`<span class="tag trip">▣ ${n.trip} tripletas</span>`:''}
+          ${cupoTag}
+        </div>
+      </div>
+      <div class="right">${n.num===state.pre?'<div class="star">⭐</div>':''}<div class="pct ${pc}">${n.amt?n.pct+'%':''}</div></div>
+    </div>`;
+  }).join('') || `<div style="color:#7d8b99;text-align:center;padding:30px">Sin resultados para “${q}”.</div>`;
+}
+
+/* ===== action sheet ===== */
+function openSheet(num){
+  state.sel=NUMS.find(n=>n.num===num);
+  const n=state.sel;
+  document.getElementById('shNum').textContent=n.num;
+  document.getElementById('shNm').textContent=n.nm||('Número '+n.num);
+  document.getElementById('shMeta').textContent=`${n.amt?'Apostado '+fmt(n.amt)+' · '+n.pct+'% de la venta':'Sin ventas'} · hace ${n.dias} días`;
+  document.getElementById('qMeta').textContent = n.cupo!==null?`Cupo actual: ${fmt(n.cupo)} · disponible ${fmt(n.disp)}`:'Sin cupo definido';
+  document.getElementById('sheetActions').style.display = state.editable?'block':'none';
+  document.getElementById('sheetRO').style.display = state.editable?'none':'block';
+  document.getElementById('scrim').classList.add('on');
+}
+function closeSheet(){ document.getElementById('scrim').classList.remove('on'); }
+
+/* ===== confirm ===== */
+let pending=null;
+function askConfirm(title,body,okLabel,danger,fn){
+  document.getElementById('cfTitle').textContent=title;
+  document.getElementById('cfBody').innerHTML=body;
+  const ok=document.getElementById('cfOk'); ok.textContent=okLabel; ok.classList.toggle('dz',!!danger);
+  pending=fn; document.getElementById('confirm').classList.add('on');
+}
+function closeConfirm(){ document.getElementById('confirm').classList.remove('on'); pending=null; }
+function confirmOk(){ const f=pending; closeConfirm(); if(f)f(); }
+
+function doPreselect(){
+  const n=state.sel; closeSheet();
+  askConfirm('Cambiar pre-seleccionado',
+    `Marcar <b>${n.num}${n.nm?' · '+n.nm:''}</b> como pre-ganador del sorteo de las <b>${state.draw}</b>.<br><br>Se notificará a los demás administradores.`,
+    'Preseleccionar', false, ()=>{
+      state.pre=n.num; renderMonitor(); toast(`Pre-seleccionado: ${n.num}${n.nm?' '+n.nm:''}`);
+    });
+}
+function doQuota(){
+  const n=state.sel; closeSheet();
+  askConfirm('Fijar cupo',
+    `Define el monto máximo de ventas para <b>${n.num}${n.nm?' · '+n.nm:''}</b>.<br><br><i>(en la app real: campo numérico + teclado)</i>`,
+    'Guardar cupo', false, ()=>toast('Cupo actualizado'));
+}
+function doBlock(){
+  const n=state.sel; closeSheet();
+  askConfirm('Bloquear número',
+    `Se impedirán nuevas ventas para <b>${n.num}${n.nm?' · '+n.nm:''}</b> en este sorteo.`,
+    'Bloquear', true, ()=>toast('Número bloqueado',true));
+}
+function mainAction(){}
+function toast(m,danger){
+  const t=document.getElementById('toast'); document.getElementById('toastMsg').textContent=m;
+  t.firstChild.textContent = danger?'⛔ ':'✅ ';
+  t.style.background=danger?'#3a2226':'#223a2c'; t.style.borderColor=danger?'#5a2f34':'#2f5a40'; t.style.color=danger?'#f0bfc4':'#bff0cf';
+  t.classList.add('on'); setTimeout(()=>t.classList.remove('on'),1900);
+}
+
+renderGames(); go('games');
+</script>
+</body>
+</html>
