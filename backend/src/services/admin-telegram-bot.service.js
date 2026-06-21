@@ -608,11 +608,11 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
   /**
    * Enviar mensaje directo usando cualquier bot activo
    */
-  async sendMessageDirect(chatId, message) {
+  async sendMessageDirect(chatId, message, options = {}) {
     // Usar el primer bot activo disponible
     for (const [botId, bot] of this.bots) {
       try {
-        await bot.sendMessage(chatId, message, { parse_mode: 'HTML' });
+        await bot.sendMessage(chatId, message, { parse_mode: 'HTML', ...options });
         return true;
       } catch (error) {
         continue;
@@ -638,13 +638,13 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
 
       if (!botGame || !botGame.bot || !botGame.bot.isActive) {
         logger.warn(`No hay bot de juego activo para ${gameId}, usando fallback`);
-        return this.sendMessageDirect(chatId, message);
+        return this.sendMessageDirect(chatId, message, options);
       }
 
       const bot = this.bots.get(botGame.botId);
       if (!bot) {
         logger.warn(`Bot ${botGame.botId} no está en memoria, usando fallback`);
-        return this.sendMessageDirect(chatId, message);
+        return this.sendMessageDirect(chatId, message, options);
       }
 
       await bot.sendMessage(chatId, message, {
