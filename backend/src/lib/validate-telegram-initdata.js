@@ -18,17 +18,31 @@ export function validateTelegramInitData(initData, botTokens, { maxAgeSec = 8640
   const hash = params.get('hash');
   if (!hash) return { ok: false, reason: 'no_hash' };
   params.delete('hash');
-  params.delete('signature'); // no es parte del data-check-string del esquema HMAC
 
-  const dataCheckString = [...params.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
+  // Data-check-strings candidatos. Telegram (Bot API 8.0+) agrega un campo
+  // `signature` (validación Ed25519 de terceros). Para el HMAC del bot, los
+  // clientes modernos INCLUYEN `signature` en el data-check-string, mientras
+  // que clientes/libs antiguas lo excluyen. Probamos ambas variantes para ser
+  // robustos entre versiones; aceptar cualquiera NO debilita la seguridad:
+  // ambas requieren el token del bot como secreto para producir un hash válido.
+  const buildDcs = (p) => [...p.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
+  const withSig = buildDcs(params);
+  const noSigParams = new URLSearchParams(params.toString());
+  noSigParams.delete('signature');
+  const withoutSig = buildDcs(noSigParams);
+  const candidates = withSig === withoutSig ? [withSig] : [withSig, withoutSig];
+
   const tokens = Array.isArray(botTokens) ? botTokens : [botTokens];
 
   let matched = false;
   for (const token of tokens) {
     if (!token) continue;
     const secret = crypto.createHmac('sha256', 'WebAppData').update(token).digest();
-    const computed = crypto.createHmac('sha256', secret).update(dataCheckString).digest('hex');
-    if (timingSafeEqualStr(computed, hash)) { matched = true; break; }
+    for (const dcs of candidates) {
+      const computed = crypto.createHmac('sha256', secret).update(dcs).digest('hex');
+      if (timingSafeEqualStr(computed, hash)) { matched = true; break; }
+    }
+    if (matched) break;
   }
   if (!matched) return { ok: false, reason: 'bad_hash' };
 

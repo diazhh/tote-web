@@ -55,4 +55,27 @@ describe('validateTelegramInitData', () => {
     expect(r.ok).toBe(false);
     expect(r.reason).toBe('no_hash');
   });
+
+  // --- Bot API 8.0+: campo `signature` (la causa del bad_hash en prod) ---
+  test('signature presente, hash calculado INCLUYENDO signature → ok (cliente moderno)', () => {
+    const initData = signInitData(TOKEN, {
+      auth_date: String(now()), user: userJson, query_id: 'AAA', signature: 'ed25519sig123',
+    });
+    const r = validateTelegramInitData(initData, [TOKEN]);
+    expect(r.ok).toBe(true);
+    expect(r.user.id).toBe(777);
+  });
+
+  test('signature presente, hash calculado EXCLUYENDO signature → ok (fallback robusto)', () => {
+    // Firma el data-check-string SIN signature, pero deja signature en el initData.
+    const params = new URLSearchParams({ auth_date: String(now()), user: userJson, query_id: 'AAA' });
+    const dcs = [...params.entries()].map(([k, v]) => `${k}=${v}`).sort().join('\n');
+    const secret = crypto.createHmac('sha256', 'WebAppData').update(TOKEN).digest();
+    const hash = crypto.createHmac('sha256', secret).update(dcs).digest('hex');
+    params.append('signature', 'ed25519sig123');
+    params.append('hash', hash);
+    const r = validateTelegramInitData(params.toString(), [TOKEN]);
+    expect(r.ok).toBe(true);
+    expect(r.user.id).toBe(777);
+  });
 });
