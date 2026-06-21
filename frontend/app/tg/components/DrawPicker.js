@@ -9,17 +9,24 @@ function nowHHMM() { return new Date().toLocaleTimeString('en-GB', { hour: '2-di
 export default function DrawPicker({ game, onPick }) {
   const [groups, setGroups] = useState({ upcoming: [], past: [] });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   useEffect(() => {
     (async () => {
-      const ymd = todayYMD();
-      const { data } = await api.get('/draws', { params: { gameId: game.id, dateFrom: ymd, dateTo: ymd } });
-      const draws = data?.data || data?.draws || data || [];
-      setGroups(orderDraws(Array.isArray(draws) ? draws : [], nowHHMM()));
-      setLoading(false);
+      try {
+        const ymd = todayYMD();
+        const { data } = await api.get('/draws', { params: { gameId: game.id, dateFrom: ymd, dateTo: ymd } });
+        const draws = data?.data || data?.draws || data || [];
+        setGroups(orderDraws(Array.isArray(draws) ? draws : [], nowHHMM()));
+      } catch (e) {
+        setError('No se pudieron cargar los sorteos. Reintenta desde el bot.');
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [game]);
 
   if (loading) return <div style={{ padding: 24 }}>Cargando sorteos…</div>;
+  if (error) return <div style={{ padding: 24, color: '#ff5c5c' }}>{error}</div>;
   const Btn = (d, editable) => (
     <button key={d.id} onClick={() => onPick(d, editable)}
       style={{ width: '100%', textAlign: 'left', background: editable ? '#1b2c3d' : '#1d2733',
