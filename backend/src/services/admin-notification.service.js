@@ -79,7 +79,9 @@ class AdminNotificationService {
 
       // Enviar solo mensaje de texto al admin (el PDF adjunto se eliminó —
       // ver spec 2026-05-11-eliminar-pdf-cierre-sorteo-design.md)
-      const result = await adminTelegramBotService.notifyGameAdmins(game.id, message);
+      const miniappUrl = (process.env.MINIAPP_URL || 'https://tote.atilax.io/tg') + `?startapp=${drawId}`;
+      const replyMarkup = { inline_keyboard: [[{ text: '🔮 Abrir monitor', url: miniappUrl }]] };
+      const result = await adminTelegramBotService.notifyGameAdmins(game.id, message, null, { reply_markup: replyMarkup });
       
       logger.info(`📱 Notificaciones pre-ganador enviadas: ${result.notified}/${result.total}`);
       return result;

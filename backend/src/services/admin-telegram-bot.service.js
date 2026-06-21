@@ -792,7 +792,7 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
    * @param {string} message - Mensaje a enviar
    * @param {string} photoPath - Ruta de imagen opcional (resultado de sorteo)
    */
-  async notifyGameAdmins(gameId, message, photoPath = null) {
+  async notifyGameAdmins(gameId, message, photoPath = null, options = {}) {
     // NOTE: El bot de admin se mantiene activo en local para testing.
     // DISABLE_SOCIAL_CHANNELS solo aplica a canales públicos (publicationService, playerNotification).
     try {
@@ -806,7 +806,7 @@ ${previousItem ? `\n❌ <b>Anterior:</b> ${previousItem.number} - ${previousItem
       let notified = 0;
       for (const admin of admins) {
         try {
-          const sent = await this.sendMessage(gameId, admin.user.telegramChatId, message);
+          const sent = await this.sendMessage(gameId, admin.user.telegramChatId, message, options);
 
           if (photoPath) {
             await this.sendPhoto(gameId, admin.user.telegramChatId, photoPath);
