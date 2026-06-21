@@ -173,6 +173,7 @@ import authRoutes from './routes/auth.routes.js';
 import drawTemplateRoutes from './routes/draw-template.routes.js';
 import drawPauseRoutes from './routes/draw-pause.routes.js';
 import publicRoutes from './routes/public.routes.js';
+import integrationRoutes from './routes/integration.routes.js';
 import channelRoutes from './routes/channel.routes.js';
 import imageRoutes from './routes/images.js';
 import whatsappBaileysRoutes from './routes/whatsapp-baileys.routes.js';
@@ -185,6 +186,7 @@ import telegramRoutes from './routes/telegram.routes.js';
 import instagramRoutes from './routes/instagram.routes.js';
 import facebookRoutes from './routes/facebook.routes.js';
 import tiktokRoutes from './routes/tiktok.routes.js';
+import twitterRoutes from './routes/twitter.routes.js';
 
 // Importar rutas de taquilla online
 import systemPagoMovilRoutes from './routes/system-pago-movil.routes.js';
@@ -219,6 +221,7 @@ import visorReportRoutes from './routes/visor-report.routes.js';
 import changelogRoutes from './routes/changelog.routes.js';
 import healthRoutes from './routes/health.routes.js';
 import cacheAdminRoutes from './routes/cache-admin.routes.js';
+import telegramMiniappRoutes from './routes/telegram-miniapp.routes.js';
 
 // ============================================
 // REGISTRAR RUTAS
@@ -226,10 +229,15 @@ import cacheAdminRoutes from './routes/cache-admin.routes.js';
 
 // Rutas públicas
 app.use('/api/public', publicRoutes);
+app.use('/api/telegram-miniapp', telegramMiniappRoutes);
 
 // Rutas públicas para imágenes (sin autenticación)
 import publicImagesRoutes from './routes/public-images.routes.js';
 app.use('/api/public/images', publicImagesRoutes);
+
+// API de interconexión read-only (autenticada con X-Api-Key) — consumida por
+// servicios internos como tote-oraculo. Mismos datos que /api/public + auth.
+app.use('/api/integration', integrationRoutes);
 
 // Rutas protegidas
 app.use('/api/auth', authRoutes);
@@ -252,6 +260,7 @@ app.use('/api/telegram', telegramRoutes);
 app.use('/api/instagram', instagramRoutes);
 app.use('/api/facebook', facebookRoutes);
 app.use('/api/tiktok', tiktokRoutes);
+app.use('/api/twitter', twitterRoutes);
 
 // Rutas de bots de administración y vinculación Telegram
 import adminRoutes from './routes/admin.routes.js';
