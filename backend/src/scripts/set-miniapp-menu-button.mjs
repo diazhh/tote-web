@@ -5,14 +5,21 @@
 // DEFERRED MANUAL STEP — no ejecutar en CI ni en local sin verificar la URL destino.
 import { prisma } from '../lib/prisma.js';
 
-const URL = process.env.MINIAPP_URL || 'https://tote.atilax.io/tg';
+const MINIAPP_URL = process.env.MINIAPP_URL || 'https://tote.atilax.io/tg';
 
 const bots = await prisma.adminTelegramBot.findMany({ where: { isActive: true }, select: { botToken: true, name: true } });
-for (const b of bots) {
-  const res = await fetch(`https://api.telegram.org/bot${b.botToken}/setChatMenuButton`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ menu_button: { type: 'web_app', text: '📊 Monitor', web_app: { url: URL } } }),
-  });
-  console.log(b.name, await res.json());
+try {
+  for (const b of bots) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${b.botToken}/setChatMenuButton`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ menu_button: { type: 'web_app', text: '📊 Monitor', web_app: { url: MINIAPP_URL } } }),
+      });
+      console.log(b.name, await res.json());
+    } catch (e) {
+      console.error(b.name, 'FAILED', e.message);
+    }
+  }
+} finally {
+  await prisma.$disconnect();
 }
-await prisma.$disconnect();
