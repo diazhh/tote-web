@@ -6,7 +6,7 @@ import sharp from 'sharp';
 
 let _browser = null;
 
-async function getBrowser() {
+export async function getBrowser() {
   if (_browser && _browser.connected) return _browser;
   _browser = await puppeteer.launch({
     headless: true,
