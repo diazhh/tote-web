@@ -31,20 +31,18 @@ export async function resolveBackground(cfg, canvas) {
       </defs>
       <rect width="${canvas.w}" height="${canvas.h}" fill="url(#g)"/>
     </svg>`);
-  return sharp(grad).png().toBuffer();
+  return sharp(grad).resize(canvas.w, canvas.h).png().toBuffer();
 }
 
 export async function logoLayer(cfg, canvas, { top = 40, maxH = 150 } = {}) {
   if (!(await fileExists(cfg.logo))) return null;
-  const resized = await sharp(cfg.logo).resize({ height: maxH, fit: 'inside' }).png().toBuffer();
-  const meta = await sharp(resized).metadata();
-  return { input: resized, left: Math.round((canvas.w - meta.width) / 2), top };
+  const { data: input, info } = await sharp(cfg.logo).resize({ height: maxH, fit: 'inside' }).png().toBuffer({ resolveWithObject: true });
+  return { input, left: Math.round((canvas.w - info.width) / 2), top };
 }
 
 export async function mascotLayer(cfg, canvas, { maxH = 170 } = {}) {
   const mascotFile = path.join(cfg.marketingDir, 'mascot.png');
   if (!(await fileExists(mascotFile))) return null;
-  const resized = await sharp(mascotFile).resize({ height: maxH, fit: 'inside' }).png().toBuffer();
-  const meta = await sharp(resized).metadata();
-  return { input: resized, left: canvas.w - meta.width - 30, top: 20 };
+  const { data: input, info } = await sharp(mascotFile).resize({ height: maxH, fit: 'inside' }).png().toBuffer({ resolveWithObject: true });
+  return { input, left: canvas.w - info.width - 30, top: 20 };
 }
