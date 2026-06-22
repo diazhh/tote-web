@@ -198,10 +198,16 @@ export const QUEUE_CONFIGS = {
     expireInMinutes: 3,
   },
   [QUEUES.RESUMEN_LOTOANIMALITO]: {
-    retryLimit: 3,
+    // Best-effort, NON-idempotent publish (no DrawPublication marker). A pg-boss
+    // retry re-publishes → duplicate stories. Channel-level transient errors are
+    // already retried INSIDE publishImage/StoryToChannels (3–5×/canal), so a
+    // queue-level retry can only duplicate, never recover. retryLimit:0.
+    // expire >> real runtime (101-frame reveal-video under the shared render-lock
+    // saturated by the 19:00–19:30 VE burst) so the job isn't falsely expired.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 3,
+    expireInMinutes: 20,
   },
   [QUEUES.PIRAMIDE_LOTTOPANTERA]: {
     retryLimit: 3,
@@ -210,10 +216,11 @@ export const QUEUE_CONFIGS = {
     expireInMinutes: 3,
   },
   [QUEUES.RESUMEN_LOTTOPANTERA]: {
-    retryLimit: 3,
+    // See RESUMEN_LOTOANIMALITO: non-idempotent publish, no queue-level retry.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 3,
+    expireInMinutes: 20,
   },
   [QUEUES.RECOMENDACIONES_TRIPLE]: {
     retryLimit: 3,
@@ -222,48 +229,57 @@ export const QUEUE_CONFIGS = {
     expireInMinutes: 3,
   },
   [QUEUES.RESUMEN_TRIPLE]: {
-    retryLimit: 3,
+    // See RESUMEN_LOTOANIMALITO: non-idempotent publish, no queue-level retry.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 3,
+    expireInMinutes: 20,
   },
   [QUEUES.PIZARRA_LOTOANIMALITO]: {
-    retryLimit: 3,
+    // Non-idempotent publish at the contended 19:30 VE window. No queue-level retry.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 5,
+    expireInMinutes: 20,
   },
   [QUEUES.PIZARRA_LOTTOPANTERA]: {
-    retryLimit: 3,
+    // See PIZARRA_LOTOANIMALITO.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 5,
+    expireInMinutes: 20,
   },
   [QUEUES.PIZARRA_TRIPLE]: {
-    retryLimit: 3,
+    // See PIZARRA_LOTOANIMALITO.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 5,
+    expireInMinutes: 20,
   },
   [QUEUES.WINNER_STORY]: {
-    // Best-effort marketing: render (~25s) + publish con polling de video IG.
-    // Pocas reintentos para no doble-postear; expire generoso por el polling.
-    retryLimit: 2,
+    // Best-effort marketing: reveal-video render + IG/FB story publish (non-idempotent).
+    // retryLimit:2 STILL double-posted: at end-of-day the shared render-lock is
+    // saturated (winner+resumen+pizarra), the job waits >expire, pg-boss marks it
+    // expired and retries → 2–3× the SAME game's winner story. retryLimit:0 + big
+    // expire fixes it (the original run finishes and publishes exactly once).
+    retryLimit: 0,
     retryDelay: 15,
     retryBackoff: true,
-    expireInMinutes: 5,
+    expireInMinutes: 20,
   },
   [QUEUES.DONDE_JUGAR_LOTOANIMALITO]: {
-    retryLimit: 3,
+    // Non-idempotent publish (story + tweet thread). No queue-level retry → no dups.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 3,
+    expireInMinutes: 10,
   },
   [QUEUES.DONDE_JUGAR_LOTTOPANTERA]: {
-    retryLimit: 3,
+    // See DONDE_JUGAR_LOTOANIMALITO.
+    retryLimit: 0,
     retryDelay: 5,
     retryBackoff: true,
-    expireInMinutes: 3,
+    expireInMinutes: 10,
   },
   [QUEUES.RETRY_FAILED_PUBLICATIONS]: {
     retryLimit: 2,
