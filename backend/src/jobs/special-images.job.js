@@ -15,6 +15,7 @@ class SpecialImagesJob {
     this.morningTask = null;
     this.eveningTask = null;
     this.pizarraTask = null;
+    this.dondeJugarTask = null;
   }
 
   start() {
@@ -48,13 +49,24 @@ class SpecialImagesJob {
       await this.executePizarra();
     });
 
-    logger.info('[special-images] Job iniciado (7:00am piramides, 7:01pm resumenes, 7:30pm pizarra, TZ: America/Caracas)');
+    // 7:30 AM Venezuela — "¿dónde jugar?" (recordatorio de casas)
+    this.dondeJugarTask = new Cron('30 7 * * *', {
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('[special-images] Error en donde-jugar job:', error);
+      }
+    }, async () => {
+      await this.executeDondeJugar();
+    });
+
+    logger.info('[special-images] Job iniciado (7:00am piramides, 7:30am donde-jugar, 7:01pm resumenes, 7:30pm pizarra, TZ: America/Caracas)');
   }
 
   stop() {
     if (this.morningTask) this.morningTask.stop();
     if (this.eveningTask) this.eveningTask.stop();
     if (this.pizarraTask) this.pizarraTask.stop();
+    if (this.dondeJugarTask) this.dondeJugarTask.stop();
     logger.info('[special-images] Job detenido');
   }
 
@@ -207,6 +219,39 @@ class SpecialImagesJob {
       });
     } catch (error) {
       logger.error('[special-images] Error en ejecucion pizarra:', error);
+    }
+  }
+
+  async executeDondeJugar() {
+    const today = getVenezuelaDateAsUTC();
+    const dateStr = today.toISOString();
+    logger.info(`[special-images] Encolando donde-jugar para ${dateStr}`);
+
+    if (process.env.PGBOSS_SPECIAL_IMAGES === 'true') {
+      const boss = getBoss();
+      await Promise.all([
+        boss.send(QUEUES.DONDE_JUGAR_LOTOANIMALITO, { date: dateStr }, {
+          singletonKey: `donde-jugar-la-${dateStr}`,
+          ...QUEUE_CONFIGS[QUEUES.DONDE_JUGAR_LOTOANIMALITO],
+        }),
+        boss.send(QUEUES.DONDE_JUGAR_LOTTOPANTERA, { date: dateStr }, {
+          singletonKey: `donde-jugar-lp-${dateStr}`,
+          ...QUEUE_CONFIGS[QUEUES.DONDE_JUGAR_LOTTOPANTERA],
+        }),
+      ]);
+      logger.info('[special-images] 2 donde-jugar encolados en pg-boss');
+      return;
+    }
+
+    // Legacy: ejecución directa (sin pg-boss)
+    try {
+      const { runDailyDondeJugar } = await import('../lib/marketing/partner-runner.js');
+      await Promise.allSettled([
+        runDailyDondeJugar({ date: today, family: 'lotoanimalito' }),
+        runDailyDondeJugar({ date: today, family: 'lottopantera' }),
+      ]);
+    } catch (error) {
+      logger.error('[special-images] Error en ejecución donde-jugar:', error);
     }
   }
 }
