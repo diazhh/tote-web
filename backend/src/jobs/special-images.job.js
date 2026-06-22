@@ -14,6 +14,7 @@ class SpecialImagesJob {
   constructor() {
     this.morningTask = null;
     this.eveningTask = null;
+    this.pizarraTask = null;
   }
 
   start() {
@@ -37,12 +38,23 @@ class SpecialImagesJob {
       await this.executeEvening();
     });
 
-    logger.info('[special-images] Job iniciado (7:00am piramides, 7:01pm resumenes, TZ: America/Caracas)');
+    // 7:30 PM Venezuela — pizarra semanal (story todos los dias; feed los domingos)
+    this.pizarraTask = new Cron('30 19 * * *', {
+      timezone: 'America/Caracas',
+      catch: (error) => {
+        logger.error('[special-images] Error en pizarra job:', error);
+      }
+    }, async () => {
+      await this.executePizarra();
+    });
+
+    logger.info('[special-images] Job iniciado (7:00am piramides, 7:01pm resumenes, 7:30pm pizarra, TZ: America/Caracas)');
   }
 
   stop() {
     if (this.morningTask) this.morningTask.stop();
     if (this.eveningTask) this.eveningTask.stop();
+    if (this.pizarraTask) this.pizarraTask.stop();
     logger.info('[special-images] Job detenido');
   }
 
@@ -143,6 +155,58 @@ class SpecialImagesJob {
       });
     } catch (error) {
       logger.error('[special-images] Error en ejecucion vespertina:', error);
+    }
+  }
+
+  async executePizarra() {
+    const today = getVenezuelaDateAsUTC();
+    const dateStr = today.toISOString();
+    logger.info(`[special-images] Generando pizarra semanal para ${dateStr}`);
+
+    if (process.env.PGBOSS_SPECIAL_IMAGES === 'true') {
+      const boss = getBoss();
+      await Promise.all([
+        boss.send(QUEUES.PIZARRA_LOTOANIMALITO, { date: dateStr }, {
+          singletonKey: `pizarra-la-${dateStr}`,
+          ...QUEUE_CONFIGS[QUEUES.PIZARRA_LOTOANIMALITO],
+        }),
+        boss.send(QUEUES.PIZARRA_LOTTOPANTERA, { date: dateStr }, {
+          singletonKey: `pizarra-lp-${dateStr}`,
+          ...QUEUE_CONFIGS[QUEUES.PIZARRA_LOTTOPANTERA],
+        }),
+        boss.send(QUEUES.PIZARRA_TRIPLE, { date: dateStr }, {
+          singletonKey: `pizarra-tp-${dateStr}`,
+          ...QUEUE_CONFIGS[QUEUES.PIZARRA_TRIPLE],
+        }),
+      ]);
+      logger.info('[special-images] 3 pizarras encoladas en pg-boss');
+      return;
+    }
+
+    // Legacy: solo generacion (sin publicacion, igual que el resto del fallback)
+    try {
+      const { generatePizarraLotoanimalito } = await import('../queue/workers/pizarra-lotoanimalito.worker.js');
+      const { generatePizarraLottopantera } = await import('../queue/workers/pizarra-lottopantera.worker.js');
+      const { generatePizarraTriple } = await import('../queue/workers/pizarra-triple.worker.js');
+      const { isSunday } = await import('../lib/marketing/pizarra-runner.js');
+      const withFeed = isSunday(today);
+
+      const results = await Promise.allSettled([
+        generatePizarraLotoanimalito(today, withFeed),
+        generatePizarraLottopantera(today, withFeed),
+        generatePizarraTriple(today, withFeed),
+      ]);
+
+      results.forEach((r, i) => {
+        const names = ['pizarra-lotoanimalito', 'pizarra-lottopantera', 'pizarra-triple'];
+        if (r.status === 'fulfilled') {
+          logger.info(`[special-images] ${names[i]} generada`);
+        } else {
+          logger.error(`[special-images] Error generando ${names[i]}:`, r.reason);
+        }
+      });
+    } catch (error) {
+      logger.error('[special-images] Error en ejecucion pizarra:', error);
     }
   }
 }

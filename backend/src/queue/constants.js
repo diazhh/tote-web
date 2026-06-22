@@ -33,6 +33,9 @@ export const QUEUES = {
   RESUMEN_LOTTOPANTERA: 'resumen-lottopantera',
   RECOMENDACIONES_TRIPLE: 'recomendaciones-triple',
   RESUMEN_TRIPLE: 'resumen-triple',
+  PIZARRA_LOTOANIMALITO: 'pizarra-lotoanimalito',
+  PIZARRA_LOTTOPANTERA: 'pizarra-lottopantera',
+  PIZARRA_TRIPLE: 'pizarra-triple',
   RETRY_FAILED_PUBLICATIONS: 'retry-failed-publications',
   CLEANUP_LOGS: 'cleanup-logs',
 };
@@ -219,6 +222,24 @@ export const QUEUE_CONFIGS = {
     retryDelay: 5,
     retryBackoff: true,
     expireInMinutes: 3,
+  },
+  [QUEUES.PIZARRA_LOTOANIMALITO]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 5,
+  },
+  [QUEUES.PIZARRA_LOTTOPANTERA]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 5,
+  },
+  [QUEUES.PIZARRA_TRIPLE]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 5,
   },
   [QUEUES.RETRY_FAILED_PUBLICATIONS]: {
     retryLimit: 2,

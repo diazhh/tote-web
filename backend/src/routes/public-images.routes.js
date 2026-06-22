@@ -38,7 +38,8 @@ router.get('/test/:filename', async (req, res) => {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
       '.gif': 'image/gif',
-      '.webp': 'image/webp'
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4'
     };
 
     const contentType = contentTypes[ext] || 'application/octet-stream';
@@ -109,7 +110,8 @@ router.get('/draw/:drawId', async (req, res) => {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
       '.gif': 'image/gif',
-      '.webp': 'image/webp'
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4'
     };
 
     const contentType = contentTypes[ext] || 'application/octet-stream';
@@ -222,7 +224,8 @@ router.get('/results/:filename', async (req, res) => {
       '.jpg': 'image/jpeg',
       '.jpeg': 'image/jpeg',
       '.gif': 'image/gif',
-      '.webp': 'image/webp'
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4'
     };
 
     const contentType = contentTypes[ext] || 'application/octet-stream';

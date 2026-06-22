@@ -566,6 +566,56 @@ class FacebookService {
   }
 
   /**
+   * Publicar STORY en la página (Facebook Stories API). Foto o video 9:16.
+   * Foto:  1) subir foto sin publicar (published:false) → photo_id
+   *        2) POST /{page}/photo_stories con photo_id
+   * Video: subida reanudable (upload_phase start→finish) con archivo hospedado (file_url).
+   */
+  async publishStory(instanceId, mediaUrl, { isVideo = false } = {}) {
+    const instance = await this.getInstance(instanceId);
+    const token = instance.pageAccessToken;
+    try {
+      if (isVideo) {
+        // 1) start → video_id + upload_url
+        const start = await axios.post(`${this.baseUrl}/${instance.pageId}/video_stories`, null, {
+          params: { upload_phase: 'start', access_token: token }
+        });
+        const videoId = start.data.video_id;
+        const uploadUrl = start.data.upload_url;
+        // 2) subir indicando el archivo hospedado públicamente (rupload acepta header file_url)
+        await axios.post(uploadUrl, null, {
+          headers: { Authorization: `OAuth ${token}`, file_url: mediaUrl }
+        });
+        // 3) finish
+        const finish = await axios.post(`${this.baseUrl}/${instance.pageId}/video_stories`, null, {
+          params: { upload_phase: 'finish', video_id: videoId, access_token: token }
+        });
+        await this.updateLastSeen(instanceId);
+        logger.info(`✅ Facebook STORY (video) publicada: ${finish.data.post_id || videoId}`);
+        return { success: true, storyId: finish.data.post_id || videoId, videoId };
+      } else {
+        // 1) foto sin publicar
+        const photo = await axios.post(`${this.baseUrl}/${instance.pageId}/photos`, null, {
+          params: { url: mediaUrl, published: false, access_token: token }
+        });
+        const photoId = photo.data.id;
+        // 2) photo story
+        const story = await axios.post(`${this.baseUrl}/${instance.pageId}/photo_stories`, null, {
+          params: { photo_id: photoId, access_token: token }
+        });
+        await this.updateLastSeen(instanceId);
+        logger.info(`✅ Facebook STORY (foto) publicada: ${story.data.post_id || story.data.id}`);
+        return { success: true, storyId: story.data.post_id || story.data.id, photoId };
+      }
+    } catch (error) {
+      logger.error('Error al publicar story en Facebook:', {
+        message: error.message, status: error.response?.status, data: error.response?.data
+      });
+      throw error;
+    }
+  }
+
+  /**
    * Probar conexión
    */
   async testConnection(instanceId) {

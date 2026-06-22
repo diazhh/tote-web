@@ -5,6 +5,7 @@ import messageTemplateService from './message-template.service.js';
 import telegramService from './telegram.service.js';
 import facebookService from './facebook.service.js';
 import instagramService from './instagram.service.js';
+import twitterService from './twitter.service.js';
 
 /**
  * Servicio para publicar sorteos en diferentes canales
@@ -116,6 +117,9 @@ class PublicationService {
               break;
             case 'FACEBOOK':
               result = await this.publishToFacebook(draw, channel);
+              break;
+            case 'TWITTER':
+              result = await this.publishToTwitter(draw, channel);
               break;
             default:
               logger.warn(`Canal no soportado: ${channel.channelType}`);
@@ -634,6 +638,119 @@ class PublicationService {
   }
 
   /**
+   * Publicar en Twitter / X
+   */
+  async publishToTwitter(draw, channel) {
+    try {
+      const instanceId = channel.twitterInstanceId;
+
+      // Validar configuración
+      if (!instanceId) {
+        throw new Error('No hay instancia de Twitter/X configurada para este canal');
+      }
+
+      // Verificar que la instancia esté activa (no pausada)
+      const instance = await prisma.twitterInstance.findUnique({
+        where: { instanceId }
+      });
+
+      if (!instance) {
+        throw new Error(`Instancia ${instanceId} no encontrada`);
+      }
+
+      if (instance.isActive === false) {
+        logger.info(`Instancia Twitter/X ${instanceId} está pausada, omitiendo envío`);
+        return {
+          success: false,
+          skipped: true,
+          message: 'Instancia pausada por el administrador'
+        };
+      }
+
+      // Verificar si ya se envió a este canal
+      const existingPub = await prisma.drawPublication.findUnique({
+        where: { drawId_channel: { drawId: draw.id, channel: 'TWITTER' } }
+      });
+      if (existingPub?.status === 'SENT') {
+        logger.info(`📢 Twitter/X ya enviado para draw ${draw.id}, saltando`);
+        return { success: true, skipped: true, reason: 'already_sent' };
+      }
+
+      // Crear o actualizar registro de publicación
+      const publication = await prisma.drawPublication.upsert({
+        where: {
+          drawId_channel: {
+            drawId: draw.id,
+            channel: 'TWITTER'
+          }
+        },
+        create: {
+          drawId: draw.id,
+          channel: 'TWITTER',
+          status: 'PENDING'
+        },
+        update: {
+          status: 'PENDING',
+          error: null,
+          retries: { increment: 1 }
+        }
+      });
+
+      // Preparar mensaje usando la plantilla del canal
+      const message = messageTemplateService.renderDrawMessage(
+        channel.messageTemplate,
+        draw
+      );
+
+      // Construir URL pública de la imagen usando el endpoint público.
+      // A diferencia de Meta (que descarga la URL), X sube los bytes: el servicio
+      // descarga esta URL y la sube al endpoint de media de X.
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+      const imageUrl = draw.imageUrl ? `${baseUrl}/api/public/images/draw/${draw.id}` : null;
+
+      logger.info(`🐦 Publicando en Twitter/X${imageUrl ? ` con imagen: ${imageUrl}` : ' (solo texto)'}`);
+
+      const result = await twitterService.publishTweet(instanceId, message, imageUrl);
+
+      // Actualizar publicación con resultado
+      await prisma.drawPublication.update({
+        where: { id: publication.id },
+        data: {
+          status: result.success ? 'SENT' : 'FAILED',
+          sentAt: result.success ? new Date() : null,
+          externalId: result.tweetId || null,
+          error: result.error || null
+        }
+      });
+
+      return {
+        success: result.success,
+        tweetId: result.tweetId,
+        error: result.error
+      };
+    } catch (error) {
+      logger.error('Error al publicar en Twitter/X:', error);
+
+      // Marcar como fallido
+      await prisma.drawPublication.updateMany({
+        where: {
+          drawId: draw.id,
+          channel: 'TWITTER'
+        },
+        data: {
+          status: 'FAILED',
+          error: error.message
+        }
+      });
+
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  /**
    * Publicar en Instagram
    */
   async publishToInstagram(draw, channel) {
@@ -771,7 +888,7 @@ class PublicationService {
    * @param {string} filename  - Nombre del archivo (se construye la URL pública con él)
    * @param {string} caption   - Texto del mensaje a enviar junto a la imagen
    */
-  async publishImageToChannels(gameId, imagePath, filename, caption) {
+  async publishImageToChannels(gameId, imagePath, filename, caption, { channelTypes = null } = {}) {
     if (process.env.DISABLE_SOCIAL_CHANNELS === 'true') {
       logger.warn(`⛔ [LOCAL] DISABLE_SOCIAL_CHANNELS=true — publicación de imagen especial desactivada`);
       return { success: true, skipped: true, results: [] };
@@ -782,9 +899,10 @@ class PublicationService {
 
     try {
       // Obtener canales activos para este juego
-      const channels = await prisma.gameChannel.findMany({
+      let channels = await prisma.gameChannel.findMany({
         where: { gameId, isActive: true }
       });
+      if (channelTypes) channels = channels.filter(c => channelTypes.includes(c.channelType));
 
       if (channels.length === 0) {
         logger.warn(`⚠️ No hay canales activos para gameId=${gameId} (imagen especial)`);
@@ -867,6 +985,22 @@ class PublicationService {
                 return { channel: 'INSTAGRAM', name: channel.name, success: true, mediaId: result.mediaId, attempts: attempt };
               }
 
+              case 'TWITTER': {
+                const instanceId = channel.twitterInstanceId;
+                if (!instanceId) {
+                  return { channel: 'TWITTER', name: channel.name, success: false, skipped: true, error: 'Sin instancia' };
+                }
+                const instance = await prisma.twitterInstance.findUnique({ where: { instanceId } });
+                if (!instance || instance.isActive === false) {
+                  return { channel: 'TWITTER', name: channel.name, success: false, skipped: true, message: 'Instancia pausada' };
+                }
+                const result = await twitterService.publishTweet(instanceId, caption, imageUrl);
+                if (!result.success) {
+                  throw new Error(`Twitter publishTweet falló: ${result.error || 'error desconocido'}`);
+                }
+                return { channel: 'TWITTER', name: channel.name, success: true, tweetId: result.tweetId, attempts: attempt };
+              }
+
               default:
                 return { channel: channel.channelType, name: channel.name, success: false, skipped: true, error: 'Canal no soportado' };
             }
@@ -908,6 +1042,135 @@ class PublicationService {
       return { success: successCount > 0, results };
     } catch (error) {
       logger.error('Error al publicar imagen especial en canales:', error);
+      return { success: false, error: error.message, results: [] };
+    }
+  }
+
+  /**
+   * Publicar una STORY 9:16 (diaria o pizarra) en los canales del juego.
+   * - Instagram/Facebook: story NATIVA (media_type:STORIES). Si hay video se publica
+   *   como story-video con fallback a story-imagen.
+   * - Telegram/WhatsApp: no existen stories por API → se envía la imagen 9:16 al canal.
+   * - Twitter: no aplica (sin stories) → se omite.
+   * No requiere Draw ni crea registros DrawPublication.
+   *
+   * @param {object} [opts]
+   * @param {string|null} [opts.videoFilename] nombre del MP4 9:16 en storage/results (IG/FB story-video)
+   * @param {string[]|null} [opts.channelTypes] si se pasa, sólo publica a esos tipos de canal
+   */
+  async publishStoryToChannels(gameId, storyImagePath, storyFilename, caption, { videoFilename = null, channelTypes = null } = {}) {
+    if (process.env.DISABLE_SOCIAL_CHANNELS === 'true') {
+      logger.warn(`⛔ [LOCAL] DISABLE_SOCIAL_CHANNELS=true — story no publicada`);
+      return { success: true, skipped: true, results: [] };
+    }
+
+    const MAX_ATTEMPTS = 3;
+    const RETRY_DELAY_MS = 5000;
+
+    try {
+      let channels = await prisma.gameChannel.findMany({ where: { gameId, isActive: true } });
+      if (channelTypes) channels = channels.filter(c => channelTypes.includes(c.channelType));
+      if (channels.length === 0) {
+        logger.warn(`⚠️ No hay canales activos para gameId=${gameId} (story)`);
+        return { success: true, results: [] };
+      }
+
+      const baseUrl = process.env.BACKEND_PUBLIC_URL || 'https://toteback.atilax.io';
+      const imageUrl = `${baseUrl}/api/public/images/results/${storyFilename}`;
+      const videoUrl = videoFilename ? `${baseUrl}/api/public/images/results/${videoFilename}` : null;
+
+      logger.info(`📢 Publicando STORY en ${channels.length} canal(es): ${videoUrl ? 'video+img' : 'img'} ${imageUrl}`);
+
+      const sendWithRetry = async (channel) => {
+        let lastError = null;
+        for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+          try {
+            switch (channel.channelType) {
+              case 'INSTAGRAM': {
+                const instanceId = channel.instagramInstanceId;
+                if (!instanceId) return { channel: 'INSTAGRAM', name: channel.name, success: false, skipped: true, error: 'Sin instancia' };
+                const instance = await prisma.instagramInstance.findUnique({ where: { instanceId } });
+                if (!instance || instance.isActive === false) return { channel: 'INSTAGRAM', name: channel.name, success: false, skipped: true, message: 'Instancia pausada' };
+                let result;
+                if (videoUrl) {
+                  try {
+                    result = await instagramService.publishStory(instanceId, videoUrl, { isVideo: true });
+                  } catch (e) {
+                    logger.warn(`⚠️ [story] IG video falló (${e.message}); fallback a imagen`);
+                    result = await instagramService.publishStory(instanceId, imageUrl, { isVideo: false });
+                  }
+                } else {
+                  result = await instagramService.publishStory(instanceId, imageUrl, { isVideo: false });
+                }
+                return { channel: 'INSTAGRAM', name: channel.name, success: true, mediaId: result.mediaId, attempts: attempt };
+              }
+              case 'FACEBOOK': {
+                const instanceId = channel.facebookInstanceId;
+                if (!instanceId) return { channel: 'FACEBOOK', name: channel.name, success: false, skipped: true, error: 'Sin instancia' };
+                const instance = await prisma.facebookInstance.findUnique({ where: { instanceId } });
+                if (!instance || instance.isActive === false) return { channel: 'FACEBOOK', name: channel.name, success: false, skipped: true, message: 'Instancia pausada' };
+                let result;
+                if (videoUrl) {
+                  try {
+                    result = await facebookService.publishStory(instanceId, videoUrl, { isVideo: true });
+                  } catch (e) {
+                    logger.warn(`⚠️ [story] FB video falló (${e.message}); fallback a imagen`);
+                    result = await facebookService.publishStory(instanceId, imageUrl, { isVideo: false });
+                  }
+                } else {
+                  result = await facebookService.publishStory(instanceId, imageUrl, { isVideo: false });
+                }
+                return { channel: 'FACEBOOK', name: channel.name, success: true, storyId: result.storyId, attempts: attempt };
+              }
+              case 'TELEGRAM': {
+                const instanceId = channel.telegramInstanceId;
+                const chatId = channel.telegramChatId;
+                if (!instanceId || !chatId) return { channel: 'TELEGRAM', name: channel.name, success: false, skipped: true, error: 'Sin instancia o chatId' };
+                const instance = await prisma.telegramInstance.findUnique({ where: { instanceId } });
+                if (!instance || instance.isActive === false) return { channel: 'TELEGRAM', name: channel.name, success: false, skipped: true, message: 'Instancia pausada' };
+                const htmlCaption = this.formatMessageForTelegram(caption);
+                const result = await telegramService.sendPhoto(instanceId, chatId, imageUrl, htmlCaption);
+                if (!result.success) throw new Error(`Telegram sendPhoto falló: ${result.error || 'desconocido'}`);
+                return { channel: 'TELEGRAM', name: channel.name, success: true, messageId: result.messageId, attempts: attempt };
+              }
+              case 'WHATSAPP': {
+                const recipients = channel.recipients || [];
+                if (!recipients.length) return { channel: 'WHATSAPP', name: channel.name, success: false, skipped: true, error: 'Sin destinatarios' };
+                const result = await whatsappClient.sendToMultipleGroups(recipients, caption, imageUrl);
+                if (result.summary.successful === 0) throw new Error(`WhatsApp: 0 de ${recipients.length} grupos`);
+                return { channel: 'WHATSAPP', name: channel.name, success: true, sent: result.summary.successful, attempts: attempt };
+              }
+              case 'TWITTER':
+                return { channel: 'TWITTER', name: channel.name, success: false, skipped: true, message: 'Twitter no soporta stories' };
+              default:
+                return { channel: channel.channelType, name: channel.name, success: false, skipped: true, error: 'Canal no soportado' };
+            }
+          } catch (error) {
+            lastError = error;
+            if (attempt < MAX_ATTEMPTS) {
+              logger.warn(`⚠️ [story] Intento ${attempt}/${MAX_ATTEMPTS} — ${channel.channelType} (${channel.name}): ${error.message}. Reintentando...`);
+              await this.sleep(RETRY_DELAY_MS);
+            }
+          }
+        }
+        logger.error(`❌ [story] Canal ${channel.channelType} (${channel.name}) falló tras ${MAX_ATTEMPTS}: ${lastError?.message}`);
+        return { channel: channel.channelType, name: channel.name, success: false, attempts: MAX_ATTEMPTS, error: lastError?.message };
+      };
+
+      const instagramChannels = channels.filter(c => c.channelType === 'INSTAGRAM');
+      const otherChannels = channels.filter(c => c.channelType !== 'INSTAGRAM');
+      const otherResults = await Promise.all(otherChannels.map(c => sendWithRetry(c)));
+      const instagramResults = [];
+      for (let i = 0; i < instagramChannels.length; i++) {
+        instagramResults.push(await sendWithRetry(instagramChannels[i]));
+        if (i < instagramChannels.length - 1) await this.sleep(5000);
+      }
+      const results = [...otherResults, ...instagramResults];
+      const successCount = results.filter(r => r.success).length;
+      logger.info(`✅ Story publicada: ${successCount}/${results.length} canales`);
+      return { success: successCount > 0, results };
+    } catch (error) {
+      logger.error('Error al publicar story en canales:', error);
       return { success: false, error: error.message, results: [] };
     }
   }
@@ -955,6 +1218,9 @@ class PublicationService {
           break;
         case 'INSTAGRAM':
           result = await this.publishToInstagram(draw, channel);
+          break;
+        case 'TWITTER':
+          result = await this.publishToTwitter(draw, channel);
           break;
         default:
           throw new Error(`Canal no soportado: ${channelType}`);

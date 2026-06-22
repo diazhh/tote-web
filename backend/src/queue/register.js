@@ -227,6 +227,9 @@ export async function registerAllWorkers(boss) {
     const { resumenLottopanteraWorker } = await import('./workers/resumen-lottopantera.worker.js');
     const { recomendacionesTripleWorker } = await import('./workers/recomendaciones-triple.worker.js');
     const { resumenTripleWorker } = await import('./workers/resumen-triple.worker.js');
+    const { pizarraLotoanimalitoWorker } = await import('./workers/pizarra-lotoanimalito.worker.js');
+    const { pizarraLottopanteraWorker } = await import('./workers/pizarra-lottopantera.worker.js');
+    const { pizarraTripleWorker } = await import('./workers/pizarra-triple.worker.js');
 
     // En pg-boss v10, boss.work() NO crea la cola automaticamente.
     // La cola debe existir en pgboss.queue para que boss.send() pueda insertar jobs (usa JOIN).
@@ -237,6 +240,9 @@ export async function registerAllWorkers(boss) {
     await boss.createQueue(QUEUES.RESUMEN_LOTTOPANTERA);
     await boss.createQueue(QUEUES.RECOMENDACIONES_TRIPLE);
     await boss.createQueue(QUEUES.RESUMEN_TRIPLE);
+    await boss.createQueue(QUEUES.PIZARRA_LOTOANIMALITO);
+    await boss.createQueue(QUEUES.PIZARRA_LOTTOPANTERA);
+    await boss.createQueue(QUEUES.PIZARRA_TRIPLE);
 
     await boss.work(QUEUES.PIRAMIDE_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.PIRAMIDE_LOTOANIMALITO], piramideLotoanimalitoWorker);
     await boss.work(QUEUES.RESUMEN_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.RESUMEN_LOTOANIMALITO], resumenLotoanimalitoWorker);
@@ -244,7 +250,10 @@ export async function registerAllWorkers(boss) {
     await boss.work(QUEUES.RESUMEN_LOTTOPANTERA, QUEUE_CONFIGS[QUEUES.RESUMEN_LOTTOPANTERA], resumenLottopanteraWorker);
     await boss.work(QUEUES.RECOMENDACIONES_TRIPLE, QUEUE_CONFIGS[QUEUES.RECOMENDACIONES_TRIPLE], recomendacionesTripleWorker);
     await boss.work(QUEUES.RESUMEN_TRIPLE, QUEUE_CONFIGS[QUEUES.RESUMEN_TRIPLE], resumenTripleWorker);
-    logger.info('[pg-boss] Workers de imagenes especiales registrados (6 workers)');
+    await boss.work(QUEUES.PIZARRA_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.PIZARRA_LOTOANIMALITO], pizarraLotoanimalitoWorker);
+    await boss.work(QUEUES.PIZARRA_LOTTOPANTERA, QUEUE_CONFIGS[QUEUES.PIZARRA_LOTTOPANTERA], pizarraLottopanteraWorker);
+    await boss.work(QUEUES.PIZARRA_TRIPLE, QUEUE_CONFIGS[QUEUES.PIZARRA_TRIPLE], pizarraTripleWorker);
+    logger.info('[pg-boss] Workers de imagenes especiales registrados (9 workers)');
   }
 
   logger.info('[pg-boss] Workers registrados correctamente');

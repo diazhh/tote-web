@@ -379,6 +379,58 @@ class InstagramService {
   }
 
   /**
+   * Publicar STORY (Instagram Graph API). Foto (image_url) o video (video_url) 9:16.
+   * Las stories NO admiten caption vía API (media_type: STORIES).
+   */
+  async publishStory(instanceId, mediaUrl, { isVideo = false } = {}) {
+    try {
+      const instance = await this.getInstance(instanceId);
+      if (!instance.accessToken) throw new Error('Instancia no autorizada');
+      if (instance.tokenExpiresAt && new Date() > instance.tokenExpiresAt) {
+        await this.updateConnectionStatus(instanceId, 'EXPIRED');
+        throw new Error('Token expirado. Reautoriza la aplicación.');
+      }
+
+      const params = { media_type: 'STORIES', access_token: instance.accessToken };
+      if (isVideo) params.video_url = mediaUrl; else params.image_url = mediaUrl;
+
+      logger.info(`📸 Instagram STORY: creando container (${isVideo ? 'video' : 'foto'}) para ${instance.userId}`);
+      const containerResponse = await axios.post(`${this.baseUrl}/${instance.userId}/media`, null, { params });
+      const creationId = containerResponse.data.id;
+
+      // Video: el procesamiento es asíncrono → poll de status_code. Foto: espera breve.
+      if (isVideo) {
+        let status = 'IN_PROGRESS', attempts = 0;
+        const maxAttempts = 30; // ~5 min
+        while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
+          await this.sleep(10000);
+          const statusResponse = await axios.get(`${this.baseUrl}/${creationId}`, {
+            params: { fields: 'status_code', access_token: instance.accessToken }
+          });
+          status = statusResponse.data.status_code;
+          attempts++;
+        }
+        if (status !== 'FINISHED') throw new Error(`Procesamiento del story-video no finalizó: ${status}`);
+      } else {
+        await this.sleep(3000);
+      }
+
+      const publishResponse = await axios.post(`${this.baseUrl}/${instance.userId}/media_publish`, null, {
+        params: { creation_id: creationId, access_token: instance.accessToken }
+      });
+      logger.info(`✅ Instagram STORY publicada: ${publishResponse.data.id}`);
+      await this.updateLastSeen(instanceId);
+      return { success: true, mediaId: publishResponse.data.id, creationId };
+    } catch (error) {
+      logger.error('Error al publicar story en Instagram:', {
+        message: error.message, status: error.response?.status, data: error.response?.data
+      });
+      if (error.response?.status === 401) await this.updateConnectionStatus(instanceId, 'EXPIRED');
+      throw error;
+    }
+  }
+
+  /**
    * Helper: Sleep
    */
   sleep(ms) {
