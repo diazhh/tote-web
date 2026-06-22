@@ -36,6 +36,10 @@ export const QUEUES = {
   PIZARRA_LOTOANIMALITO: 'pizarra-lotoanimalito',
   PIZARRA_LOTTOPANTERA: 'pizarra-lottopantera',
   PIZARRA_TRIPLE: 'pizarra-triple',
+  // Story-video del ganador por sorteo (marketing) — encolado no-bloqueante desde step-process-prizes
+  WINNER_STORY: 'winner-story',
+  DONDE_JUGAR_LOTOANIMALITO: 'donde-jugar-lotoanimalito',
+  DONDE_JUGAR_LOTTOPANTERA: 'donde-jugar-lottopantera',
   RETRY_FAILED_PUBLICATIONS: 'retry-failed-publications',
   CLEANUP_LOGS: 'cleanup-logs',
 };
@@ -240,6 +244,26 @@ export const QUEUE_CONFIGS = {
     retryDelay: 5,
     retryBackoff: true,
     expireInMinutes: 5,
+  },
+  [QUEUES.WINNER_STORY]: {
+    // Best-effort marketing: render (~25s) + publish con polling de video IG.
+    // Pocas reintentos para no doble-postear; expire generoso por el polling.
+    retryLimit: 2,
+    retryDelay: 15,
+    retryBackoff: true,
+    expireInMinutes: 5,
+  },
+  [QUEUES.DONDE_JUGAR_LOTOANIMALITO]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 3,
+  },
+  [QUEUES.DONDE_JUGAR_LOTTOPANTERA]: {
+    retryLimit: 3,
+    retryDelay: 5,
+    retryBackoff: true,
+    expireInMinutes: 3,
   },
   [QUEUES.RETRY_FAILED_PUBLICATIONS]: {
     retryLimit: 2,

@@ -149,6 +149,14 @@ export async function registerAllWorkers(boss) {
   );
   logger.info('[pg-boss] Workers refresh-live-snapshots + refresh-daily-snapshot registrados (cron 1/min)');
 
+  // Winner story por sorteo (marketing) — always-on. Encolado no-bloqueante desde
+  // step-process-prizes. createQueue ANTES de cualquier boss.send (bug pg-boss v10:
+  // boss.work no crea la cola; sin la fila, boss.send dropea silencioso).
+  const { winnerStoryWorker } = await import('./workers/winner-story.worker.js');
+  await boss.createQueue(QUEUES.WINNER_STORY);
+  await boss.work(QUEUES.WINNER_STORY, QUEUE_CONFIGS[QUEUES.WINNER_STORY], winnerStoryWorker);
+  logger.info('[pg-boss] Worker winner-story registrado (trigger desde step-process-prizes, no bloqueante)');
+
   // Retry failed publications — siempre activo, cada 5 minutos
   const { retryFailedPublicationsWorker } = await import('./workers/retry-failed-publications.worker.js');
   await boss.createQueue(QUEUES.RETRY_FAILED_PUBLICATIONS);
@@ -230,6 +238,8 @@ export async function registerAllWorkers(boss) {
     const { pizarraLotoanimalitoWorker } = await import('./workers/pizarra-lotoanimalito.worker.js');
     const { pizarraLottopanteraWorker } = await import('./workers/pizarra-lottopantera.worker.js');
     const { pizarraTripleWorker } = await import('./workers/pizarra-triple.worker.js');
+    const { dondeJugarLotoanimalitoWorker } = await import('./workers/donde-jugar-lotoanimalito.worker.js');
+    const { dondeJugarLottopanteraWorker } = await import('./workers/donde-jugar-lottopantera.worker.js');
 
     // En pg-boss v10, boss.work() NO crea la cola automaticamente.
     // La cola debe existir en pgboss.queue para que boss.send() pueda insertar jobs (usa JOIN).
@@ -243,6 +253,8 @@ export async function registerAllWorkers(boss) {
     await boss.createQueue(QUEUES.PIZARRA_LOTOANIMALITO);
     await boss.createQueue(QUEUES.PIZARRA_LOTTOPANTERA);
     await boss.createQueue(QUEUES.PIZARRA_TRIPLE);
+    await boss.createQueue(QUEUES.DONDE_JUGAR_LOTOANIMALITO);
+    await boss.createQueue(QUEUES.DONDE_JUGAR_LOTTOPANTERA);
 
     await boss.work(QUEUES.PIRAMIDE_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.PIRAMIDE_LOTOANIMALITO], piramideLotoanimalitoWorker);
     await boss.work(QUEUES.RESUMEN_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.RESUMEN_LOTOANIMALITO], resumenLotoanimalitoWorker);
@@ -253,6 +265,8 @@ export async function registerAllWorkers(boss) {
     await boss.work(QUEUES.PIZARRA_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.PIZARRA_LOTOANIMALITO], pizarraLotoanimalitoWorker);
     await boss.work(QUEUES.PIZARRA_LOTTOPANTERA, QUEUE_CONFIGS[QUEUES.PIZARRA_LOTTOPANTERA], pizarraLottopanteraWorker);
     await boss.work(QUEUES.PIZARRA_TRIPLE, QUEUE_CONFIGS[QUEUES.PIZARRA_TRIPLE], pizarraTripleWorker);
+    await boss.work(QUEUES.DONDE_JUGAR_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.DONDE_JUGAR_LOTOANIMALITO], dondeJugarLotoanimalitoWorker);
+    await boss.work(QUEUES.DONDE_JUGAR_LOTTOPANTERA, QUEUE_CONFIGS[QUEUES.DONDE_JUGAR_LOTTOPANTERA], dondeJugarLottopanteraWorker);
     logger.info('[pg-boss] Workers de imagenes especiales registrados (9 workers)');
   }
 
