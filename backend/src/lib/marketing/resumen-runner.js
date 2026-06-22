@@ -26,7 +26,7 @@ export async function generateResumenImage({ slug, fileSlug, title, date: dateIn
 
   const slots = {};
   for (const draw of draws) {
-    const hour = parseInt(draw.drawTime.split(':')[0]);
+    const hour = parseInt(draw.drawTime.split(':')[0], 10);
     slots[hour] = { number: String(draw.winnerItem.number), name: draw.winnerItem.name || '' };
   }
 

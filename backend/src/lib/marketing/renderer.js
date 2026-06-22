@@ -41,7 +41,7 @@ export async function renderResultsBoard({ slug, canvasName = 'portrait', title,
     if (cfg.cellMode === 'animal') {
       const layer = await animalRasterLayer(rect, cfg.assetFor(slot.number));
       if (layer) animalLayers.push(layer);
-      texts += animalTextSvg(rect, { number: slot.number, name: (slot.name || '').toUpperCase() }, cfg, DISPLAY_FAMILY);
+      texts += animalTextSvg(rect, { number: String(slot.number).padStart(2, '0'), name: (slot.name || '').toUpperCase() }, cfg, DISPLAY_FAMILY);
     } else {
       texts += numberTextSvg(rect, { number: String(slot.number).padStart(3, '0') }, cfg, DISPLAY_FAMILY);
     }
