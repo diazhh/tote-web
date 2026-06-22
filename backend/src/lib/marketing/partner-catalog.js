@@ -17,6 +17,7 @@ export async function loadPartners() {
     slug: p.slug,
     url: p.url,
     logoPath: path.join(PARTNERS_DIR, p.logo.file),
+    darkChip: !!p.darkChip, // logos claros/blancos → chip oscuro para que contrasten
   }));
 }
 

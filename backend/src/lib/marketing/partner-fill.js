@@ -35,6 +35,9 @@ function prettyUrl(url) {
   return url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 }
 
+// Chip oscuro para logos claros/blancos que se perderían sobre el chip blanco.
+const DARK_CHIP_STYLE = 'background:linear-gradient(180deg,#2b2b2b,#141414);';
+
 function buildFill(templatePath, familyKey, partners) {
   const fam = getFamily(familyKey);
   const texts = [['.board__handle', fam.handle]];
@@ -44,6 +47,7 @@ function buildFill(templatePath, familyKey, partners) {
     attrs.push([`[data-logo="${n}"] .logo__img`, 'src', 'file://' + p.logoPath]);
     texts.push([`[data-logo="${n}"] .logo__name`, p.name]);
     texts.push([`[data-logo="${n}"] .logo__url`, prettyUrl(p.url)]);
+    if (p.darkChip) attrs.push([`[data-logo="${n}"] .logo__chip`, 'style', DARK_CHIP_STYLE]);
   });
   return { templatePath, fill: { texts, attrs } };
 }

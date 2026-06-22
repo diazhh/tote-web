@@ -61,6 +61,7 @@
     {
       "name": "ApuestasX",
       "slug": "apuestasx",
+      "darkChip": true,
       "url": "https://apuestasx.com",
       "altDomains": [],
       "status": "active",
@@ -224,6 +225,7 @@
     {
       "name": "Juega en Línea",
       "slug": "juega-en-linea",
+      "darkChip": true,
       "url": "https://www.juegaenlinea.net",
       "altDomains": ["https://www.juegaenlinea.com"],
       "status": "active",
@@ -293,6 +295,7 @@
     {
       "name": "MiCasino",
       "slug": "mi-casino",
+      "darkChip": true,
       "url": "https://micasino.com/",
       "altDomains": [],
       "status": "active",

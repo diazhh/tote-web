@@ -46,3 +46,18 @@ describe('buildDondeJugarDirectorioFill', () => {
     expect(img16[2]).toBe('file:///abs/casa-16.png');
   });
 });
+
+describe('darkChip', () => {
+  test('partners flagged darkChip get a dark chip style; others do not', () => {
+    const partners = [
+      { name: 'Light', slug: 'light', url: 'https://light.com/', logoPath: '/abs/light.png', darkChip: true },
+      { name: 'Normal', slug: 'normal', url: 'https://normal.com/', logoPath: '/abs/normal.png' },
+    ];
+    const r = buildDondeJugarStoryFill('lotoanimalito', partners);
+    const chip1 = r.fill.attrs.find(([sel, attr]) => sel === '[data-logo="1"] .logo__chip' && attr === 'style');
+    const chip2 = r.fill.attrs.find(([sel, attr]) => sel === '[data-logo="2"] .logo__chip' && attr === 'style');
+    expect(chip1).toBeTruthy();
+    expect(chip1[2]).toContain('background:');
+    expect(chip2).toBeUndefined();
+  });
+});
