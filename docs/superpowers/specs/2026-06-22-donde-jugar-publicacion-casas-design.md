@@ -27,7 +27,7 @@ Este catálogo es la **única fuente de verdad** para la lista de casas, sus URL
 | **Instagram** | Story 9:16 (1080×1920) "¿DÓNDE JUGAR?" con grilla **2×2 de 4 logos** rotando | Diario **07:30 VE** | Texto + "link en bio" (la API no permite link tappable en story) |
 | **Facebook** | Misma story 9:16 (story nativa) | Diario 07:30 VE | Igual que IG |
 | **Telegram** | Misma imagen + caption con los **4 links clickeables** (nombre → url) | Diario 07:30 VE | Links clickeables reales |
-| **Twitter/X** | Imagen **directorio 4×4 (16 logos)** + tweet fijado (pin) + hilo con los 16 links | **On-demand** (1 sola vez; re-correr al cambiar la lista) | Links en el hilo |
+| **Twitter/X** | Imagen **directorio 4×4 (16 logos)** + hilo con los 16 links. El **pin es manual** (un toque en la app) — la API de X no soporta fijar tweets | **On-demand** (1 sola vez; re-correr al cambiar la lista) | Links en el hilo |
 
 **Emisores:** los canales activos (`GameChannel.isActive = true`) de:
 - Familia LOTOANIMALITO → game `lotoanimalito` (`d953f80c-...`).
@@ -65,40 +65,41 @@ Carga de logos vía `file://` (patrón actual del renderer). SVG/PNG/JPG soporta
   2. Render `donde-jugar-story.html` → PNG 1080×1920 en `storage/results/`.
   3. `publishStoryToChannels(...)` → IG + FB (story nativa) de la familia.
   4. `publishImageToChannels(...)` → Telegram de la familia, con caption = `buildLinksCaption(4)`.
-- `runTwitterPin({ family })`:
+- `runTwitterDirectorio({ family })`:
   1. Render `donde-jugar-directorio.html` → PNG 1080×1350.
-  2. Por cada `TwitterInstance` de la familia: postear tweet con imagen → publicar hilo (`chunkThread(16)`) como replies encadenados → `pinTweet(instanceId, rootTweetId)`.
+  2. Por cada `GameChannel` TWITTER activo de la familia: postear tweet raíz con imagen (`twitterService.publishTweet`) → publicar hilo (`chunkThread(16)`) como replies encadenados (`twitterService.replyTweet`).
+  3. Devolver la URL del tweet raíz para que el usuario lo **fije manualmente** (la API de X no soporta pin).
 
 ### 5.4 `backend/src/services/twitter.service.js` (extender)
-- `pinTweet(instanceId, tweetId)` — `PUT /2/users/:id/pinned_tweets`.
-- `replyTweet(instanceId, text, inReplyToTweetId, imageUrl?)` — para encadenar el hilo (reusa la subida de media existente).
+- `replyTweet(instanceId, text, inReplyToTweetId, imageUrl?)` — encadena el hilo (reusa la subida de media existente vía `client.v2.tweet({ text, reply: { in_reply_to_tweet_id } })`).
+- **No** se implementa `pinTweet`: la API pública de X v2 no expone fijar un tweet al perfil. El pin queda como paso manual (un toque), una sola vez.
 
 ### 5.5 Scheduling
-- **Queues nuevas** en `queue/constants.js`: `donde-jugar-lotoanimalito`, `donde-jugar-lottopantera` (config tipo `RESUMEN_*`: ~3 reintentos, backoff, expiry corto).
-- **Workers nuevos** en `queue/workers/` + registro en `register.js` (patrón `createQueue` + `work`).
-- **trigger**: agregar ambas a `ALLOWED_QUEUES` en `trigger-pgboss-cron.mjs`.
-- **cron** en `/etc/cron.d/tote-triggers`: dos líneas a las **07:30 VE** (se verifica el TZ del VPS contra la línea de `resumen` existente y se ajusta la expresión cron en consecuencia).
-- **Twitter pin**: NO va en cron. Se ejecuta on-demand vía un script (`backend/src/scripts/`) o un endpoint admin que dispare `runTwitterPin` para cada familia.
+- **Queues nuevas** en `queue/constants.js`: `donde-jugar-lotoanimalito`, `donde-jugar-lottopantera` (config tipo `RESUMEN_*`: 3 reintentos, backoff, expiry corto).
+- **Workers nuevos** en `queue/workers/` + registro en `register.js` dentro del bloque `PGBOSS_SPECIAL_IMAGES` (patrón `createQueue` ANTES de `work`).
+- **Trigger diario** vía el job Croner existente `jobs/special-images.job.js` (TZ `America/Caracas`): se agrega una tarea `Cron('30 7 * * *')` que hace `boss.send(QUEUE, { date: dateStr })` para ambas familias. (Las imágenes de marketing NO usan `/etc/cron.d/tote-triggers` ni `trigger-pgboss-cron.mjs` — ese camino manda payload vacío; el payload `{ date }` lo provee Croner.)
+- **Twitter directorio**: NO va en cron. Se ejecuta on-demand vía script (`backend/src/scripts/`) que dispara `runTwitterDirectorio` para cada familia.
 
 ## 6. Flujo diario
 
 ```
-cron 07:30 VE
-  → trigger-pgboss-cron.mjs donde-jugar-lotoanimalito  (e idem lottopantera)
-  → boss.send(queue)
+Croner special-images.job.js  Cron('30 7 * * *', TZ America/Caracas)
+  → boss.send('donde-jugar-lotoanimalito', { date })   (e idem lottopantera)
   → worker
-  → runDailyDondeJugar({date, family})
+  → runDailyDondeJugar({ date, family })
   → render story PNG
-  → IG story + FB story + Telegram (imagen + caption con 4 links)
+  → publishStoryToChannels(gameId, ..., { channelTypes: ['INSTAGRAM','FACEBOOK','TELEGRAM'] })
+     (IG/FB story nativa + Telegram imagen 9:16 con caption de 4 links)
 ```
 
 ## 7. Requisitos / supuestos
 
-1. **Twitter Read+Write**: las apps de X deben estar en modo Read+Write con access token/secret regenerados (pendiente del usuario). Sin esto, post+pin fallan; IG/FB/Telegram funcionan igual.
+1. **Twitter Read+Write**: las apps de X deben estar en modo Read+Write con access token/secret regenerados (pendiente del usuario). Sin esto, el post del directorio + hilo falla; IG/FB/Telegram funcionan igual.
 2. **IG/FB stories sin link tappable**: la Graph API no permite añadir sticker de link por API → el link va como texto en la imagen + "link en bio".
-3. **Logos heterogéneos**: se normalizan visualmente en chips. `fanaticash` usa su avatar de IG (cuadrado); a futuro se podría sustituir por un wordmark más limpio.
-4. **TZ del cron**: se confirma el timezone del VPS antes de fijar la expresión cron para que 07:30 sea hora Venezuela.
-5. **Canales**: se publican solo a `GameChannel` activos de lotoanimalito y lottopantera; si alguno no existe/está inactivo, se omite sin romper el job.
+3. **Twitter pin manual**: la API pública de X v2 no expone fijar un tweet. El bot publica el directorio + hilo y devuelve la URL; el usuario lo fija con un toque (una sola vez).
+4. **Logos heterogéneos**: se normalizan visualmente en chips. `fanaticash` usa su avatar de IG (cuadrado); a futuro se podría sustituir por un wordmark más limpio.
+5. **TZ**: el trigger usa Croner con `timezone: 'America/Caracas'`, así que 07:30 es hora Venezuela sin depender del TZ del VPS.
+6. **Canales**: se publican solo a `GameChannel` activos de lotoanimalito y lottopantera; si alguno no existe/está inactivo, se omite sin romper el job.
 
 ## 8. Testing
 
