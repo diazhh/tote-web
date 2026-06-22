@@ -267,7 +267,7 @@ export async function registerAllWorkers(boss) {
     await boss.work(QUEUES.PIZARRA_TRIPLE, QUEUE_CONFIGS[QUEUES.PIZARRA_TRIPLE], pizarraTripleWorker);
     await boss.work(QUEUES.DONDE_JUGAR_LOTOANIMALITO, QUEUE_CONFIGS[QUEUES.DONDE_JUGAR_LOTOANIMALITO], dondeJugarLotoanimalitoWorker);
     await boss.work(QUEUES.DONDE_JUGAR_LOTTOPANTERA, QUEUE_CONFIGS[QUEUES.DONDE_JUGAR_LOTTOPANTERA], dondeJugarLottopanteraWorker);
-    logger.info('[pg-boss] Workers de imagenes especiales registrados (9 workers)');
+    logger.info('[pg-boss] Workers de imagenes especiales registrados (11 workers)');
   }
 
   logger.info('[pg-boss] Workers registrados correctamente');
